@@ -1,0 +1,128 @@
+## probe start 2026-11-16T10:28:49Z repo=/root/maza-mobile-wallet
+
+### CMD: git status --porcelain -- android/src/com/mazawallet/crypto/SelfTest.java
+<empty>
+ASSERT PASS: SelfTest.java clean before probe (refused-to-start guard)
+
+### CMD: md5sum android/maza-wallet-bench.apk
+f3fa859127c3d8701393acbb9d40ebf7  android/maza-wallet-bench.apk
+
+### CMD: cp SelfTest.java -> byte backup (fault-injection safety)
+backup verified byte-identical
+
+### CMD: sed -i s/8eb208f7e05d987a9b044a8e98c6b087f15a0bfc/8eb208f7e05d987a9b044a8e98c6b087f15a0bfd/ android/src/com/mazawallet/crypto/SelfTest.java
+replaced -> 60:                        "8eb208f7e05d987a9b044a8e98c6b087f15a0bfd"));
+
+### CMD: bash android/build-apk.sh   (expected to FAIL the gate)
+BUILD_EXIT_CODE=1
+[1/6] crypto selftest (gate — any FAIL aborts the build before packaging)
+Compiling android/src/com/mazawallet/crypto ...
+Running SelfTest ...
+
+-- BIP39 (official Trezor vectors)
+PASS bip39 entropy 0x00.. -> mnemonic
+PASS bip39 entropy 0x7f.. -> mnemonic
+PASS bip39 seed(mnemonic, TREZOR)
+PASS bip39 seed(mnemonic, "")
+-- RIPEMD-160 (spec test vectors)
+PASS ripemd160("")
+FAIL ripemd160("abc")
+PASS ripemd160(quick brown fox)
+-- Base58Check
+PASS base58check roundtrip
+PASS base58check leading zeros
+-- BIP32 (bip-0032 Test Vector 1)
+PASS bip32 xprv m
+PASS bip32 xprv m/0'
+PASS bip32 xprv m/0'/1
+-- MAZA profile (canonical mnemonic seed, coin 13)
+PASS maza address m/44'/13'/0'/0/0
+PASS maza address m/44'/13'/0'/0/1
+PASS maza address m/44'/13'/0'/0/2
+PASS maza WIF m/44'/13'/0'/0/0
+PASS maza p2pkh scriptPubKey
+-- BTC cross-check (same mnemonic, m/44'/0'/0'/0/0, version 0x00)
+PASS btc address m/44'/0'/0'/0/0
+-- TxBuilder (legacy P2PKH, SIGHASH_ALL)
+PASS txbuilder sign + verify
+
+FAILURES: 1 of 19
+FATAL: crypto selftest FAILED — build aborted, no APK written
+
+### CMD: md5sum android/maza-wallet-bench.apk   (must be unchanged)
+f3fa859127c3d8701393acbb9d40ebf7  android/maza-wallet-bench.apk
+ASSERT PASS: forced-fail build exit code (expected=1 actual=1)
+ASSERT PASS: gate FATAL line present (expected=1 actual=1)
+ASSERT PASS: no packaging stage ran (no [6/6]) (expected=0 actual=0)
+ASSERT PASS: APK md5 unchanged after aborted build (expected=f3fa859127c3d8701393acbb9d40ebf7 actual=f3fa859127c3d8701393acbb9d40ebf7)
+
+### CMD: cp byte backup -> SelfTest.java (restore; git never used)
+
+### CMD: cmp backup vs SelfTest.java; grep vector counts
+restore verified byte-identical to pre-probe content
+original_constant_count=1 corrupted_constant_count=0
+ASSERT PASS: original vector restored (expected=1 actual=1)
+ASSERT PASS: corrupted vector gone (expected=0 actual=0)
+
+### CMD: bash android/build-apk.sh   (expected green)
+BUILD_EXIT_CODE=0
+[1/6] crypto selftest (gate — any FAIL aborts the build before packaging)
+Compiling android/src/com/mazawallet/crypto ...
+Running SelfTest ...
+
+-- BIP39 (official Trezor vectors)
+PASS bip39 entropy 0x00.. -> mnemonic
+PASS bip39 entropy 0x7f.. -> mnemonic
+PASS bip39 seed(mnemonic, TREZOR)
+PASS bip39 seed(mnemonic, "")
+-- RIPEMD-160 (spec test vectors)
+PASS ripemd160("")
+PASS ripemd160("abc")
+PASS ripemd160(quick brown fox)
+-- Base58Check
+PASS base58check roundtrip
+PASS base58check leading zeros
+-- BIP32 (bip-0032 Test Vector 1)
+PASS bip32 xprv m
+PASS bip32 xprv m/0'
+PASS bip32 xprv m/0'/1
+-- MAZA profile (canonical mnemonic seed, coin 13)
+PASS maza address m/44'/13'/0'/0/0
+PASS maza address m/44'/13'/0'/0/1
+PASS maza address m/44'/13'/0'/0/2
+PASS maza WIF m/44'/13'/0'/0/0
+PASS maza p2pkh scriptPubKey
+-- BTC cross-check (same mnemonic, m/44'/0'/0'/0/0, version 0x00)
+PASS btc address m/44'/0'/0'/0/0
+-- TxBuilder (legacy P2PKH, SIGHASH_ALL)
+PASS txbuilder sign + verify
+
+ALL 19 CHECKS PASSED
+[2/6] aapt2 compile
+[3/6] aapt2 link
+[4/6] javac
+[5/6] d8
+[6/6] apksigner
+SIGNED OK: /root/maza-mobile-wallet/android/maza-wallet-bench.apk (271316 bytes)
+
+### CMD: md5sum android/maza-wallet-bench.apk
+0e9b3766d046b640004cc99f514149ec  android/maza-wallet-bench.apk
+
+selftest counts in green build log: PASS=19 FAIL=0
+ASSERT PASS: green build exit code (expected=0 actual=0)
+ASSERT PASS: selftest PASS count (expected=19 actual=19)
+ASSERT PASS: selftest FAIL count (expected=0 actual=0)
+ASSERT PASS: SIGNED OK present (expected=1 actual=1)
+
+### CMD: python3 -m unittest discover -s tests   (from repo root)
+(full output -> suite-transcript.log)
+SUITE_RC=0
+Ran 95 tests in 38.794s
+
+OK (skipped=4)
+ASSERT PASS: walletbench suite exit code (expected=0 actual=0)
+ASSERT PASS: suite OK line present (expected=1 actual=1)
+
+## probe summary: FAILS=0
+md5 before=f3fa859127c3d8701393acbb9d40ebf7 after-abort=f3fa859127c3d8701393acbb9d40ebf7 after-green=0e9b3766d046b640004cc99f514149ec
+PROBE RESULT: ALL ASSERTIONS PASS

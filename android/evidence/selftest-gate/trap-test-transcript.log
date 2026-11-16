@@ -1,0 +1,27 @@
+## trap test start 2026-11-16T10:33:25Z
+note: the probe is launched as an async job, and POSIX sets SIGINT to
+SIG_IGN for async jobs (a signal ignored at entry cannot be trapped),
+so the trap path is exercised with SIGTERM — same handler, real delivery.
+ASSERT PASS: SelfTest.java clean before test
+
+### CMD: bash probe.sh (async) -> poll for observed corruption -> kill -TERM $!  (the probe pid itself)
+corruption OBSERVED in live tree at poll 2s — sending SIGTERM to probe pid 1864681 ($! of this harness, no pgrep guess)
+### CMD: kill -TERM 1864681
+probe exit code after SIGTERM: 90  (90 = trap restore path)
+ASSERT PASS: probe exit code is exactly 90 (trap restore path) (expected=90 actual=90)
+
+### CMD: grep -c corrupted-constant SelfTest.java   (must be 0)
+0 — corrupted constant gone
+
+### CMD: git status --porcelain -- SelfTest.java   (must be empty)
+<empty>  (empty = restored byte-identical to committed content)
+ASSERT PASS: tree clean after interruption (expected= actual=)
+
+### CMD: tail of the interrupted probe log
+
+### CMD: bash android/build-apk.sh   (expected to FAIL the gate)
+TRAP: SelfTest.java restored from byte backup
+
+## trap test summary: FAILS=0
+TRAP TEST RESULT: PASS
+TRAP TEST EXIT CODE: 0
