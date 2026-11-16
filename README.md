@@ -93,11 +93,17 @@ PoW oracle.
 `android/build-apk.sh` builds a signed APK (aapt2/javac/d8/apksigner — no
 Gradle, no external libraries). The app talks to the walletbench API with
 stateless auth: `Authorization: Bearer <token>` on every request; the token
-never rides in a URL. Default endpoint: `http://100.121.150.22:18701` — the
-DNS2 tunnel (`deploy/maza-bench-tunnel.service`, bound to DNS2's tailnet IP
-only) forwarding to the bench on samihost (the samihost tailnet IP directly
-is blocked for non-granted ports by the tailnet ACL). Launcher icon is the
-official MazaCoin roundel, Sami-supplied (sha256-pinned in
+never rides in a URL. Default endpoint: `https://mazatest.sami-host.me` (public
+TEST endpoint — recipe: `deploy/PUBLIC-HOSTING.md`; the field is user-editable,
+so any walletbench host works — ordinary users need nothing beyond the APK,
+a server URL, and a token).
+
+Maintainer/admin note: the maintainer's own bench instances stay on private
+networks (the DNS2 tailnet tunnel, `deploy/maza-bench-tunnel.service`, binds
+DNS2's tailnet IP only and forwards to the bench on samihost; the public
+`mazatest` Caddy site proxies the same samihost bench). The tailnet is an
+administration convenience, never a requirement for wallet users. Launcher
+icon is the official MazaCoin roundel, Sami-supplied (sha256-pinned in
 `walletbench/static/icon.png`). The bench unlock token rotates on demand
 and goes to Sami by DM only.
 

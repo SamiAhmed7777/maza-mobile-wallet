@@ -40,7 +40,7 @@ import java.util.Locale;
 
 /**
  * MAZA Wallet (bench edition). Single activity, fully programmatic UI,
- * four bottom-tab views (BALANCE / RECEIVE / SEND / HISTORY), no external
+ * five bottom-tab views (BALANCE / RECEIVE / SEND / HISTORY / WALLET), no external
  * libraries. Auth is stateless: EVERY request (GET and POST) carries
  * "Authorization: Bearer <token>" (the app keeps no cookie jar). The token
  * is memory-only: never persisted, never in URLs.
@@ -49,7 +49,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
 
     private static final String PREFS = "maza";
     private static final String KEY_URL = "url";
-    private static final String DEFAULT_URL = "http://100.121.150.22:18701"; // lane's SSH tunnel on dns2 tailnet IP - verified reachable from BlueStacks
+    private static final String DEFAULT_URL = "https://mazatest.sami-host.me"; // public TEST endpoint (see deploy/PUBLIC-HOSTING.md); field stays user-editable
     // NO default token: credentials are never baked into source or APK.
     private static final long POLL_MS = 15000;
     private static final int MAX_ROWS = 30;
@@ -116,8 +116,9 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         // Always start at the Connect card: the token is entered per session
-        // (bench edition keeps it memory-only; no stored credentials, no
-        // auto-attempt).
+        // (memory-only; no stored credentials, no auto-attempt — the baked-in
+        // bench-edition token was removed when the endpoint went public: a
+        // token shipped inside the APK would defeat the gate it guards).
         showConnect("");
     }
 
