@@ -6,7 +6,12 @@
 #
 #   git clone https://github.com/spesmilo/electrumx
 #   git -C electrumx checkout ee28cd8ddcc61019d78880ad59582b9b4ce3cc99
-#   pip install -e ./electrumx
+#   pip install -e ./electrumx          # tests only — coin profile, no DB
+#
+# FOR SERVING (DB_ENGINE=leveldb) the tree needs a database backend it does
+# NOT ship: `pip install -e ./electrumx[leveldb]` (plyvel; needs the LevelDB
+# C headers) — deploy/install-electrumx-dev.sh does this and verifies the
+# import. The tree requires Python >= 3.10 (pyproject.toml at the pin).
 #
 # PyPI `electrumx` 1.20.2 is a stale, altcoin-stripped build (5 coin classes,
 # no DeserializerSegWit) — the tests detect and reject it. The deployment
