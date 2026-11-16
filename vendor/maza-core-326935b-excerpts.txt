@@ -1,0 +1,56 @@
+MazaCore 0.16.3 — chain/wallet code excerpts (vendored provenance)
+Source: github.com/MazaCoin/maza, HEAD 326935b (= tag v0.16.3, 2022-01-13),
+the same code family the samihost daemon runs (/MazaCore:0.16.3/).
+These lines back the constants asserted in tests/test_chain_params.py.
+Line numbers refer to the upstream files at that commit.
+
+--- src/chainparams.cpp (mainnet) ---
+89:        consensus.nPowTargetSpacing = 2 * 60; // Maza: 2 minutes
+171:        base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,50);
+172:        base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,9);
+173:        base58Prefixes[SECRET_KEY] = std::vector<unsigned char>(1,224);
+177:        bech32_hrp = "maza";
+185-191: checkpointData = { {91800, 0x...f35417...}, {183600, ...},
+             {1148232, ...}, {2036783, uint256S("0x00000000000002a124800233414bbbc58a789290f3fb1eb5352cdfd7033dfa27")} }
+
+--- src/primitives/block.h ---
+18: const std::string DEFAULT_POW_TYPE = "sha256d";
+21-24: POW_TYPE_NAMES[] = { "sha256d", "minotaurx" };
+27-32: enum POW_TYPE { POW_TYPE_SHA256, POW_TYPE_MINOTAURX, NUM_BLOCK_TYPES };
+84:    uint256 GetHash() const;
+86:    uint256 GetPoWHash() const;
+106-108: POW_TYPE GetPoWType() const { return (POW_TYPE)((nVersion >> 16) & 0xFF); }
+112-113: if (nVersion >= 0x20000000) return POW_TYPE_NAMES[0];   // "sha256d"
+
+--- src/primitives/block.cpp ---
+18-21: uint256 CBlockHeader::GetHash() const { return SerializeHash(*this); }
+   // SerializeHash = double-SHA256 of the serialized header — the BLOCK
+   // IDENTITY hash is sha256d for EVERY block regardless of PoW algo.
+   // MinotaurX/Hive are the GetPoWHash() mining-validity functions only.
+   // Verified live: sha256d(header) reproduces the daemon-reported hash for
+   // type-1 (minotaurx) mainnet blocks at heights 4480797 and 4480789
+   // (2026-11-16 UTC).
+
+--- src/consensus/consensus.h ---
+19: static const int COINBASE_MATURITY = 100;
+
+--- src/wallet/wallet.h ---
+47: static const CAmount DEFAULT_TRANSACTION_FEE = 0;
+
+--- src/wallet/wallet.cpp (HD scheme) ---
+185:    // for now we use a fixed keypath scheme of m/0'/0'/k
+198-202: derive m/0' -> m/0'/0' (external) or m/0'/1' (internal) -> child keys
+
+--- src/qt/transactionrecord.h ---
+89: static const int RecommendedNumConfirmations = 6;
+
+--- src/validation.h ---
+53: static const unsigned int DEFAULT_MIN_RELAY_TX_FEE = 1000;
+
+--- src/policy/policy.h ---
+46: static const unsigned int DUST_RELAY_TX_FEE = 3000;
+
+--- Live-node cross-checks (samihost mazad /MazaCore:0.16.3/, 2026-11-16 UTC) ---
+getnetworkinfo subversion: /MazaCore:0.16.3/
+genesis hash (getblockhash 0): 00000c7c73d8ce604178dae13f0fc6ec0be3275614366d44b1b4b5c6e238c60c
+tip at harvest: height 4480773, hash 00047ac31dafad2ae869454643fb2aaef6fb42c5e9d11a3eb098a755edeee91d

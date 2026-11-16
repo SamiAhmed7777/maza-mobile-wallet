@@ -1,0 +1,15 @@
+# Development/test dependencies (NOT runtime — the repo core is stdlib-only).
+#
+# electrumx is required to exercise the integration tests in
+# tests/test_chain_params.py::TestElectrumxIntegration; without it they skip
+# cleanly. Install the PINNED git tree — the dist is named `e-x`:
+#
+#   git clone https://github.com/spesmilo/electrumx
+#   git -C electrumx checkout ee28cd8ddcc61019d78880ad59582b9b4ce3cc99
+#   pip install -e ./electrumx
+#
+# PyPI `electrumx` 1.20.2 is a stale, altcoin-stripped build (5 coin classes,
+# no DeserializerSegWit) — the tests detect and reject it. The deployment
+# venv on samihost uses this same pin; Python 3.12 there, 3.14 works too.
+#
+#   pip install -r requirements-dev.txt   # (this file documents, see above)

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / mobile builds
+node_modules/
+build/
+dist/
+.gradle/
+*.apk
+*.aab
+*.ipa
+
+# Secrets — never commit daemon RPC passwords or keys
+*.conf
+.env
+*credentials*
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Vendored clones (installed by deploy/install-electrumx-dev.sh)
+third_party/
