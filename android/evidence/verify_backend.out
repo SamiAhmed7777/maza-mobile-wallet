@@ -1,0 +1,18 @@
+token: applied (32 chars, value withheld)
+=== MAZA wallet bench E2E verification ===
+base: http://100.121.150.22:18701
+
+
+PASS  a) POST /api/unlock -> 200 + ok:true + Set-Cookie  [status=200 body={"ok": true} cookie=yes]
+PASS  a2) POST /api/unlock bad token -> 401  [status=401]
+PASS  b) GET /api/state (Bearer) -> 200, balance ~= 48.9999, address starts M  [status=200 balance=48.9999 address=MWRVvgWrLRqyEEQSm7J8NuYor1X9J4J9Fa]
+PASS  b2) GET /api/state (no creds) -> 401 locked  [status=401]
+PASS  c) GET /api/qr.png (Bearer) -> 200 image/png + PNG magic  [status=200 type=image/png magic=89504e470d0a1a0a bytes=1025]
+PASS  d) GET /api/state?t=<token> -> 401 (query auth removed)  [status=401 body={"error": "locked"}]
+PASS  e) POST /api/send invalid address -> 400  [status=400 body={"error": "invalid MAZA address"}]
+PASS  f) POST /api/send amount 999 -> 400 (50 MAZA cap)  [status=400 body={"error": "bench cap: max 50.0 MAZA per send"}]
+PASS  g) POST /api/send amount -1 -> 400 (amount must be positive)  [status=400 body={"error": "amount must be positive"}]
+PASS  h) POST /api/send (no creds) -> 401  [status=401]
+
+SUMMARY: 10/10 passed, 0 failed
+state snapshot: {"balance":48.9999,"address":"MWRVvgWrLRqyEEQSm7J8NuYor1X9J4J9Fa","account":"mobile-play","fee":0.0001,"tx_count":3}

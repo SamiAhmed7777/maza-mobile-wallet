@@ -81,6 +81,17 @@ chain code on three fields (noted per item).
 - Network exposure: tailnet-only bind (WB_LISTEN_HOST = tailscale IPv4),
   never 0.0.0.0; unlock token required for every API surface.
 
+## D8 — Seed phrases (answered 2026-11-16)
+- Bench edition (v0): **NO seed phrase support.** The keys live in the
+  samihost mazad wallet; the only seed there is the node wallet's master
+  seed, which controls ALL wallet funds including the 11,500-MAZA
+  mazapay-bridge deposit. Exposing or exporting it from a phone screen
+  would put bridge funds at risk — refused by design.
+- v1 self-custody lane (client-side keys + the indexer) is where seed
+  phrases arrive: per-wallet BIP39 mnemonics with import/export, generated
+  on-device, never touching the node wallet. Until then, backup story =
+  the bench is a play wallet; meaningful funds wait for v1.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

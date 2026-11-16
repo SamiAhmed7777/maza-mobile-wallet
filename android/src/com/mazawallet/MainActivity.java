@@ -39,33 +39,47 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Locale;
 
 /**
  * MAZA Wallet (bench edition). Single activity, fully programmatic UI,
- * no external libraries. Auth is stateless: EVERY request (GET and POST)
- * carry "Authorization: Bearer <token>" (the app keeps no cookie jar).
+ * four bottom-tab views (BALANCE / RECEIVE / SEND / HISTORY), no external
+ * libraries. Auth is stateless: EVERY request (GET and POST) carries
+ * "Authorization: Bearer <token>" (the app keeps no cookie jar). The token
+ * is memory-only: never persisted, never in URLs.
  */
 public class MainActivity extends Activity {
 
     private static final String PREFS = "maza";
     private static final String KEY_URL = "url";
-    private static final String DEFAULT_URL = "http://100.121.150.22:18701"; // lane's SSH tunnel on dns2 tailnet IP — verified reachable from BlueStacks
+    private static final String DEFAULT_URL = "http://100.121.150.22:18701"; // lane's SSH tunnel on dns2 tailnet IP - verified reachable from BlueStacks
     // NO default token: credentials are never baked into source or APK.
     private static final long POLL_MS = 15000;
     private static final int MAX_ROWS = 30;
 
-    private static final int BG = 0xFF121418;
-    private static final int CARD = 0xFF1E222B;
-    private static final int TEXT = 0xFFE8EAF0;
-    private static final int MUTED = 0xFF9AA0AC;
-    private static final int ACCENT = 0xFFF7931A;
-    private static final int RED = 0xFFE05555;
-    private static final int GREEN = 0xFF4CAF50;
+    private static final int BG = 0xFF141414;       // near-black background
+    private static final int CARD = 0xFF1E1E1E;     // cards
+    private static final int BAR = 0xFF1A1A1A;      // tab bar background
+    private static final int DIVIDER = 0xFF2E2E2E;  // hairline dividers
+    private static final int TEXT = 0xFFFFFFFF;     // white primary text
+    private static final int MUTED = 0xFFB3B3B3;    // muted secondary text
+    private static final int ACCENT = 0xFFF0A000;   // amber brand accent
+    private static final int RED = 0xFFFF6B6B;      // send / error
+    private static final int GREEN = 0xFF6FD66F;    // receive
+
+    private static final String[] TABS = {"BALANCE", "RECEIVE", "SEND", "HISTORY"};
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final Runnable pollTask = this::refresh;
+
+    // Absolute history timestamp and last-sync line, device-local timezone
+    // (SimpleDateFormat defaults to the device default TimeZone).
+    private static final SimpleDateFormat TS_FMT =
+            new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US);
+    private static final SimpleDateFormat SYNC_FMT =
+            new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
 
     private SharedPreferences prefs;
     private String baseUrl;      // server URL, no trailing slash
@@ -79,18 +93,26 @@ public class MainActivity extends Activity {
     private Button connectBtn;
     private TextView connectErr;
 
-    // Wallet widgets.
+    // Tab navigation: content container + one ScrollView per tab. Built once
+    // in showWallet(); polls never rebuild the tab bar or switch tabs.
+    private FrameLayout content;
+    private final ScrollView[] tabViews = new ScrollView[TABS.length];
+    private final Button[] tabBtns = new Button[TABS.length];
+    private int tab = 0;
+
+    // Wallet widgets (one set, updated in place by applyState).
     private TextView balanceTv;
     private TextView accountTv;
+    private TextView lastSyncTv;
     private TextView addressTv;
     private ImageView qrIv;
-    private TextView qrErrTv;
+    private TextView qrStatusTv;
     private EditText toEt;
     private EditText amountEt;
+    private TextView feeHintTv;
     private Button sendBtn;
     private TextView sendResultTv;
     private LinearLayout historyList;
-    private TextView statusTv;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -122,11 +144,13 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(root);
 
-        col.addView(label("MAZA Wallet", 28, TEXT, Typeface.BOLD));
-        col.addView(label("Connect to your bench server", 14, MUTED, Typeface.NORMAL));
+        addHeader(col);
+
+        col.addView(label("Connect to your bench server", 14, MUTED, Typeface.NORMAL),
+                mp(0, dp(16), 0, 0));
 
         LinearLayout card = card();
-        col.addView(card, mp(0, dp(24), 0, 0));
+        col.addView(card, mp(0, dp(16), 0, 0));
 
         card.addView(label("Server URL", 13, MUTED, Typeface.BOLD));
         urlEt = input(prefs.getString(KEY_URL, DEFAULT_URL),
@@ -149,87 +173,175 @@ public class MainActivity extends Activity {
     }
 
     private void showWallet() {
-        LinearLayout col = column();
-        col.setPadding(dp(16), dp(28), dp(16), dp(24));
-        ScrollView root = new ScrollView(this);
+        LinearLayout root = column();
         root.setBackgroundColor(BG);
-        root.addView(col, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        setContentView(root);
 
-        // 1. Header: coin glyph + title + refresh.
+        // Content area (weight 1) above the pinned tab bar.
+        content = new FrameLayout(this);
+        root.addView(content, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        buildBalanceTab();
+        buildReceiveTab();
+        buildSendTab();
+        buildHistoryTab();
+
+        // Bottom tab bar: 4 equal-weight buttons, always visible.
+        View divider = new View(this);
+        divider.setBackgroundColor(DIVIDER);
+        root.addView(divider, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
+        LinearLayout bar = row();
+        bar.setBackgroundColor(BAR);
+        root.addView(bar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
+        for (int i = 0; i < TABS.length; i++) {
+            Button b = new Button(this);
+            b.setText(TABS[i]);
+            b.setTextSize(12);
+            b.setAllCaps(false);
+            b.setBackgroundColor(0x00000000);
+            final int idx = i;
+            b.setOnClickListener(v -> selectTab(idx));
+            bar.addView(b, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+            tabBtns[i] = b;
+        }
+
+        setContentView(root);
+        selectTab(0);
+        loadQr();
+        schedulePoll();
+    }
+
+    /** Swap the visible content view; highlight the selected tab. */
+    private void selectTab(int i) {
+        tab = i;
+        for (int k = 0; k < tabViews.length; k++) {
+            tabViews[k].setVisibility(k == i ? View.VISIBLE : View.GONE);
+            tabBtns[k].setTextColor(k == i ? ACCENT : MUTED);
+            tabBtns[k].setTypeface(Typeface.DEFAULT,
+                    k == i ? Typeface.BOLD : Typeface.NORMAL);
+        }
+    }
+
+    // ---- tab builders: header logo + view body, one ScrollView each ----
+
+    private LinearLayout tabColumn() {
+        LinearLayout col = column();
+        col.setPadding(dp(16), dp(24), dp(16), dp(16));
+        return col;
+    }
+
+    private void addTab(LinearLayout col, int index) {
+        ScrollView sv = new ScrollView(this);
+        sv.setBackgroundColor(BG);
+        sv.addView(col, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        sv.setVisibility(View.GONE);
+        content.addView(sv);
+        tabViews[index] = sv;
+    }
+
+    /** Header: official MazaCoin roundel (48dp) + title, top of every view. */
+    private void addHeader(LinearLayout col) {
         LinearLayout header = row();
-        TextView glyph = label("M", 18, 0xFFFFFFFF, Typeface.BOLD);
-        glyph.setGravity(Gravity.CENTER);
-        GradientDrawable coin = new GradientDrawable();
-        coin.setShape(GradientDrawable.OVAL);
-        coin.setColor(ACCENT);
-        glyph.setBackground(coin);
-        header.addView(glyph, new LinearLayout.LayoutParams(dp(36), dp(36)));
-        LinearLayout.LayoutParams titleLp =
-                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        titleLp.leftMargin = dp(10);
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.logo);
+        header.addView(logo, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        titleLp.leftMargin = dp(12);
         header.addView(label("MAZA Wallet", 22, TEXT, Typeface.BOLD), titleLp);
+        col.addView(header, mp(0, 0, 0, dp(16)));
+    }
+
+    private void buildBalanceTab() {
+        LinearLayout col = tabColumn();
+        addHeader(col);
+
+        balanceTv = label("...", 36, TEXT, Typeface.BOLD);
+        col.addView(balanceTv);
+
+        accountTv = label("", 13, MUTED, Typeface.NORMAL);
+        col.addView(accountTv, mp(0, dp(4), 0, 0));
+
+        lastSyncTv = label("", 12, MUTED, Typeface.NORMAL);
+        col.addView(lastSyncTv, mp(0, dp(4), 0, 0));
+
         Button refreshBtn = new Button(this);
         refreshBtn.setText("Refresh");
         refreshBtn.setOnClickListener(v -> refresh());
-        header.addView(refreshBtn);
-        col.addView(header);
+        col.addView(refreshBtn, mp(0, dp(16), 0, 0));
 
-        // 2. Balance.
-        balanceTv = label("...", 34, TEXT, Typeface.BOLD);
-        col.addView(balanceTv, mp(0, dp(16), 0, 0));
-        accountTv = label("", 13, MUTED, Typeface.NORMAL);
-        col.addView(accountTv);
+        addTab(col, 0);
+    }
 
-        // 3. Receive card.
-        LinearLayout receive = card();
-        col.addView(receive, mp(0, dp(16), 0, 0));
-        receive.addView(label("RECEIVE", 13, ACCENT, Typeface.BOLD));
+    private void buildReceiveTab() {
+        LinearLayout col = tabColumn();
+        addHeader(col);
+
+        col.addView(label("RECEIVE", 13, ACCENT, Typeface.BOLD));
+
         addressTv = mono("...", 14, TEXT);
-        receive.addView(addressTv, mp(0, dp(6), 0, 0));
-        LinearLayout receiveRow = row();
+        col.addView(addressTv, mp(0, dp(6), 0, 0));
+
         Button copyBtn = new Button(this);
         copyBtn.setText("Copy");
         copyBtn.setOnClickListener(v -> copyAddress());
-        receiveRow.addView(copyBtn);
-        qrErrTv = label("", 12, RED, Typeface.NORMAL);
-        receiveRow.addView(qrErrTv, mp(dp(10), 0, 0, 0));
-        receive.addView(receiveRow, mp(0, dp(6), 0, 0));
-        qrIv = new ImageView(this);
-        LinearLayout.LayoutParams qrLp = new LinearLayout.LayoutParams(dp(220), dp(220));
-        qrLp.gravity = Gravity.CENTER_HORIZONTAL;
-        qrLp.topMargin = dp(6);
-        receive.addView(qrIv, qrLp);
+        col.addView(copyBtn, mp(0, dp(8), 0, 0));
 
-        // 4. Send card.
-        LinearLayout send = card();
-        col.addView(send, mp(0, dp(16), 0, 0));
-        send.addView(label("SEND", 13, ACCENT, Typeface.BOLD));
+        qrStatusTv = label("", 12, MUTED, Typeface.NORMAL);
+        col.addView(qrStatusTv, mp(0, dp(4), 0, 0));
+
+        qrIv = new ImageView(this);
+        LinearLayout.LayoutParams qrLp = new LinearLayout.LayoutParams(dp(320), dp(320));
+        qrLp.gravity = Gravity.CENTER_HORIZONTAL;
+        qrLp.topMargin = dp(8);
+        col.addView(qrIv, qrLp);
+
+        addTab(col, 1);
+    }
+
+    private void buildSendTab() {
+        LinearLayout col = tabColumn();
+        addHeader(col);
+
+        col.addView(label("SEND", 13, ACCENT, Typeface.BOLD));
+
         toEt = input("", InputType.TYPE_CLASS_TEXT);
         toEt.setHint("Recipient address (M...)");
         toEt.setTypeface(Typeface.MONOSPACE);
-        send.addView(toEt, mp(0, dp(4), 0, 0));
+        col.addView(toEt, mp(0, dp(4), 0, 0));
+
         amountEt = input("", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         amountEt.setHint("Amount (MAZA)");
-        send.addView(amountEt, mp(0, dp(4), 0, 0));
+        col.addView(amountEt, mp(0, dp(4), 0, 0));
+
+        feeHintTv = label("fee " + fmtAmount(fee) + " MAZA", 12, MUTED, Typeface.NORMAL);
+        col.addView(feeHintTv, mp(0, dp(2), 0, 0));
+
         sendBtn = new Button(this);
         sendBtn.setText("Send");
         sendBtn.setOnClickListener(v -> doSend());
-        send.addView(sendBtn, mp(0, dp(4), 0, 0));
-        sendResultTv = label("Fee per send: " + fmtAmount(fee) + " MAZA", 13, MUTED,
-                Typeface.NORMAL);
-        send.addView(sendResultTv, mp(0, dp(2), 0, 0));
+        col.addView(sendBtn, mp(0, dp(8), 0, 0));
 
-        // 5. History list + status line.
-        col.addView(label("HISTORY", 13, ACCENT, Typeface.BOLD), mp(0, dp(18), 0, dp(4)));
+        sendResultTv = mono("", 13, MUTED);
+        col.addView(sendResultTv, mp(0, dp(4), 0, 0));
+
+        addTab(col, 2);
+    }
+
+    private void buildHistoryTab() {
+        LinearLayout col = tabColumn();
+        addHeader(col);
+
+        col.addView(label("HISTORY", 13, ACCENT, Typeface.BOLD));
+
         historyList = column();
-        col.addView(historyList);
-        statusTv = label("", 12, MUTED, Typeface.NORMAL);
-        col.addView(statusTv, mp(0, dp(12), 0, 0));
+        col.addView(historyList, mp(0, dp(4), 0, 0));
 
-        loadQr();
-        schedulePoll();
+        addTab(col, 3);
     }
 
     // ------------------------------------------------------------- actions
@@ -306,7 +418,8 @@ public class MainActivity extends Activity {
                 JSONObject body = new JSONObject().put("to", to).put("amount", amt);
                 Resp r = http("POST", "/api/send", body);
                 if (r.code == 200) {
-                    msg = "Sent: tx " + shortTxid(r.json().optString("txid", ""));
+                    String txid = r.json().optString("txid", "");
+                    msg = txid.length() == 0 ? "Sent." : "Sent: " + shortTxid(txid);
                     color = GREEN;
                     ui.post(this::refresh);
                 } else if (r.code == 401) {
@@ -335,7 +448,6 @@ public class MainActivity extends Activity {
     private void refresh() {
         if (token == null) return;
         ui.removeCallbacks(pollTask);
-        final String t = token;
         new Thread(() -> {
             try {
                 Resp r = http("GET", "/api/state", null);  // Bearer header, never the token in URLs
@@ -369,35 +481,59 @@ public class MainActivity extends Activity {
         }, "state").start();
     }
 
+    /** Update all views in place; never rebuilds the tab bar or switches tab. */
     private void applyState(WalletState ws) {
         fee = ws.fee;
         balanceTv.setText(fmtAmount(ws.balance) + " MAZA");
-        accountTv.setText("account " + ws.account + " - fee " + fmtAmount(ws.fee) + " MAZA");
+        accountTv.setText("account " + ws.account + " \u00B7 fee "
+                + fmtAmount(ws.fee) + " MAZA");
+        feeHintTv.setText("fee " + fmtAmount(ws.fee) + " MAZA");
         if (ws.address.equals(lastAddress) == false) {
             lastAddress = ws.address;
             addressTv.setText(ws.address);
             loadQr();
         }
+
+        ArrayList<Tx> txs = new ArrayList<>(ws.txs);
+        Collections.sort(txs, (a, b) -> Long.compare(b.time, a.time)); // newest first
         historyList.removeAllViews();
-        int n = Math.min(ws.txs.size(), MAX_ROWS);
+        int n = Math.min(txs.size(), MAX_ROWS);
         if (n == 0) {
-            historyList.addView(label("No transactions yet.", 13, MUTED, Typeface.NORMAL));
+            historyList.addView(label("No transactions yet", 13, MUTED, Typeface.NORMAL));
         }
         for (int i = 0; i < n; i++) {
-            historyList.addView(txRow(ws.txs.get(i)));
+            historyList.addView(txRow(txs.get(i)));
         }
-        note("Updated " + new SimpleDateFormat("HH:mm:ss", Locale.US).format(new Date()));
+
+        note("Last sync " + SYNC_FMT.format(new Date()));
     }
 
     private View txRow(Tx t) {
         boolean send = "send".equals(t.category);
-        String arrow = send ? "->" : "<-";
-        String sign = send ? "-" : "+";
-        LinearLayout box = column();
-        box.addView(label(arrow + " " + sign + fmtAmount(Math.abs(t.amount)) + " MAZA ("
-                + t.confs + " confs)", 14, TEXT, Typeface.NORMAL));
-        box.addView(label(relTime(t.time), 12, MUTED, Typeface.NORMAL));
-        box.setLayoutParams(mp(0, dp(8), 0, 0));
+        // Arrows via unicode escapes to keep this source file pure ASCII:
+        // \u2190 = left arrow (received), \u2192 = right arrow (sent).
+        String glyph = send ? "\u2192" : "\u2190";
+        String signed = (send ? "-" : "+") + fmtAmount(Math.abs(t.amount));
+
+        LinearLayout box = card();
+        int p = dp(12);
+        box.setPadding(p, p, p, p);
+        box.setLayoutParams(mp(0, 0, 0, dp(8)));
+
+        LinearLayout row1 = row();
+        row1.addView(label(glyph + " " + signed, 15, send ? RED : GREEN, Typeface.BOLD),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        // Absolute local timestamp from the unix time field.
+        row1.addView(label(TS_FMT.format(new Date(t.time * 1000)), 13, TEXT, Typeface.NORMAL));
+        box.addView(row1);
+
+        LinearLayout row2 = row();
+        row2.addView(label(relTime(t.time), 12, MUTED, Typeface.NORMAL),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        String conf = t.confs > 0 ? t.confs + " confs" : "unconfirmed";
+        row2.addView(label(conf, 12, t.confs > 0 ? MUTED : ACCENT, Typeface.NORMAL));
+        box.addView(row2);
+
         return box;
     }
 
@@ -406,17 +542,20 @@ public class MainActivity extends Activity {
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (cm == null) return;
         cm.setPrimaryClip(ClipData.newPlainText("MAZA address", a));
-        Toast.makeText(this, "Address copied", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
     }
 
     private void loadQr() {
         if (token == null) return;
-        qrErrTv.setText("Loading QR...");
-        qrErrTv.setTextColor(MUTED);
-        final String t = token;
+        qrStatusTv.setText("Loading QR...");
+        qrStatusTv.setTextColor(MUTED);
         new Thread(() -> {
             try {
                 Resp r = http("GET", "/api/qr.png", null);  // Bearer header, no token in URL
+                if (r.code == 401) {
+                    ui.post(this::lockOut);
+                    return;
+                }
                 if (r.code != 200) {
                     ui.post(() -> qrErr("QR unavailable (HTTP " + r.code + ")"));
                     return;
@@ -428,7 +567,7 @@ public class MainActivity extends Activity {
                 }
                 ui.post(() -> {
                     qrIv.setImageBitmap(bmp);
-                    qrErrTv.setText("");
+                    qrStatusTv.setText("");
                 });
             } catch (IOException e) {
                 ui.post(() -> qrErr("QR load failed"));
@@ -437,13 +576,13 @@ public class MainActivity extends Activity {
     }
 
     private void qrErr(String m) {
-        qrErrTv.setText(m);
-        qrErrTv.setTextColor(RED);
+        qrStatusTv.setText(m);
+        qrStatusTv.setTextColor(RED);
     }
 
     private void lockOut() {
         token = null;
-                showConnect("Session expired - please reconnect.");
+        showConnect("Session expired - please reconnect.");
     }
 
     private void sendResult(String msg, int color) {
@@ -452,7 +591,10 @@ public class MainActivity extends Activity {
     }
 
     private void note(String m) {
-        if (statusTv != null) statusTv.setText(m);
+        if (lastSyncTv != null) {
+            lastSyncTv.setText(m);
+            lastSyncTv.setTextColor(m.startsWith("Last sync") ? MUTED : RED);
+        }
     }
 
     private void schedulePoll() {
@@ -471,7 +613,7 @@ public class MainActivity extends Activity {
             c.setReadTimeout(15000);
             c.setRequestMethod(method);
             c.setRequestProperty("Accept", "application/json");
-            // Bearer on EVERY request (GETs included) — never the token in URLs.
+            // Bearer on EVERY request (GETs included) - never the token in URLs.
             if (token != null) {
                 c.setRequestProperty("Authorization", "Bearer " + token);
             }
@@ -651,11 +793,17 @@ public class MainActivity extends Activity {
                 : txid;
     }
 
+    /** Relative time: "3m ago", "2h 15m ago", "5d ago" (from now). */
     private static String relTime(long unix) {
         long diff = Math.max(0, System.currentTimeMillis() / 1000 - unix);
         if (diff < 60) return "just now";
-        if (diff < 3600) return (diff / 60) + "m ago";
-        if (diff < 86400) return (diff / 3600) + "h ago";
-        return (diff / 86400) + "d ago";
+        long m = diff / 60;
+        if (m < 60) return m + "m ago";
+        long h = m / 60;
+        if (h < 24) {
+            long rm = m % 60;
+            return rm == 0 ? h + "h ago" : h + "h " + rm + "m ago";
+        }
+        return (h / 24) + "d ago";
     }
 }
