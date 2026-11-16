@@ -47,14 +47,20 @@ builds the missing piece on chain-code defaults.
 ## Status
 
 - Decision table locked (`DECISIONS.md`, 2026-11-15).
-- Coin profile + offline tests landed (this commit): fixtures from BOTH PoW
-  eras reproduce the daemon's own block hashes exactly (ElectrumX internal
-  byte order verified), and chain constants are anchored to vendored MazaCore
-  excerpts (`vendor/`, sha256-pinned in the tests).
+- **Wallet bench v0 (added in this changeset)**: `walletbench/` — UTXO-scoped
+  wallet service (raw-tx sends with explicit input selection so only bench
+  addresses' coins are ever consumed), token-authed mobile UI (Kimi-CLI-built,
+  adopted via an adoption gate), samihost installer binding the tailnet IP
+  only. This is the D7 bench edition: keys in the node wallet, NOT
+  self-custody.
+- Coin profile + offline tests landed (previous commit): fixtures from BOTH
+  PoW eras reproduce the daemon's own block hashes exactly; chain constants
+  anchored to vendored MazaCore excerpts (`vendor/`, sha256-pinned).
 - **Identity-hash finding (2026-11-16):** block identity = double-SHA256 for
   all blocks (incl. MinotaurX-mined ones) — the indexer has no oracle
   blocker. PoW validation stays the daemon's job.
-- Indexer deployment and the app itself: not started.
+- Not started: indexer deployment on samihost, v1 self-custody wallet
+  (client-side keys over the indexer), MazaPay checkout integration.
 
 ## Verification
 

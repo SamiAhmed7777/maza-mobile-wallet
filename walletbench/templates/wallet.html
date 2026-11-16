@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MAZA Wallet</title>
+<link rel="icon" type="image/png" href="/static/icon.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<main class="container">
+
+  <!-- Locked state -->
+  <section id="unlock-card" class="card">
+    <div class="brand">
+      <img src="/static/icon.png" alt="MAZA" class="brand-icon">
+      <h1 class="brand-name">MAZA Wallet</h1>
+    </div>
+    <p class="card-label">Enter your access token to unlock.</p>
+    <form id="unlock-form" autocomplete="off">
+      <input type="password" id="token-input" placeholder="Access token"
+             autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button type="submit" id="unlock-btn" class="btn btn-accent">Unlock</button>
+    </form>
+    <p id="unlock-error" class="error-line" role="alert" hidden></p>
+  </section>
+
+  <!-- Unlocked state -->
+  <section id="wallet-view" hidden>
+
+    <header class="header">
+      <img src="/static/icon.png" alt="MAZA" class="brand-icon">
+      <h1 class="brand-name">MAZA Wallet</h1>
+      <button type="button" id="refresh-btn" class="btn btn-small">Refresh</button>
+    </header>
+
+    <div class="card">
+      <p class="card-label">Balance</p>
+      <p class="balance-line">
+        <span id="balance-value">0.00000000</span>
+        <span class="balance-unit">MAZA</span>
+      </p>
+    </div>
+
+    <div class="card">
+      <p class="card-label">Receive</p>
+      <p class="mono address-block" id="address-text"></p>
+      <div class="qr-wrap">
+        <img id="qr-img" src="/api/qr.svg" alt="Receive address QR code" width="180" height="180">
+      </div>
+      <button type="button" id="copy-btn" class="btn btn-accent">Copy address</button>
+      <p id="copy-feedback" class="hint-line" hidden>Address copied.</p>
+    </div>
+
+    <div class="card">
+      <p class="card-label">Send</p>
+      <label class="field-label" for="send-to">To address</label>
+      <input type="text" id="send-to" class="mono" placeholder="M..."
+             autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label class="field-label" for="send-amount">Amount (MAZA)</label>
+      <input type="text" id="send-amount" inputmode="decimal" placeholder="0.00">
+      <button type="button" id="send-btn" class="btn btn-accent">Send</button>
+      <p id="send-result" class="result-line mono" hidden></p>
+    </div>
+
+    <div class="card">
+      <p class="card-label">History</p>
+      <ul id="tx-list" class="tx-list"></ul>
+      <p id="tx-empty" class="hint-line">No transactions yet</p>
+    </div>
+
+  </section>
+
+</main>
+
+<script src="/static/wallet.js"></script>
+</body>
+</html>

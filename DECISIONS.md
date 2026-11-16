@@ -61,6 +61,26 @@ chain code on three fields (noted per item).
   blocktime 60, flat fee) — per the rule, code wins. Our differentiator:
   MazaPay-native checkout (scan merchant QR → pay), regular-user usability.
 
+## D7 — Bench edition (v0 test surface, added 2026-11-16)
+- To give Sami a working wallet immediately, v0 ships as a node-backed bench
+  wallet: the UI's coins live at dedicated addresses in the samihost mazad
+  wallet (account `mobile-play`).
+- **Isolation is UTXO-level, not account-level** (judge finding, round 1):
+  Bitcoin-style accounts are bookkeeping labels — wallet coin selection can
+  consume UTXOs of any account. Every send is therefore built as a raw
+  transaction whose inputs are selected exclusively from the bench
+  addresses' own unspent outputs (`listunspent` filtered by address), with
+  change returning to a bench-owned address. The mazapay-bridge deposit is
+  mathematically out of reach.
+- Custodial by design for this edition — labeled as such. The v1 lane
+  replaces the backend with client-side keys + the indexer.
+- Send cap: 50 MAZA per transaction (WB_MAX_SEND), flat 0.0001 MAZA fee
+  (generous vs the 1000 sat/kB code floor), funding authorized by Sami
+  (2026-11-15): up to 50 MAZA from the mazapay-bridge share for play
+  testing.
+- Network exposure: tailnet-only bind (WB_LISTEN_HOST = tailscale IPv4),
+  never 0.0.0.0; unlock token required for every API surface.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation
