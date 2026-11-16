@@ -145,6 +145,28 @@ class BenchTestCase(unittest.TestCase):
         self.assertIn("image/svg+xml", headers.get("Content-Type"))
         self.assertIn("<svg", body.decode())
 
+    def test_qr_png(self):
+        cookie = self.unlock()
+        status, headers, body = self.request("GET", "/api/qr.png", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Content-Type"), "image/png")
+        self.assertEqual(body[:8], b"\x89PNG\r\n\x1a\n")
+
+    def test_query_param_token_is_rejected(self):
+        # Regression: query-param auth was REMOVED (credentials must never
+        # ride in URLs) — a valid token passed as ?t= must be refused.
+        status, _, _ = self.request(
+            "GET", f"/api/state?t={TOKEN}")
+        self.assertEqual(status, 401)
+
+    def test_bearer_token_auth(self):
+        cookie = self.unlock()
+        url = self.base + "/api/state"
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"Bearer {TOKEN}")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            self.assertEqual(resp.status, 200)
+
     def test_qr_requires_auth(self):
         status, _, _ = self.request("GET", "/api/qr.svg")
         self.assertEqual(status, 401)

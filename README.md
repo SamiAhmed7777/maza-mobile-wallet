@@ -62,6 +62,18 @@ builds the missing piece on chain-code defaults.
 - Not started: indexer deployment on samihost, v1 self-custody wallet
   (client-side keys over the indexer), MazaPay checkout integration.
 
+## Android APK / bench app
+
+`android/build-apk.sh` builds a signed APK (aapt2/javac/d8/apksigner — no
+Gradle, no external libraries). The app talks to the walletbench API with
+stateless auth: `Authorization: Bearer <token>` on every request (GETs and
+POSTs). Default endpoint: `http://100.121.150.22:18701` — the DNS2 tunnel
+(`deploy/maza-bench-tunnel.service`, bound to DNS2's tailnet IP only) that
+forwards to the bench on samihost; the samihost tailnet IP directly is
+blocked for non-granted ports by the tailnet ACL. Launcher icon is the
+official MazaCoin roundel, Sami-supplied (sha256-pinned in
+`walletbench/static/icon.png`).
+
 ## Verification
 
 ```bash

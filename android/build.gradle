@@ -1,0 +1,19 @@
+// MAZA Wallet - bench edition (Android).
+//
+// METADATA ONLY. The app is built by the raw Android toolchain, not Gradle:
+// see build-apk.sh in this directory (aapt2 -> javac -> d8 -> zip ->
+// apksigner, single-activity, android.jar APIs only, no dependencies).
+// The values below document the SDK levels for IDEs and mirror
+// AndroidManifest.xml; they are not wired to a Gradle build.
+android {
+    namespace "com.mazawallet"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.mazawallet"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+}

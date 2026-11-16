@@ -88,3 +88,41 @@ def address_svg(payload: str) -> str:
         f'<path d="{"".join(parts)}" fill="#000000"/>'
         "</svg>"
     )
+
+
+def address_png_bytes(payload: str, scale: int = 6) -> bytes:
+    """Render a payment QR code as a PNG (black modules on white).
+
+    Pure stdlib: the QR matrix becomes 1-bit-per-channel RGB scanlines,
+    zlib-compressed with the standard PNG chunk layout. Used by the Android
+    app (ImageView cannot render SVG without a third-party library).
+    """
+    import struct
+    import zlib
+    from .vendor import qrcodegen as _qr
+
+    if not isinstance(payload, str) or not payload:
+        raise ValueError("qr payload must be a non-empty string")
+    code = _qr.QrCode.encode_text(payload, _ECC)
+    size = code.get_size()
+    total = size + 2 * QUIET_ZONE_MODULES
+    width = height = total * scale
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    raw = bytearray()
+    for y in range(height):
+        raw.append(0)  # filter type 0 per scanline
+        qr_y = (y // scale) - QUIET_ZONE_MODULES
+        for x in range(width):
+            qr_x = (x // scale) - QUIET_ZONE_MODULES
+            inside = 0 <= qr_x < size and 0 <= qr_y < size
+            dark = inside and code.get_module(qr_x, qr_y)
+            raw += b"\xff\xff\xff" if not dark else b"\x00\x00\x00"
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", ihdr)
+            + chunk(b"IDAT", zlib.compress(bytes(raw), 9))
+            + chunk(b"IEND", b""))
