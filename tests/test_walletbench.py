@@ -603,5 +603,115 @@ class TestSelfCustody(BenchTestCase):
             os.environ.pop("WB_STATE_FILE", None)
 
 
+class TestWatchImportAccessLog(BenchTestCase):
+    """M21: count-only WATCH_IMPORT access line for /api/watch/import.
+
+    The unlock-path proof needs "did the app re-import its watch window on
+    unlock?" to be observable on the live bench (journald captures service
+    stdout). The line carries a sequence number, the COUNT of addresses in
+    the request, and the response status — never addresses, tokens, or IPs.
+    The line is flushed BEFORE the response is sent, so observing the
+    response implies the log line landed.
+    """
+
+    def _capture(self, fn):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            fn()
+        return buf.getvalue()
+
+    @staticmethod
+    def _lines(out: str):
+        return [l for l in out.splitlines() if l.startswith("WATCH_IMPORT ")]
+
+    def test_success_logs_one_count_only_line(self):
+        cookie = self.unlock()
+        out = self._capture(lambda: self.request(
+            "POST", "/api/watch/import",
+            {"addresses": [WATCH_A, WATCH_B]}, cookie=cookie)[0])
+        lines = self._lines(out)
+        self.assertEqual(len(lines), 1, out)
+        # strict full-line shape: no extra fields, no unexpected text
+        self.assertRegex(lines[0], r"^WATCH_IMPORT seq=\d+ imported=2 status=200$")
+        # count-only invariant: no address or token material, ever
+        self.assertNotIn(WATCH_A, out)
+        self.assertNotIn(WATCH_B, out)
+        self.assertNotIn(TOKEN, out)
+
+    def test_chain_error_502_logs_imported_zero(self):
+        cookie = self.unlock()
+
+        class ExplodingChain(MockChain):
+            def import_watch_addresses(self, addresses):
+                raise ChainError("rpc connection refused")
+
+        cls = api.WalletBenchHandler  # same class object make_server wired
+        saved = cls.chain
+        cls.chain = ExplodingChain()
+        try:
+            out = self._capture(lambda: self.request(
+                "POST", "/api/watch/import",
+                {"addresses": [WATCH_A]}, cookie=cookie)[0])
+        finally:
+            cls.chain = saved
+        lines = self._lines(out)
+        self.assertEqual(len(lines), 1, out)
+        self.assertRegex(lines[0], r"^WATCH_IMPORT seq=\d+ imported=0 status=502$")
+        self.assertNotIn(WATCH_A, out)
+
+    def test_malformed_body_and_oversized_list_log_400(self):
+        cookie = self.unlock()
+        # invalid JSON body -> 400 invalid body, logged count-only
+        out = self._capture(lambda: self.request(
+            "POST", "/api/watch/import", raw_body=b"{not json",
+            cookie=cookie)[0])
+        lines = self._lines(out)
+        self.assertEqual(len(lines), 1, out)
+        self.assertRegex(lines[0], r"^WATCH_IMPORT seq=\d+ imported=0 status=400$")
+        # >200 addresses -> 400 too-many, logged count-only
+        flood = [WATCH_A] * 201
+        out = self._capture(lambda: self.request(
+            "POST", "/api/watch/import", {"addresses": flood},
+            cookie=cookie)[0])
+        lines = self._lines(out)
+        self.assertEqual(len(lines), 1, out)
+        self.assertRegex(lines[0], r"^WATCH_IMPORT seq=\d+ imported=0 status=400$")
+        self.assertNotIn(WATCH_A, out)
+
+    def test_seq_increments_per_request(self):
+        cookie = self.unlock()
+        out = self._capture(lambda: (
+            self.request("POST", "/api/watch/import",
+                         {"addresses": [WATCH_A]}, cookie=cookie)[0],
+            self.request("POST", "/api/watch/import",
+                         {"addresses": [WATCH_B]}, cookie=cookie)[0],
+        ))
+        lines = self._lines(out)
+        self.assertEqual(len(lines), 2, out)
+        seq = [int(l.split("seq=")[1].split()[0]) for l in lines]
+        self.assertEqual(seq[1], seq[0] + 1)
+
+    def test_failure_paths_log_without_leaking_input(self):
+        # unauthenticated probe -> 401 line, no address in stdout
+        out = self._capture(lambda: self.request(
+            "POST", "/api/watch/import", {"addresses": [WATCH_A]}))
+        lines = self._lines(out)
+        self.assertEqual(len(lines), 1, out)
+        self.assertIn("status=401", lines[0])
+        self.assertIn("imported=0", lines[0])
+        self.assertNotIn(WATCH_A, out)
+        # malformed address -> 400 line; the log line stays count-only
+        cookie = self.unlock()
+        out = self._capture(lambda: self.request(
+            "POST", "/api/watch/import",
+            {"addresses": ["not-an-address"]}, cookie=cookie))
+        lines = self._lines(out)
+        self.assertEqual(len(lines), 1, out)
+        self.assertIn("status=400", lines[0])
+        self.assertNotIn("not-an-address", lines[0])
+
+
 if __name__ == "__main__":
     unittest.main()

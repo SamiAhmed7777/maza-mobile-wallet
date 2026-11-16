@@ -13,6 +13,11 @@ Routes:
     GET  /api/watch/history-> history filtered to the watch set
     POST /api/broadcast   -> {"hex": "..."} broadcast a CLIENT-SIGNED tx
 
+Every /api/watch/import request also emits one count-only stdout line
+(`WATCH_IMPORT seq=N imported=C status=S` — never addresses/tokens/IPs;
+journald captures it) so the app's unlock-path re-import is observable
+on the live bench.
+
 Auth: single token from WB_TOKEN; unlock exchanges it for an HttpOnly
 SameSite=Strict cookie. All /api/* except /api/unlock require it. The
 service binds loopback or the tailnet IP only — never 0.0.0.0.
@@ -44,6 +49,30 @@ CONTENT_SECURITY_POLICY = (
 
 _cache: Dict[str, Any] = {}
 _state_lock = threading.Lock()
+
+# Count-only access log for /api/watch/import (M21): the app re-imports its
+# watch window on every unlock, and "did the unlock-path import fire?" must
+# be observable on the live bench. journald captures this service's stdout,
+# so one line per request — a sequence number, the COUNT of addresses in the
+# request, and the response status. Never addresses, tokens, or IPs.
+_watch_import_seq = 0
+_watch_log_lock = threading.Lock()
+
+
+def _log_watch_import(status: int, imported: int) -> None:
+    """Emit the WATCH_IMPORT access line; must never break the request."""
+    global _watch_import_seq
+    with _watch_log_lock:
+        _watch_import_seq += 1
+        # Print INSIDE the lock: one whole line per request, never two
+        # requests interleaving half-lines into the journal.
+        try:
+            print(f"WATCH_IMPORT seq={_watch_import_seq} "
+                  f"imported={imported} status={status}", flush=True)
+        except Exception:
+            # Logging is observability, not the request path — a failed
+            # write (closed stdout) must not turn an import into a 500.
+            pass
 
 
 def _token_digest(token: str) -> str:
@@ -260,28 +289,45 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
                 watch = _cache.get("watch_addresses", [])
             return list(watch)
 
+    def _watch_json(self, status: int, payload: Dict[str, Any],
+                    imported: int) -> None:
+        """Send the response AND emit the count-only WATCH_IMPORT line.
+
+        Logged BEFORE the response is sent, so a client that observed the
+        response knows the log line is already flushed — the M21 unlock-path
+        proof reads "app unlocked -> new WATCH_IMPORT line" from journald.
+        """
+        _log_watch_import(int(status), int(imported))
+        self._json(status, payload)
+
     def _watch_import(self) -> None:
-        if not self._require_auth():
+        if not self._authorized():
+            # Same payload/status as _require_auth's refusal, plus the
+            # access line — unauthorized probes are log-worthy too.
+            self._watch_json(HTTPStatus.UNAUTHORIZED, {"error": "locked"}, 0)
             return
         data = self._read_json()
         if data is None:
-            self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid body"})
+            self._watch_json(HTTPStatus.BAD_REQUEST,
+                             {"error": "invalid body"}, 0)
             return
         raw = data.get("addresses")
         if not isinstance(raw, list) or not raw:
-            self._json(HTTPStatus.BAD_REQUEST,
-                       {"error": "addresses (non-empty list) required"})
+            self._watch_json(HTTPStatus.BAD_REQUEST,
+                             {"error": "addresses (non-empty list) required"}, 0)
             return
         if len(raw) > 200:
-            self._json(HTTPStatus.BAD_REQUEST,
-                       {"error": "too many addresses per import (max 200)"})
+            self._watch_json(HTTPStatus.BAD_REQUEST,
+                             {"error": "too many addresses per import (max 200)"},
+                             0)
             return
         valid: List[str] = []
         for addr in raw:
             if not isinstance(addr, str) or not addr.startswith("M") \
                     or len(addr) != 34:
-                self._json(HTTPStatus.BAD_REQUEST,
-                           {"error": f"invalid MAZA address {addr!r}"})
+                self._watch_json(HTTPStatus.BAD_REQUEST,
+                                 {"error": f"invalid MAZA address {addr!r}"},
+                                 0)
                 return
             if addr not in valid:
                 valid.append(addr)
@@ -292,10 +338,11 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             if "invalid" in text or "checksum" in text \
                     or "decode" in text:
                 # the node rejected the address itself -> client error class
-                self._json(HTTPStatus.BAD_REQUEST,
-                           {"error": "address rejected by node"})
+                self._watch_json(HTTPStatus.BAD_REQUEST,
+                                 {"error": "address rejected by node"}, 0)
                 return
-            self._json(HTTPStatus.BAD_GATEWAY, {"error": f"chain: {exc}"})
+            self._watch_json(HTTPStatus.BAD_GATEWAY,
+                             {"error": f"chain: {exc}"}, 0)
             return
         with _state_lock:
             book = _cache.setdefault("watch_addresses", [])
@@ -304,7 +351,9 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
                     book.append(addr)
             _persist_state_locked()
             watched = len(book)
-        self._json(HTTPStatus.OK, {"imported": len(valid), "watched": watched})
+        self._watch_json(HTTPStatus.OK,
+                         {"imported": len(valid), "watched": watched},
+                         len(valid))
 
     def _watch_utxos(self) -> None:
         if not self._require_auth():

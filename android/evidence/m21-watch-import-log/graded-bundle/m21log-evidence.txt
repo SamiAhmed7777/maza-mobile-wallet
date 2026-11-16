@@ -1,0 +1,16 @@
+=== CMD: git diff --stat ===
+ tests/test_walletbench.py | 70 +++++++++++++++++++++++++++++++++++++++++++++
+ walletbench/api.py        | 73 +++++++++++++++++++++++++++++++++++++++--------
+ 2 files changed, 131 insertions(+), 12 deletions(-)
+
+=== CMD: python3 -m unittest discover -s tests 2>&1 | tail -3 ===
+Ran 129 tests in 51.554s
+
+OK (skipped=4)
+
+=== CMD: python3 -m unittest tests.test_walletbench.TestWatchImportAccessLog -v 2>&1 | grep -E '^(test_success|test_seq|test_failure|Ran|OK)' ===
+test_failure_paths_log_without_leaking_input (tests.test_walletbench.TestWatchImportAccessLog.test_failure_paths_log_without_leaking_input) ... /root/.hermes/tools/python-3.14.9+20261021-linux-x64/lib/python3.14/tempfile.py:538: ResourceWarning: Implicitly cleaning up <HTTPError 401: 'Unauthorized'>
+test_seq_increments_per_request (tests.test_walletbench.TestWatchImportAccessLog.test_seq_increments_per_request) ... ok
+test_success_logs_one_count_only_line (tests.test_walletbench.TestWatchImportAccessLog.test_success_logs_one_count_only_line) ... ok
+Ran 34 tests in 12.492s
+OK
