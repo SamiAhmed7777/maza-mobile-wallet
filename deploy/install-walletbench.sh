@@ -14,8 +14,11 @@
 #      (loopback + tailnet ONLY, never 0.0.0.0).
 #   4. systemd unit maza-wallet-bench.service (User=mazad so the RPC conf
 #      at /var/lib/mazad/maza.conf stays 0600 mazad:mazad).
-#   5. Health gate: GET /api/state over loopback must answer 401 (serving
-#      AND locked — both properties in one check).
+#   5. Health gate: `curl http://<bound-ip>:18701/api/state` must answer 401
+#      (serving + locked — both properties in one check). The installer
+#      RESTARTS the unit on every run: `enable --now` does not restart an
+#      already-active service (upgrade-path bug found live 2026-11-16 —
+#      new code on disk, old code serving).
 set -euo pipefail
 
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
@@ -101,7 +104,11 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now maza-wallet-bench.service
+# Upgrade path: enable --now does NOT restart an already-active unit — the
+# old process would keep serving the previous release (found live 2026-11-16:
+# new code on disk, old code serving). Restart explicitly, every time.
+systemctl restart maza-wallet-bench.service
+systemctl enable maza-wallet-bench.service
 
 # --- health gate -----------------------------------------------------------
 sleep 2
