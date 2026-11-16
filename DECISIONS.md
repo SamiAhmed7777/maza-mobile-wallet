@@ -109,6 +109,46 @@ chain code on three fields (noted per item).
   testnet mining stalls after the first difficulty adjustment (mined blocks
   only while the apparent-stall rule allowed floor difficulty).
 
+## D10 — Funding-flow change reconciliation (M20, added 2026-11-16)
+- Hazard (observed TWICE live): any NODE-side `sendtoaddress`/`sendfrom`
+  funding transfer uses wallet-level coin selection, which may consume UTXOs
+  sitting at bench-book addresses and return the change to a default-account
+  address OUTSIDE the bench book (Bitcoin-style accounts are bookkeeping
+  labels, not UTXO isolation — see chain.py module docstring). The swept
+  change then vanishes from the bench balance and its UTXO is stranded from
+  the bench's point of view (funds still safe in the mazad wallet).
+- Rule: after EVERY node-side funding transfer, reconcile the tx:
+  `POST /api/book/reconcile` with `{"txid": "<64-char hex>"}` (bench token
+  auth, cookie or Bearer). The service decodes the tx, finds outputs to
+  WALLET-OWNED addresses that are not already booked (and not phone-held
+  watch addresses — those never join the bench book), appends them to the
+  book through the same atomic fsync'd persist path as every other book
+  write, and reports the buckets {added, already_booked, already_watched,
+  external}. Idempotent: re-running a reconciled txid adds nothing, so the
+  safe live check is reconcile-on-a-known-tx expecting `added: []`.
+- Observability: one count-only stdout line per request —
+  `BOOK_RECONCILE seq=N added=C status=S` — never addresses, tokens,
+  or txids (journald captures it; same discipline as WATCH_IMPORT).
+- Cross-book invariant (judge round-2 finding): WATCH WINS. A phone-held
+  address must never remain in the bench book — `/api/watch/import` removes
+  any watch-imported address from the bench book under `_state_lock` (its
+  chain RPC runs BEFORE the lock, so a concurrent reconcile can publish the
+  address into the bench book in that window; the locked watch update
+  reclaims it in the same persist). Documented conflict policy: an address
+  ends up in exactly one book — the watch book.
+- Persist phase discipline (judge round-4 finding): `_persist_state_file`
+  raises `StatePersistError` whose `committed` flag distinguishes a
+  pre-commit failure (rename never landed — old file intact; callers roll
+  back the in-memory books) from a post-commit one (`os.replace` succeeded,
+  only the directory fsync failed — the new books ARE on disk; callers KEEP
+  the in-memory books so memory, disk, and the post-restart state agree).
+  Either phase returns a deliberate logged 500 through the count-only log
+  helper; a blind rollback on a committed failure would split memory from
+  disk.
+- This is an OPERATIONAL guard for the bench book, not a coin-policy change:
+  fee rate (D4), confirmation default (D1), and URI scheme are untouched —
+  no Payu routing needed.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

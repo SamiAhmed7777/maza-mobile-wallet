@@ -117,6 +117,10 @@ class WalletRPC:
     def validateaddress(self, address: str) -> Dict[str, Any]:
         return dict(self.rpc("validateaddress", address) or {})
 
+    def getrawtransaction_verbose(self, txid: str) -> Dict[str, Any]:
+        """Decoded tx by txid (M20 funding-change reconciliation)."""
+        return dict(self.rpc("getrawtransaction", txid, 1) or {})
+
     def listtransactions_all(self, count: int = 100) -> List[Dict[str, Any]]:
         return list(self.rpc("listtransactions", "*", int(count), 0) or [])
 
@@ -168,6 +172,13 @@ class MockChain:
         self.last_send: Dict[str, Any] = {}
         self.watched: List[str] = []
         self.last_broadcast: str = ""
+        # Addresses the NODE wallet holds keys for but the bench book does
+        # not know (default-account change sinks — the M20 swept-change
+        # hazard). getnewaddress() intentionally does NOT mark itself here:
+        # existing tests use it as a stand-in external recipient.
+        self.wallet_owned: set = set()
+        # txid -> decoded tx dict, for getrawtransaction_verbose (M20 tests).
+        self.decoded_txs: Dict[str, Dict[str, Any]] = {}
 
     def import_watch_addresses(self, addresses: List[str]) -> int:
         for address in addresses:
@@ -197,7 +208,28 @@ class MockChain:
     def validateaddress(self, address: str) -> Dict[str, Any]:
         valid = isinstance(address, str) and address.startswith("M") \
             and len(address) == 34
-        return {"isvalid": valid, "ismine": False, "address": address}
+        return {"isvalid": valid, "ismine": address in self.wallet_owned,
+                "iswatchonly": False, "address": address}
+
+    def mint_wallet_address(self) -> str:
+        """Mint a node-side default-account address: wallet-owned, NOT in
+        the bench book — models the swept-change sink M20 reconciles."""
+        self._addr_seq += 1
+        addr = "M" + f"{self._addr_seq:011d}" + "y" * 22
+        self.wallet_owned.add(addr)
+        return addr
+
+    def record_decoded_tx(self, txid: str, vout: List[Dict[str, Any]]) -> None:
+        """Test helper: register a decoded tx for getrawtransaction_verbose."""
+        self.decoded_txs[txid] = {"txid": txid, "vout": list(vout)}
+
+    def getrawtransaction_verbose(self, txid: str) -> Dict[str, Any]:
+        tx = self.decoded_txs.get(txid)
+        if tx is None:
+            raise ChainError("rpc getrawtransaction error: "
+                             "No such transaction or Info about "
+                             "transaction <{}> is not available".format(txid))
+        return dict(tx)
 
     def listtransactions_all(self, count: int = 100) -> List[Dict[str, Any]]:
         return list(self.txs[:count])
