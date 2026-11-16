@@ -67,6 +67,11 @@ EVERY member; zero 32-hex/64-hex full-line strings in any member. The only
 non-code, non-signature content is the public BIP39 English wordlist and
 brand PNGs.
 
+STALE-TOKEN HISTORY (accuracy): the baked value f7977f02… that this scan
+proves absent was itself DEAD — md5-proven distinct from both the
+pre-rotation server token and the current one; the server token was rotated
+before public exposure regardless (old 401s, new 200s — §4).
+
 $ unzip -p maza-wallet-v1.1.0-mazatest.apk classes.dex | strings | grep -m1 mazatest
 https://mazatest.sami-host.me
 (the ONLY baked endpoint: the public TEST URL — user-editable in the app)
