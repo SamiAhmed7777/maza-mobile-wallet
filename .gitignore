@@ -20,6 +20,7 @@ dist/
 # Secrets — never commit daemon RPC passwords or keys
 *.conf
 .env
+deploy/electrumx.env
 *credentials*
 
 # OS noise

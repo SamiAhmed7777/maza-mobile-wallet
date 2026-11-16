@@ -8,8 +8,10 @@ Sami-specific knowledge, that is a bug — open an issue.
 Status: core verified in-repo (coin profile grade B, judge-graded; installer
 pin-enforced; header-hash proven against live mainnet type-1 MinotaurX blocks).
 Deployment-hardening numbers marked **[TBD/community]** still need measuring
-on real hardware — file PRs with what you observe. Planned follow-ups (not yet
-in-tree): packaged systemd unit + docker-compose, and a troubleshooting guide.
+on real hardware — file PRs with what you observe. Packaged deployments are
+in-tree (Step 4b: `deploy/electrumx.service`, `deploy/docker-compose.yml`).
+Still planned: a troubleshooting guide (regtest genesis, testnet stall,
+txindex replay, ACL pitfalls).
 
 ## What you are building
 
@@ -230,8 +232,11 @@ stream {
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Open TCP 50002 (and keep 80 open for renewals) in your firewall; ElectrumX's
-50001 stays loopback-only. Clients then connect to `ssl://example.com:50002`
+Open TCP 50002 in BOTH firewalls — the host firewall (`sudo ufw allow
+50002/tcp` when ufw is active) AND the cloud provider's security group /
+external firewall, which apt cannot configure for you — and keep port 80
+open in BOTH for certificate issuance and renewals. ElectrumX's 50001
+stays loopback-only. Clients then connect to `ssl://example.com:50002`
 (substitute your hostname in the certificate paths). Caddy can do the same
 raw-TLS termination only with its layer4 module — the stock `reverse_proxy`
 is HTTP-only and does not fit the Electrum wire protocol. (Alternative for
@@ -246,6 +251,85 @@ INTERNAL byte order (`double_sha256` returns the raw digest); reversal is a
 DISPLAY concern only (`hash_to_display_hex` / `header_hash_rev` in
 `indexer/maza_coin.py`). Mixing the two is the classic "everything matches
 except the last characters" bug.
+
+## Step 4b — packaged deployments (systemd unit / docker compose)
+
+Both packages carry NO host-specific values: every path and credential
+lives in one env file (`deploy/electrumx.env.example`, placeholders only).
+They wrap the SAME runner you launched interactively in Step 4, so all of
+that section's env vars apply unchanged.
+
+### systemd: `deploy/electrumx.service`
+
+The unit is env-file-driven (`EnvironmentFile=/etc/electrumx-maza.env` —
+required, mode 600, it carries the RPC credentials), runs as a dedicated
+`electrumx` system user, provisions `/var/lib/electrumx-maza` itself via
+`StateDirectory=`, restarts on failure, and — before every serve — runs
+`run_indexer.py --check-only` as `ExecStartPre`, so a misconfigured env
+fails with the checker's own diagnostics (exit 2/3/4, in
+`journalctl -u electrumx`) instead of crash-looping a socketless server.
+
+```bash
+# as root — paths are the guide's worked example; adjust ELECTRUMX_VENV /
+# MAZA_REPO_DIR in the env file if you place the clone or venv elsewhere
+useradd --system --home-dir /var/lib/electrumx-maza --shell /usr/sbin/nologin electrumx
+git clone https://github.com/SamiAhmed7777/maza-mobile-wallet /opt/maza-mobile-wallet
+python3 -m venv /opt/venvs/electrumx-maza
+cd /opt/maza-mobile-wallet
+bash deploy/install-electrumx-dev.sh \
+     /opt/maza-mobile-wallet/third_party/electrumx \
+     /opt/venvs/electrumx-maza/bin/python
+# repo + venv stay ROOT-owned (world-readable): the service user gets write
+# access ONLY to its StateDirectory (/var/lib/electrumx-maza), so a
+# compromised indexer cannot rewrite its own code or interpreter.
+install -m 755 deploy/electrumx-launcher.sh /usr/local/sbin/electrumx-maza-launcher
+install -m 644 deploy/electrumx.service /etc/systemd/system/electrumx.service
+$EDITOR deploy/electrumx.env.example          # fill in YOUR rpcuser/rpcpass
+install -m 600 -o root -g electrumx deploy/electrumx.env.example /etc/electrumx-maza.env
+systemctl daemon-reload
+systemctl enable --now electrumx
+journalctl -u electrumx -f                    # expect the wiring check, then serving logs
+```
+
+If you already built a DB interactively under a different owner (Step 4's
+`install -d -o "$USER"` fence), chown it to `electrumx` before enabling the
+service — do not run both ownership schemes at once. Public TLS is layered
+on top exactly as in Step 4: the listener stays loopback-only
+(`SERVICES=tcp://127.0.0.1:50001` in the env file) and nginx terminates
+`ssl://…:50002`.
+
+One behaviour to expect: `Restart=on-failure` retries EVERY failure —
+including an ExecStartPre wiring-check failure — every 10 s. A wrong env
+file therefore restart-loops on purpose; the journal names the missing
+variable each cycle, `systemctl stop electrumx` breaks the loop, and a
+fixed env file just needs `systemctl restart electrumx`.
+
+### compose: `deploy/docker-compose.yml` + `deploy/Dockerfile.electrumx`
+
+The image installs electrumx with the repo's pin-enforcing installer (the
+same clone-check-fingerprint gate as bare metal, so a pin mismatch fails
+the BUILD), and the container command runs `--check-only` before serving —
+the same validate-then-serve shape as the systemd unit.
+
+```bash
+cd deploy
+cp electrumx.env.example electrumx.env        # gitignored — never commit it
+printf 'MAZA_DAEMON_URL=http://rpcuser:rpcpass@host.docker.internal:12832\n' > .env
+#  ^ .env is gitignored — put YOUR mazad rpcuser:rpcpass in it
+docker compose up -d --build
+docker compose logs -f electrumx
+```
+
+Two container-network facts are baked in (and commented in the compose
+file): the container's DAEMON_URL is interpolated from
+`MAZA_DAEMON_URL` in the gitignored `deploy/.env` — the tracked compose
+file never carries credentials, and the `:?` guard refuses to start
+without it — and `SERVICES` binds the container's `0.0.0.0`, required for
+the host port mapping to reach the listener, while the `ports:` entry
+keeps HOST exposure loopback-only, so the Step 4 TLS proxy design is
+unchanged. mazad itself: bring your own — no official MazaCore image
+exists; run it on the host per Step 2 (or containerise it yourself and
+set `MAZA_DAEMON_URL`'s host to your `mazad` service name).
 
 ## Step 5 — verify your server (do not skip)
 
@@ -367,8 +451,8 @@ welcome PR — the repo's crypto instruments (`tools/oracle.py`,
 ## Operating notes
 
 - Run both processes under systemd (or your supervisor of choice) with
-  restart-on-failure. A ready-made `deploy/electrumx.service` +
-  docker-compose packaging is planned but NOT in this tree yet — the
+  restart-on-failure. Ready-made packaging IS in-tree (Step 4b):
+  `deploy/electrumx.service` + `deploy/docker-compose.yml`. The
   wallet-bench installer (`deploy/install-walletbench.sh`) shows the house
   pattern (release dirs + health gate + state-file backup before restart).
 - The ElectrumX DB is a cache — it can be deleted and rebuilt from the node.

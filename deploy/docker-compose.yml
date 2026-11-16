@@ -1,0 +1,56 @@
+# deploy/docker-compose.yml — MAZA ElectrumX indexer under compose.
+#
+# Walkthrough: docs/electrumx/README.md, "Step 4b" (compose subsection).
+#
+#   cd deploy
+#   cp electrumx.env.example electrumx.env      # gitignored — never commit it
+#   printf 'MAZA_DAEMON_URL=http://rpcuser:rpcpass@host.docker.internal:12832\n' > .env
+#   #     ^ .env is gitignored — replace rpcuser:rpcpass with YOUR mazad RPC
+#   #       credentials; the compose file interpolates it into the container's
+#   #       DAEMON_URL and REFUSES to start without it (no credentials in the
+#   #       tracked file, and no silent empty expansion either).
+#   docker compose up -d --build
+#   docker compose logs -f electrumx            # the check gate prints wiring
+#
+# mazad: bring your own. No official MazaCore image exists (build per
+# upstream github.com/MazaCoin/maza with txindex=1 BEFORE first sync). This
+# file assumes mazad runs on the HOST and the indexer reaches its RPC via
+# the host-gateway alias; if you instead containerise mazad, add your own
+# service block named `mazad` and set MAZA_DAEMON_URL's host to `mazad`.
+services:
+  electrumx:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.electrumx
+    image: maza-electrumx:local
+    container_name: maza-electrumx
+    restart: unless-stopped
+    env_file:
+      - electrumx.env
+    environment:
+      # The container's "127.0.0.1" is the CONTAINER, not your host — the
+      # daemon lives on the host, so the RPC is repointed at the host-gateway
+      # alias declared by extra_hosts below. The VALUE (including the
+      # credentials) comes from the gitignored deploy/.env via interpolation;
+      # the :? guard fails the compose invocation LOUDLY when it is unset.
+      DAEMON_URL: ${MAZA_DAEMON_URL:?set MAZA_DAEMON_URL (rpcuser:rpcpass@host.docker.internal:12832 with YOUR creds) in deploy/.env}
+      # The listener must bind the container's 0.0.0.0 or the host port
+      # mapping below can never reach it (a 127.0.0.1 bind inside the
+      # container only accepts container-loopback traffic). HOST exposure
+      # stays loopback-only via "ports", so the public TLS design (guide
+      # Step 4: nginx terminates ssl:50002 -> 127.0.0.1:50001) is unchanged.
+      SERVICES: tcp://0.0.0.0:50001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      # Loopback-only on the HOST — the indexer itself never faces the
+      # network directly; public TLS is the proxy's job (guide Step 4).
+      - "127.0.0.1:50001:50001"
+    volumes:
+      # Named volume (NOT a bind mount): the image pre-creates
+      # /var/lib/electrumx-maza owned by the electrumx uid, and docker seeds
+      # a named volume's ownership from the image on first use.
+      - electrumx-db:/var/lib/electrumx-maza
+
+volumes:
+  electrumx-db:

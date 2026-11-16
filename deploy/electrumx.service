@@ -1,0 +1,81 @@
+# deploy/electrumx.service — run the MAZA ElectrumX indexer as a system
+# service. Full walkthrough: docs/electrumx/README.md, "Step 4b".
+#
+# Install (as root; paths below are the worked example from the guide):
+#   useradd --system --home-dir /var/lib/electrumx-maza --shell /usr/sbin/nologin electrumx
+#   git clone https://github.com/SamiAhmed7777/maza-mobile-wallet /opt/maza-mobile-wallet
+#   python3 -m venv /opt/venvs/electrumx-maza
+#   cd /opt/maza-mobile-wallet
+#   bash deploy/install-electrumx-dev.sh \
+#        /opt/maza-mobile-wallet/third_party/electrumx \
+#        /opt/venvs/electrumx-maza/bin/python
+#   install -m 755 deploy/electrumx-launcher.sh /usr/local/sbin/electrumx-maza-launcher
+#   install -m 644 deploy/electrumx.service /etc/systemd/system/electrumx.service
+#   # NOTE: repo + venv stay ROOT-owned (world-readable) — the service user
+#   # gets write access ONLY to its StateDirectory (/var/lib/electrumx-maza),
+#   # so a compromised indexer cannot rewrite its own code or interpreter.
+#   # then edit the env template (placeholders only) and install it:
+#   $EDITOR deploy/electrumx.env.example
+#   install -m 600 -o root -g electrumx deploy/electrumx.env.example \
+#           /etc/electrumx-maza.env
+#   systemctl daemon-reload && systemctl enable --now electrumx
+#   journalctl -u electrumx -f      # ExecStartPre prints the wiring check
+#
+# The unit carries NO chain or path values of its own — everything comes
+# from the env file, so the same unit text works on any host.
+[Unit]
+Description=MAZA ElectrumX indexer (Electrum wire protocol in front of the local mazad)
+Documentation=https://github.com/SamiAhmed7777/maza-mobile-wallet/blob/master/docs/electrumx/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=electrumx
+Group=electrumx
+# REQUIRED — the leading value is deliberately NOT "-"-prefixed, so a
+# missing env file FAILS THE START loudly instead of serving empty config.
+# Must define: DB_DIRECTORY, DAEMON_URL, DB_ENGINE, SERVICES (read by
+# electrumx/run_indexer) and ELECTRUMX_VENV, MAZA_REPO_DIR (expanded in
+# the Exec* lines below). Placeholders: deploy/electrumx.env.example.
+EnvironmentFile=/etc/electrumx-maza.env
+# Validate wiring BEFORE serving: --check-only builds the coin class and
+# checks the required env without opening sockets or the DB. Exit codes
+# (printed to the journal): 2 = missing env vars, 3 = electrumx not
+# importable (run the installer), 4 = coin class failed to build. A
+# misconfigured env fails HERE with the checker's diagnostics instead of
+# crash-looping a server that can only say "connection refused".
+#
+# Both Exec* lines name ONE absolute command: the launcher installed by the
+# walkthrough below (`deploy/electrumx-launcher.sh` ->
+# /usr/local/sbin/electrumx-maza-launcher). The unit cannot reference
+# "${ELECTRUMX_VENV}/bin/python" directly — systemd-analyze verify rejects a
+# variable as the executable's first path component, and the launcher gives
+# the host-specific paths real shell-expansion semantics instead.
+ExecStartPre=/usr/local/sbin/electrumx-maza-launcher --check-only
+ExecStart=/usr/local/sbin/electrumx-maza-launcher
+# systemd provisions /var/lib/electrumx-maza with the right owner so the
+# DB directory exists before the first serve (the interactive path in the
+# guide provisions it with `install -d` instead — either one, not both).
+StateDirectory=electrumx-maza
+Restart=on-failure
+RestartSec=10
+# ElectrumX flushes its DB on SIGTERM — give it time to exit cleanly.
+TimeoutStopSec=120
+
+# Hardening: the indexer needs outbound RPC, its listener and its DB.
+# Reads (venv, repo, certs) stay allowed; writes outside /var/lib and
+# /tmp are not.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target
