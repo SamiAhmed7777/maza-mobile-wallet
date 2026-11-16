@@ -1,0 +1,19 @@
+PASS static: wasSelected capture exists
+PASS static: tab reassignment exists
+PASS static: navigation refresh guard exists
+PASS static: showWallet tab reset exists
+PASS static: capture is BEFORE the tab reassignment
+PASS static: reset is BEFORE the initial selectTab(0)
+PASS static: no visibility-based guard remains
+PASS A: unlock performs exactly 1 fetch
+PASS B1: switching to SEND does not refresh
+PASS B2: navigating to BALANCE refreshes
+PASS C1: navigating to HISTORY refreshes
+PASS C2: returning to HISTORY refreshes again
+PASS D: WALLET navigation does not balance-refresh
+PASS D: WALLET onShown fired per entry
+PASS E: each BALANCE navigation refreshes
+PASS F: self-tap of the selected tab does not refresh
+PASS G: reconnect from non-BALANCE tab = exactly 1 fetch
+PASS H: without the reset the reconnect double-fetches (discriminator)
+ALL CHECKS PASSED

@@ -414,7 +414,9 @@ public final class SelfCustody {
 
         LinearLayout sendCard = card();
         root.addView(sendCard, mp(0, dp(12), 0, 0));
-        sendCard.addView(label("SEND", 12, ACCENT, Typeface.BOLD));
+        sendCard.addView(label("SEND \u00B7 SELF-CUSTODY", 12, ACCENT, Typeface.BOLD));
+        sendCard.addView(label("Signed on this device from your own seed balance.",
+                12, MUTED, Typeface.NORMAL), mp(0, dp(2), 0, 0));
 
         toEt = input("", "To (M...)");
         toEt.setTypeface(Typeface.MONOSPACE);
