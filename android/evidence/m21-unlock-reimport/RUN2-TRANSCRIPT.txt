@@ -1,0 +1,59 @@
+RUN 2 — M21 unlock-path proof, full timestamped transcript (UTC)
+All commands verbatim-logged; token delivered over stdin, never echoed;
+no other redaction needed (addresses are public mainnet data).
+
+--- step stamps (verbatim from the run driver) ---
+[2026-11-16T13:03:03.522Z] T0 recorded: app still running from prior session; about to force-stop
+[2026-11-16T13:03:03.542Z] STEP force-stop            adb shell am force-stop com.mazawallet
+[2026-11-16T13:03:16.162Z] STEP am start              adb shell am start -n com.mazawallet/.MainActivity
+[2026-11-16T13:03:36.306Z] STEP token entry           type_token.ps1 via stdin (token never echoed)
+[2026-11-16T13:03:51.838Z] STEP CONNECT tap           adb shell input tap 800 576   <- THE UNLOCK
+[2026-11-16T13:04:00.734Z] STEP passive 14s wait      (no input)
+[2026-11-16T13:04:14.783Z] STEP journald read         journalctl -u maza-wallet-bench --since "-90 sec" -o short-iso
+[2026-11-16T13:04:18.033Z] STEP uiautomator dump #1   post-unlock landing screen
+[2026-11-16T13:04:32.718Z] STEP WALLET tab tap        adb shell input tap 1440 858   <- FIRST tab interaction
+[2026-11-16T13:04:51.204Z] STEP uiautomator dump #2   wallet render after proof
+[2026-11-16T13:05:18.025Z] DONE run 2
+
+--- token-entry output (only line that command emits) ---
+EditText[1] len=96 bounds=[54,421][1546,489] focus=true
+(len 96 = 96 masked bullets = the 32-char token; per uiautomator masking)
+
+--- journald, verbatim UTC-native lines (TZ=UTC journalctl -o short-iso) ---
+2026-11-16T12:37:27+00:00 Samihost python3[2883516]: WATCH_IMPORT seq=1 imported=43 status=200
+2026-11-16T12:41:41+00:00 Samihost python3[2883516]: WATCH_IMPORT seq=2 imported=0 status=401
+2026-11-16T12:45:16+00:00 Samihost python3[2883516]: WATCH_IMPORT seq=3 imported=40 status=200
+2026-11-16T12:46:07+00:00 Samihost python3[2883516]: WATCH_IMPORT seq=4 imported=40 status=200
+2026-11-16T13:04:05+00:00 Samihost python3[2883516]: WATCH_IMPORT seq=5 imported=40 status=200
+2026-11-16T13:04:43+00:00 Samihost python3[2883516]: WATCH_IMPORT seq=6 imported=40 status=200
+(one clock: everything above is UTC, same as the step stamps; the line's
+raw text contains "+00:00" verbatim as printed by journalctl)
+
+--- attribution of each line ---
+seq=1 12:37:27Z imported=43  = backlog-loop's idempotent re-import probe
+seq=2 12:41:41Z imported=0/401 = interactive lane's unauthenticated probe
+seq=3 12:45:16Z imported=40  = RUN 1 unlock (CONNECT tap ~12:45:02Z, +14s)  -> unlock path
+seq=4 12:46:07Z imported=40  = RUN 1 WALLET-tab tap (~12:45:5xZ)            -> tab path (pre-existing onShown)
+seq=5 13:04:05Z imported=40  = RUN 2 unlock (CONNECT tap 13:03:51.8Z stamped, +13.2s) -> unlock path (THE M21 FIX)
+seq=6 13:04:43Z imported=40  = RUN 2 WALLET-tab tap (13:04:32.7Z stamped, +10.3s)     -> tab path (pre-existing onShown)
+
+--- uiautomator dumps (RAW XML shipped verbatim in this directory) ---
+ur2a.xml sha256 531591a0d8537d0e1f126158984179bd4f02cb05955cc3d946139ece23dc1636  (dump #1, post-unlock landing)
+ur2b.xml sha256 a09484324a7ff2b74dd72b524c4317c08833118fe8f47953b6beb058f3203cc2  (dump #2, wallet render)
+dump #1 text nodes: MAZA Wallet / 46.9998774 MAZA / account mobile-play · fee 0.0001 MAZA /
+  Last sync 2026-11-16 05:04:17 / REFRESH / BALANCE RECEIVE SEND HISTORY WALLET
+dump #2 text nodes: My Wallet / Self-custody · keys never leave this device / BALANCE /
+  1.4999 MAZA / RECEIVE ADDRESS / index 2 / MGo1gjPrj2GDnbwcyRBJMaZ4GJMEAaVkU8 / NEXT /
+  BALANCE RECEIVE SEND HISTORY WALLET
+
+--- artifact hashes (this directory) ---
+m21_run2_wallet.png sha256 a9955d8a0d688d4a5414e10f06d9ace9257818762f237ad01159846aae22b736
+(content: My Wallet / BALANCE 1.4999 MAZA / RECEIVE ADDRESS index 2
+MGo1gjPrj2GDnbwcyRBJMaZ4GJMEAaVkU8 / QR — verified by both uiautomator XML
+and visual inspection of the PNG)
+
+--- endpoint note ---
+GET /api/watch/utxos ignores any ?addr= parameter by design: the handler
+returns UTXOs for the ENTIRE watch set (walletbench/api.py _watch_utxos),
+filtered to watched addresses. Earlier transcript lines showing
+"?addr=MPHoBsbs…" were therefore watch-set-wide queries, not per-address.
