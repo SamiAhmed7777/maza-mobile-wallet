@@ -1,0 +1,4 @@
+# Python deps for tools/oracle.py + tools/txverify.py (dev/oracle only).
+# The walletbench service itself is stdlib-only.
+ecdsa>=0.17
+pycryptodome>=3.15

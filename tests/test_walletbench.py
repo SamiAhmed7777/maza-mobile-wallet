@@ -33,6 +33,7 @@ FOREIGN_ADDR = "M9" + "f" * 32  # 34 chars, simulates the bridge deposit addr
 def make_server(chain):
     api._cache.pop("addresses", None)  # fresh bench address book per test
     api._cache.pop("txids", None)
+    api._cache.pop("watch_addresses", None)
     handler = api.WalletBenchHandler
     handler.chain = chain
     handler.token_digest = api._token_digest(TOKEN)
@@ -429,8 +430,177 @@ class TestChainAdapter(unittest.TestCase):
         rpc = WalletRPC("http://127.0.0.1:1", "u", "p", timeout=1,
                         account="mobile-play")
         for method in ("getnewaddress", "listunspent_for", "send_precise",
-                       "listtransactions_all", "validateaddress"):
+                       "listtransactions_all", "validateaddress",
+                       "import_watch_addresses", "sendraw_only"):
             self.assertTrue(callable(getattr(rpc, method)))
+
+
+WATCH_A = "M" + "a" * 33
+WATCH_B = "M" + "b" * 33
+FOREIGN_WATCH = "M" + "c" * 33
+
+
+class TestSelfCustody(BenchTestCase):
+    """Watch-only endpoints for the phone-held (self-custody) wallet."""
+
+    def test_watch_import_requires_auth(self):
+        status, _, _ = self.request(
+            "POST", "/api/watch/import", {"addresses": [WATCH_A]})
+        self.assertEqual(status, 401)
+
+    def test_watch_import_rejects_bad_address(self):
+        cookie = self.unlock()
+        for bad in ("not-an-address", "M" + "a" * 32, 42, None):
+            status, _, body = self.request(
+                "POST", "/api/watch/import", {"addresses": [bad]},
+                cookie=cookie)
+            self.assertEqual(status, 400, bad)
+        status, _, _ = self.request(
+            "POST", "/api/watch/import", {"addresses": []}, cookie=cookie)
+        self.assertEqual(status, 400)
+
+    def test_watch_import_dedupes_and_counts(self):
+        cookie = self.unlock()
+        status, _, body = self.request(
+            "POST", "/api/watch/import",
+            {"addresses": [WATCH_A, WATCH_B, WATCH_A]}, cookie=cookie)
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data["imported"], 2)
+        self.assertEqual(data["watched"], 2)
+        # idempotent second import
+        status, _, body = self.request(
+            "POST", "/api/watch/import", {"addresses": [WATCH_A]},
+            cookie=cookie)
+        data = json.loads(body)
+        self.assertEqual(data["imported"], 1)
+        self.assertEqual(data["watched"], 2)
+
+    def test_watch_utxos_scoped_to_watch_set(self):
+        cookie = self.unlock()
+        self.request("POST", "/api/watch/import",
+                     {"addresses": [WATCH_A]}, cookie=cookie)
+        self.chain.fund_address(WATCH_A, 3.5)
+        self.chain.fund_address(WATCH_B, 9.0)  # NOT imported
+        status, _, body = self.request(
+            "GET", "/api/watch/utxos", cookie=cookie)
+        self.assertEqual(status, 200)
+        utxos = json.loads(body)["utxos"]
+        self.assertEqual(len(utxos), 1)
+        self.assertEqual(utxos[0]["address"], WATCH_A)
+        self.assertEqual(utxos[0]["amount"], 3.5)
+
+    def test_watch_utxos_empty_book(self):
+        cookie = self.unlock()
+        status, _, body = self.request(
+            "GET", "/api/watch/utxos", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"utxos": []})
+
+    def test_watch_history_filters_by_address(self):
+        cookie = self.unlock()
+        self.request("POST", "/api/watch/import",
+                     {"addresses": [WATCH_A]}, cookie=cookie)
+        self.chain.txs.append({"category": "receive", "txid": "t" * 64,
+                               "amount": 2.0, "confirmations": 3,
+                               "time": 1700000000, "address": WATCH_A})
+        self.chain.txs.append({"category": "receive", "txid": "e" * 64,
+                               "amount": 5.0, "confirmations": 1,
+                               "time": 1700000100, "address": FOREIGN_WATCH})
+        status, _, body = self.request(
+            "GET", "/api/watch/history", cookie=cookie)
+        self.assertEqual(status, 200)
+        txs = json.loads(body)["transactions"]
+        self.assertEqual(len(txs), 1)
+        self.assertEqual(txs[0]["address"], WATCH_A)
+        self.assertEqual(txs[0]["amount"], 2.0)
+
+    def test_broadcast_validates_hex(self):
+        cookie = self.unlock()
+        for bad in ("zzzz", "abc", "0" * 10, "0x1234", ""):
+            status, _, _ = self.request(
+                "POST", "/api/broadcast", {"hex": bad}, cookie=cookie)
+            self.assertEqual(status, 400, bad)
+        status, _, _ = self.request(
+            "POST", "/api/broadcast", {"nope": 1}, cookie=cookie)
+        self.assertEqual(status, 400)
+
+    def test_broadcast_returns_txid_and_records_hex(self):
+        cookie = self.unlock()
+        raw_hex = "01000000" + "ab" * 40
+        status, _, body = self.request(
+            "POST", "/api/broadcast", {"hex": raw_hex}, cookie=cookie)
+        self.assertEqual(status, 200)
+        txid = json.loads(body)["txid"]
+        self.assertEqual(len(txid), 64)
+        self.assertEqual(self.chain.last_broadcast, raw_hex)
+
+    def test_broadcast_requires_auth(self):
+        status, _, _ = self.request(
+            "POST", "/api/broadcast", {"hex": "0100"})
+        self.assertEqual(status, 401)
+
+    def test_broadcast_uppercase_normalized(self):
+        cookie = self.unlock()
+        raw_hex = "01000000" + "CD" * 20
+        status, _, body = self.request(
+            "POST", "/api/broadcast", {"hex": raw_hex}, cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(self.chain.last_broadcast, raw_hex.lower())
+
+    def test_qr_addr_requires_watch_membership(self):
+        cookie = self.unlock()
+        # well-formed but NOT watched -> 400
+        status, _, _ = self.request(
+            "GET", f"/api/qr.png?addr={FOREIGN_WATCH}", cookie=cookie)
+        self.assertEqual(status, 400)
+        # imported -> renders
+        self.request("POST", "/api/watch/import",
+                     {"addresses": [WATCH_A]}, cookie=cookie)
+        status, headers, _ = self.request(
+            "GET", f"/api/qr.png?addr={WATCH_A}", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Content-Type"), "image/png")
+        # bench default (no addr param) still works
+        status, _, _ = self.request("GET", "/api/qr.png", cookie=cookie)
+        self.assertEqual(status, 200)
+
+    def test_watch_book_surfaces_in_state_restart(self):
+        # Watch book must persist across a service restart, same as the
+        # bench address book (orphaned watch addresses = blind wallet).
+        import tempfile
+        fd, state_file = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        os.unlink(state_file)
+        os.environ["WB_STATE_FILE"] = state_file
+        try:
+            cookie = self.unlock()
+            status, _, body = self.request(
+                "POST", "/api/watch/import",
+                {"addresses": [WATCH_A, WATCH_B]}, cookie=cookie)
+            self.assertEqual(status, 200)
+            with open(state_file) as fh:
+                on_disk = json.load(fh)
+            self.assertEqual(on_disk.get("watch_addresses"),
+                             [WATCH_A, WATCH_B])
+            # restart with an empty in-memory cache: the watch book must
+            # come back from disk
+            self.server.shutdown()
+            api._cache.clear()
+            self.server, self.base = make_server(self.chain)
+            cookie = self.unlock()
+            status, _, body = self.request(
+                "GET", "/api/watch/utxos", cookie=cookie)
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body), {"utxos": []})
+            # prove the book survived: the QR for a restored watch address
+            # must be allowed (membership check reads the reloaded book)
+            status, headers, _ = self.request(
+                "GET", f"/api/qr.png?addr={WATCH_B}", cookie=cookie)
+            self.assertEqual(status, 200)
+        finally:
+            os.unlink(state_file)
+            os.environ.pop("WB_STATE_FILE", None)
 
 
 if __name__ == "__main__":

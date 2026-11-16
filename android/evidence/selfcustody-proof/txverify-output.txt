@@ -1,0 +1,8 @@
+$ /tmp/destvenv/bin/python tools/txverify.py <sent-tx-hex> 0 76a914a8d1e31cee7692a99dc10bdd8d36a7da9f2bde3288ac
+tx: version=1 inputs=1 outputs=2 locktime=0 consumed=226/226 bytes
+pubkey 03b962f74b70283d... -> address MPHoBsbsNUduo7fsvMCREpDSMWpyeUxq2H
+s value: LOW (ok)
+SIGNATURE: VALID
+  output 0: 0.50000000 MAZA script=76a914e925ffcf7e89ff8082be95...
+  output 1: 1.49990000 MAZA script=76a914c2e2616a0e8078cdb83b66...
+

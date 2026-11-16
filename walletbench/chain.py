@@ -12,6 +12,7 @@ address. Only the bench UTXOs can ever be consumed; the mazapay-bridge
 deposit is mathematically out of reach.
 """
 
+import hashlib
 import json
 import secrets
 from typing import Any, Dict, List, Optional, Tuple
@@ -63,6 +64,16 @@ class WalletRPC:
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            # Bitcoin-family RPC answers JSON-RPC errors with HTTP 500 —
+            # the real error message lives in the BODY, not the status line
+            # (masking it turned "Invalid Maza address" into a mystery 502).
+            try:
+                err_body = json.loads(exc.read().decode("utf-8"))
+                node_err = err_body.get("error") or err_body
+            except Exception:
+                node_err = str(exc)
+            raise ChainError(f"rpc {method} error: {node_err}") from exc
         except OSError as exc:
             raise ChainError(f"rpc {method} transport error: {exc}") from exc
         except json.JSONDecodeError as exc:
@@ -74,6 +85,29 @@ class WalletRPC:
     # --- wallet surface ------------------------------------------------------
     def getnewaddress(self) -> str:
         return str(self.rpc("getnewaddress", self.account))
+
+    def import_watch_addresses(self, addresses: List[str]) -> int:
+        """Watch-only import of client-held addresses (self-custody mode).
+
+        The SERVER never receives the keys for these addresses — the phone
+        signs everything locally; importaddress here only lets the wallet
+        surface balances/history/broadcast for them. rescan=false: fresh
+        addresses only receive NEW transactions, and a 4.48M-block rescan
+        per address would pin the node for hours.
+        """
+        count = 0
+        for address in addresses:
+            self.rpc("importaddress", address, "", False)
+            count += 1
+        return count
+
+    def sendraw_only(self, raw_hex: str) -> str:
+        """Broadcast a client-signed raw transaction (self-custody path).
+
+        No signing happens here — the bytes arrive already signed by the
+        phone's key. This endpoint can never move funds by itself.
+        """
+        return str(self.rpc("sendrawtransaction", raw_hex))
 
     def listunspent_for(self, addresses: List[str],
                         minconf: int = 1) -> List[Dict[str, Any]]:
@@ -132,6 +166,18 @@ class MockChain:
         self._addr_seq = 0
         self._utxo_seq = 0
         self.last_send: Dict[str, Any] = {}
+        self.watched: List[str] = []
+        self.last_broadcast: str = ""
+
+    def import_watch_addresses(self, addresses: List[str]) -> int:
+        for address in addresses:
+            if address not in self.watched:
+                self.watched.append(address)
+        return len(addresses)
+
+    def sendraw_only(self, raw_hex: str) -> str:
+        self.last_broadcast = raw_hex
+        return hashlib.sha256(raw_hex.encode("ascii")).hexdigest()
 
     def fund_address(self, address: str, amount: float, label: str = "") -> None:
         """Test helper: mint an unspent output at `address`."""

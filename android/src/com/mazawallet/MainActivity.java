@@ -29,14 +29,9 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,7 +45,7 @@ import java.util.Locale;
  * "Authorization: Bearer <token>" (the app keeps no cookie jar). The token
  * is memory-only: never persisted, never in URLs.
  */
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements SelfCustody.Host {
 
     private static final String PREFS = "maza";
     private static final String KEY_URL = "url";
@@ -69,7 +64,8 @@ public class MainActivity extends Activity {
     private static final int RED = 0xFFFF6B6B;      // send / error
     private static final int GREEN = 0xFF6FD66F;    // receive
 
-    private static final String[] TABS = {"BALANCE", "RECEIVE", "SEND", "HISTORY"};
+    private static final String[] TABS = {"BALANCE", "RECEIVE", "SEND", "HISTORY", "WALLET"};
+    private static final int TAB_WALLET = 4;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final Runnable pollTask = this::refresh;
@@ -113,6 +109,7 @@ public class MainActivity extends Activity {
     private Button sendBtn;
     private TextView sendResultTv;
     private LinearLayout historyList;
+    private SelfCustody selfCustody;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -185,6 +182,7 @@ public class MainActivity extends Activity {
         buildReceiveTab();
         buildSendTab();
         buildHistoryTab();
+        buildWalletTab();
 
         // Bottom tab bar: 4 equal-weight buttons, always visible.
         View divider = new View(this);
@@ -223,6 +221,7 @@ public class MainActivity extends Activity {
             tabBtns[k].setTypeface(Typeface.DEFAULT,
                     k == i ? Typeface.BOLD : Typeface.NORMAL);
         }
+        if (i == TAB_WALLET && selfCustody != null) selfCustody.onShown();
     }
 
     // ---- tab builders: header logo + view body, one ScrollView each ----
@@ -344,6 +343,31 @@ public class MainActivity extends Activity {
         addTab(col, 3);
     }
 
+    /** "My Wallet" self-custody tab; all logic lives in SelfCustody. */
+    private void buildWalletTab() {
+        LinearLayout col = tabColumn();
+        selfCustody = new SelfCustody(this, this);
+        col.addView(selfCustody.view());
+        addTab(col, TAB_WALLET);
+    }
+
+    // ------------------------------------------------- SelfCustody.Host
+
+    @Override
+    public String baseUrl() {
+        return baseUrl;
+    }
+
+    @Override
+    public String token() {
+        return token;
+    }
+
+    @Override
+    public void onUnauthorized() {
+        ui.post(this::lockOut);
+    }
+
     // ------------------------------------------------------------- actions
 
     private void doUnlock() {
@@ -366,7 +390,7 @@ public class MainActivity extends Activity {
                 baseUrl = url;
                 token = tok;
                 JSONObject body = new JSONObject().put("token", tok);
-                Resp r = http("POST", "/api/unlock", body);
+                Api.Resp r = Api.http(baseUrl, token, "POST", "/api/unlock", body);
                 if (r.code == 200) {
                     prefs.edit().putString(KEY_URL, url).apply();
                     ui.post(() -> {
@@ -416,7 +440,7 @@ public class MainActivity extends Activity {
             int color;
             try {
                 JSONObject body = new JSONObject().put("to", to).put("amount", amt);
-                Resp r = http("POST", "/api/send", body);
+                Api.Resp r = Api.http(baseUrl, token, "POST", "/api/send", body);
                 if (r.code == 200) {
                     String txid = r.json().optString("txid", "");
                     msg = txid.length() == 0 ? "Sent." : "Sent: " + shortTxid(txid);
@@ -450,7 +474,7 @@ public class MainActivity extends Activity {
         ui.removeCallbacks(pollTask);
         new Thread(() -> {
             try {
-                Resp r = http("GET", "/api/state", null);  // Bearer header, never the token in URLs
+                Api.Resp r = Api.http(baseUrl, token, "GET", "/api/state", null);  // Bearer header, never the token in URLs
                 if (r.code == 401) {
                     ui.post(this::lockOut);
                     return;
@@ -465,6 +489,7 @@ public class MainActivity extends Activity {
                 final WalletState ws = WalletState.parse(r.text());
                 ui.post(() -> {
                     applyState(ws);
+                    if (selfCustody != null) selfCustody.refresh();
                     schedulePoll();
                 });
             } catch (IOException e) {
@@ -551,7 +576,7 @@ public class MainActivity extends Activity {
         qrStatusTv.setTextColor(MUTED);
         new Thread(() -> {
             try {
-                Resp r = http("GET", "/api/qr.png", null);  // Bearer header, no token in URL
+                Api.Resp r = Api.http(baseUrl, token, "GET", "/api/qr.png", null);  // Bearer header, no token in URL
                 if (r.code == 401) {
                     ui.post(this::lockOut);
                     return;
@@ -603,72 +628,7 @@ public class MainActivity extends Activity {
     }
 
     // ----------------------------------------------------------- network
-
-    /** Minimal stateless HTTP. Body != null means POST with Bearer auth. */
-    private Resp http(String method, String path, JSONObject body) throws IOException {
-        HttpURLConnection c =
-                (HttpURLConnection) new URL(baseUrl + path).openConnection();
-        try {
-            c.setConnectTimeout(10000);
-            c.setReadTimeout(15000);
-            c.setRequestMethod(method);
-            c.setRequestProperty("Accept", "application/json");
-            // Bearer on EVERY request (GETs included) - never the token in URLs.
-            if (token != null) {
-                c.setRequestProperty("Authorization", "Bearer " + token);
-            }
-            if (body != null) {
-                c.setDoOutput(true);
-                c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                c.getOutputStream().write(body.toString().getBytes("UTF-8"));
-            }
-            int code = c.getResponseCode();
-            InputStream in = code >= HttpURLConnection.HTTP_BAD_REQUEST
-                    ? c.getErrorStream() : c.getInputStream();
-            return new Resp(code, readAll(in));
-        } finally {
-            c.disconnect();
-        }
-    }
-
-    private static byte[] readAll(InputStream in) throws IOException {
-        if (in == null) return new byte[0];
-        try {
-            ByteArrayOutputStream buf = new ByteArrayOutputStream();
-            byte[] tmp = new byte[4096];
-            int n;
-            while ((n = in.read(tmp)) != -1) buf.write(tmp, 0, n);
-            return buf.toByteArray();
-        } finally {
-            in.close();
-        }
-    }
-
-    static final class Resp {
-        final int code;
-        final byte[] body;
-
-        Resp(int code, byte[] body) {
-            this.code = code;
-            this.body = body;
-        }
-
-        String text() {
-            return new String(body, StandardCharsets.UTF_8);
-        }
-
-        JSONObject json() throws JSONException {
-            return new JSONObject(text());
-        }
-
-        String errorText() {
-            try {
-                return new JSONObject(text()).optString("error", "HTTP " + code);
-            } catch (JSONException e) {
-                return "HTTP " + code;
-            }
-        }
-    }
+    // All HTTP lives in Api (shared with the SelfCustody wallet tab).
 
     static final class WalletState {
         double balance;

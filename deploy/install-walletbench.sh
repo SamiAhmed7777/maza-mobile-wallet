@@ -81,6 +81,17 @@ chmod 600 "$ENV_DST"
 mkdir -p /var/lib/maza-wallet-bench
 chown mazad:mazad /var/lib/maza-wallet-bench
 chmod 750 /var/lib/maza-wallet-bench
+# Backup the address book before ANY restart: the book IS the pointer to
+# funded addresses (lost once on 2026-11-16 while funds stayed safe in the
+# node wallet — recovery was manual chain forensics). Keep the last 5.
+if [ -f /var/lib/maza-wallet-bench/state.json ]; then
+  cp /var/lib/maza-wallet-bench/state.json \
+     "/var/lib/maza-wallet-bench/state.json.bak-${STAMP}"
+  ls -1t /var/lib/maza-wallet-bench/state.json.bak-* 2>/dev/null \
+    | tail -n +6 | xargs -r rm -f
+  chown mazad:mazad /var/lib/maza-wallet-bench/state.json.bak-"${STAMP}"
+  log "state.json backed up"
+fi
 log "env assembled at ${ENV_DST} (0600, host=${TS_IP})"
 
 # --- systemd unit ----------------------------------------------------------

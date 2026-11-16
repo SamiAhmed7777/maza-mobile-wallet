@@ -7,6 +7,11 @@ Routes:
     GET  /api/state       -> {"balance","address","account","txs":[...]}
     POST /api/send        -> {"to","amount"} -> {"txid"} (UTXO-scoped, capped)
     GET  /api/qr.svg      -> SVG QR of the current receive address
+    GET  /api/qr.png[?addr=M...] -> PNG QR (addr must be in the watch book)
+    POST /api/watch/import -> {"addresses":[...]} watch-only import (no keys)
+    GET  /api/watch/utxos  -> UTXOs of the watch set (self-custody balance)
+    GET  /api/watch/history-> history filtered to the watch set
+    POST /api/broadcast   -> {"hex": "..."} broadcast a CLIENT-SIGNED tx
 
 Auth: single token from WB_TOKEN; unlock exchanges it for an HttpOnly
 SameSite=Strict cookie. All /api/* except /api/unlock require it. The
@@ -22,6 +27,7 @@ import json
 import math
 import os
 import threading
+import urllib.parse
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional
@@ -59,6 +65,7 @@ def _persist_state_locked() -> None:
     payload = json.dumps({
         "addresses": _cache.get("addresses", []),
         "txids": sorted(_cache.get("txids", set())),
+        "watch_addresses": _cache.get("watch_addresses", []),
     }).encode("utf-8")
     tmp = path + ".tmp"
     with open(tmp, "wb") as fh:
@@ -103,9 +110,19 @@ def _load_state_locked() -> None:
         if not isinstance(txid, str) or len(txid) != 64:
             raise ChainError(f"corrupt state: bad txid entry {txid!r}")
         txids.add(txid)
+    raw_watch = data.get("watch_addresses", [])
+    if not isinstance(raw_watch, list):
+        raise ChainError("corrupt state: watch_addresses is not a list")
+    watch: List[str] = []
+    for addr in raw_watch:
+        if not isinstance(addr, str) or not addr.startswith("M") \
+                or len(addr) != 34:
+            raise ChainError(f"corrupt state: bad watch address {addr!r}")
+        watch.append(addr)
     if addresses:
         _cache["addresses"] = addresses
         _cache["txids"] = txids
+    _cache["watch_addresses"] = watch
 
 
 class WalletBenchHandler(BaseHTTPRequestHandler):
@@ -233,6 +250,139 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             import traceback
             traceback.print_exc()
 
+    # --- self-custody watch book ---------------------------------------------
+    def _watch_addresses(self) -> List[str]:
+        """Addresses the phone holds keys for (server sees public data only)."""
+        with _state_lock:
+            watch = _cache.get("watch_addresses")
+            if watch is None:
+                _load_state_locked()
+                watch = _cache.get("watch_addresses", [])
+            return list(watch)
+
+    def _watch_import(self) -> None:
+        if not self._require_auth():
+            return
+        data = self._read_json()
+        if data is None:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid body"})
+            return
+        raw = data.get("addresses")
+        if not isinstance(raw, list) or not raw:
+            self._json(HTTPStatus.BAD_REQUEST,
+                       {"error": "addresses (non-empty list) required"})
+            return
+        if len(raw) > 200:
+            self._json(HTTPStatus.BAD_REQUEST,
+                       {"error": "too many addresses per import (max 200)"})
+            return
+        valid: List[str] = []
+        for addr in raw:
+            if not isinstance(addr, str) or not addr.startswith("M") \
+                    or len(addr) != 34:
+                self._json(HTTPStatus.BAD_REQUEST,
+                           {"error": f"invalid MAZA address {addr!r}"})
+                return
+            if addr not in valid:
+                valid.append(addr)
+        try:
+            self.chain.import_watch_addresses(valid)
+        except ChainError as exc:
+            text = str(exc).lower()
+            if "invalid" in text or "checksum" in text \
+                    or "decode" in text:
+                # the node rejected the address itself -> client error class
+                self._json(HTTPStatus.BAD_REQUEST,
+                           {"error": "address rejected by node"})
+                return
+            self._json(HTTPStatus.BAD_GATEWAY, {"error": f"chain: {exc}"})
+            return
+        with _state_lock:
+            book = _cache.setdefault("watch_addresses", [])
+            for addr in valid:
+                if addr not in book:
+                    book.append(addr)
+            _persist_state_locked()
+            watched = len(book)
+        self._json(HTTPStatus.OK, {"imported": len(valid), "watched": watched})
+
+    def _watch_utxos(self) -> None:
+        if not self._require_auth():
+            return
+        watch = self._watch_addresses()
+        if not watch:
+            self._json(HTTPStatus.OK, {"utxos": []})
+            return
+        try:
+            unspent = self.chain.listunspent_for(watch)
+        except ChainError as exc:
+            self._json(HTTPStatus.BAD_GATEWAY, {"error": f"chain: {exc}"})
+            return
+        ours = set(watch)
+        utxos = [{
+            "txid": u.get("txid"), "vout": u.get("vout"),
+            "address": u.get("address"),
+            "amount": round(float(u.get("amount", 0)), 8),
+            "confirmations": u.get("confirmations"),
+        } for u in unspent if u.get("address") in ours]
+        self._json(HTTPStatus.OK, {"utxos": utxos})
+
+    def _watch_history(self) -> None:
+        if not self._require_auth():
+            return
+        watch = self._watch_addresses()
+        if not watch:
+            self._json(HTTPStatus.OK, {"transactions": []})
+            return
+        try:
+            txs = self.chain.listtransactions_all(count=200)
+        except ChainError as exc:
+            self._json(HTTPStatus.BAD_GATEWAY, {"error": f"chain: {exc}"})
+            return
+        ours = set(watch)
+        clean = []
+        for t in txs:
+            amount = t.get("amount")
+            if not isinstance(amount, (int, float)) or isinstance(amount, bool):
+                continue
+            if t.get("address") in ours:
+                clean.append({
+                    "category": t.get("category"),
+                    "txid": t.get("txid"),
+                    "amount": round(float(amount), 8),
+                    "confirmations": t.get("confirmations"),
+                    "time": t.get("time", 0),
+                    "address": t.get("address"),
+                })
+        self._json(HTTPStatus.OK, {"transactions": clean[:60]})
+
+    def _broadcast(self) -> None:
+        if not self._require_auth():
+            return
+        data = self._read_json()
+        if data is None:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid body"})
+            return
+        raw_hex = data.get("hex")
+        if not isinstance(raw_hex, str):
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "hex required"})
+            return
+        raw_hex = raw_hex.strip().lower()
+        if len(raw_hex) < 20 or len(raw_hex) % 2 != 0 \
+                or any(c not in "0123456789abcdef" for c in raw_hex):
+            self._json(HTTPStatus.BAD_REQUEST,
+                       {"error": "hex must be even-length lowercase hex"})
+            return
+        if len(raw_hex) > 200000:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "transaction too large"})
+            return
+        try:
+            txid = self.chain.sendraw_only(raw_hex)
+        except ChainError as exc:
+            self._json(HTTPStatus.BAD_GATEWAY, {"error": f"chain: {exc}"})
+            return
+        self._json(HTTPStatus.OK, {"txid": txid})
+
     # --- routes ------------------------------------------------------------
     def do_GET(self) -> None:  # noqa: N802 (http.server naming)
         try:
@@ -257,6 +407,10 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             self._file(os.path.join(config.STATIC_DIR, name), ctype)
         elif path == "/api/state":
             self._state()
+        elif path == "/api/watch/utxos":
+            self._watch_utxos()
+        elif path == "/api/watch/history":
+            self._watch_history()
         elif path == "/api/qr.svg":
             self._qr()
         elif path == "/api/qr.png":
@@ -279,6 +433,10 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             self._unlock()
         elif path == "/api/send":
             self._send()
+        elif path == "/api/watch/import":
+            self._watch_import()
+        elif path == "/api/broadcast":
+            self._broadcast()
         else:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -394,11 +552,31 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             return
         self._json(HTTPStatus.OK, {"txid": txid})
 
+    def _requested_qr_address(self, primary: str) -> Any:
+        """Optional ?addr= override: must be well-formed AND already in the
+        watch book (no arbitrary-address QR proxying)."""
+        parsed = urllib.parse.urlsplit(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        vals = params.get("addr", [])
+        if not vals:
+            return primary
+        addr = vals[0]
+        if not (isinstance(addr, str) and addr.startswith("M")
+                and len(addr) == 34):
+            return None
+        if addr not in self._watch_addresses():
+            return None
+        return addr
+
     def _qr(self) -> None:
         if not self._require_auth():
             return
         try:
-            address = self._primary_address()
+            address = self._requested_qr_address(self._primary_address())
+            if address is None:
+                self._json(HTTPStatus.BAD_REQUEST,
+                           {"error": "addr not valid or not watched"})
+                return
             svg = qr.address_svg(address)
         except ChainError as exc:
             self._json(HTTPStatus.BAD_GATEWAY, {"error": f"chain: {exc}"})
@@ -411,7 +589,11 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
         if not self._require_auth():
             return
         try:
-            address = self._primary_address()
+            address = self._requested_qr_address(self._primary_address())
+            if address is None:
+                self._json(HTTPStatus.BAD_REQUEST,
+                           {"error": "addr not valid or not watched"})
+                return
             png = qr.address_png_bytes(address)
         except ChainError as exc:
             self._json(HTTPStatus.BAD_GATEWAY, {"error": f"chain: {exc}"})

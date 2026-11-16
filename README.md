@@ -1,10 +1,14 @@
 # MAZA Mobile Wallet
 
-An indexer/decision scaffold for a MazaCoin (MAZA) mobile wallet. **This is
-not yet a working wallet app** — it holds the locked decision table and the
-first tested building block (the ElectrumX MAZA coin profile). Decisions are
-inherited from the existing wallet code — MazaCore 0.16.3 — not invented
-(see `DECISIONS.md` for the cited decision table and the rule behind it).
+A native MAZA (MazaCoin) mobile wallet: **v0.5 self-custody is implemented
+and live-proven on mainnet**. The Android app generates/imports a BIP39
+seed phrase on-device, derives keys at `m/44'/13'` (SLIP-44 coin 13),
+builds and signs legacy P2PKH transactions locally, and talks to a small
+token-gated watch/broadcast service — the server never sees a private key.
+
+Also in this repo: the bench backend (walletbench), the ElectrumX coin
+profile + installer for running your own Electrum server, and the
+verification tooling that gates every crypto change.
 
 ## Why
 
@@ -15,64 +19,87 @@ upgrade. The official site points users at Komodo Wallet, whose MAZA config
 drifts from chain code (WIF byte, derivation path, block time). This project
 builds the missing piece on chain-code defaults.
 
-## Architecture
+## Components
 
-- **Light client** (phone) — address derivation mirrors MazaCore's own HD
-  scheme (`m/0'/0'/k`, wallet.cpp:185). Note: MazaCore's wallet.dat stores a
-  raw HD seed (not a BIP39 mnemonic); importing a desktop wallet seed into
-  the mobile wallet is a planned lane, not an established fact. Address,
-  fee, and confirmation behavior mirror MazaCore's wallet code (DECISIONS.md).
-- **Indexer** (samihost, next to the existing `mazad`) — ElectrumX with the
-  MAZA coin profile (`indexer/maza_coin.py`): server merkle proofs for tx
-  verification, so the phone never validates multi-algo PoW itself (Hive
-  consensus needs chain state a header-only client can't rebuild — see
-  DECISIONS.md D2).
-- **MazaPay integration** — scan a merchant checkout QR and pay it directly.
+| Path | What it is |
+|---|---|
+| `android/` | The app: `MainActivity` (bench views) + `SelfCustody` (seed wallet), crypto package `com.mazawallet.crypto` (BIP39/BIP32/Secp256k1/Base58Check/TxBuilder), `selftest.sh` (desktop JVM vector tests), `build-apk.sh` (Gradle-free aapt2/javac/d8/apksigner) |
+| `walletbench/` | Watch-only backend: `/api/watch/import`, `/api/watch/utxos`, `/api/watch/history`, `/api/broadcast`, scoped `/api/qr.png?addr=`, plus the v0 bench (custodial) API |
+| `indexer/` | ElectrumX MAZA coin profile + launcher |
+| `deploy/` | samihost installer (bench service), ElectrumX pinned installer |
+| `tools/` | `oracle.py` — independent Python oracle (official BIP39/BIP32 vectors + MAZA profile); `txverify.py` — offline SIGHASH_ALL/ECDSA verifier (validated against a real MazaCore-signed mainnet tx); `requirements.txt` for the oracle venv |
+| `docs/electrumx/` | Community guide: run your own Electrum server for MAZA |
+| `android/evidence/` | Install + live-proof evidence, incl. `selfcustody-proof/PROOF.md` |
 
-## Lanes
+## Verify everything yourself (do not trust this README)
 
-1. **Indexer** — ElectrumX + MAZA coin profile on samihost. Coin profile and
-   header-hash behavior are in this repo and tested offline against live
-   mainnet fixtures from both PoW eras. **Unblocked finding (2026-11-16):**
-   the block identity hash is double-SHA256 for every block regardless of
-   PoW algorithm (`CBlockHeader::GetHash()` = `SerializeHash`, verified live
-   on genuine MinotaurX blocks), so ElectrumX ingests the whole chain with
-   no MinotaurX hash oracle. Open: daemon `txindex=1`, the `Env(coin=...)`
-   launch runner, `DB_ENGINE` choice, deploy script, public TCP verification.
-2. **Mobile app** — Android-first wallet on the indexer above (m/0'/0'/k,
-   MazaCore-faithful defaults per DECISIONS.md).
-3. **MazaPay bridge integration** — checkout deep links + confirmation display
-   consistent with D1.
+```bash
+# Crypto vectors (desktop JVM; Java + Python must agree):
+bash android/selftest.sh                        # 19 checks, ALL PASS, exit 0
+python tools/oracle.py                          # BIP39/BIP32 anchored checks
 
-## Status
+# Backend tests:
+python3 -m unittest discover -s tests           # walletbench + chain suites
 
-- Decision table locked (`DECISIONS.md`, 2026-11-15).
-- **Wallet bench v0 (added in this changeset)**: `walletbench/` — UTXO-scoped
-  wallet service (raw-tx sends with explicit input selection so only bench
-  addresses' coins are ever consumed), token-authed mobile UI (Kimi-CLI-built,
-  adopted via an adoption gate), samihost installer binding the tailnet IP
-  only. This is the D7 bench edition: keys in the node wallet, NOT
-  self-custody.
-- Coin profile + offline tests landed (previous commit): fixtures from BOTH
-  PoW eras reproduce the daemon's own block hashes exactly; chain constants
-  anchored to vendored MazaCore excerpts (`vendor/`, sha256-pinned).
-- **Identity-hash finding (2026-11-16):** block identity = double-SHA256 for
-  all blocks (incl. MinotaurX-mined ones) — the indexer has no oracle
-  blocker. PoW validation stays the daemon's job.
-- Not started: indexer deployment on samihost, v1 self-custody wallet
-  (client-side keys over the indexer), MazaPay checkout integration.
+# Python deps for tools/ (system python lacks ecdsa/pycryptodome):
+pip install -r tools/requirements.txt
 
-## Android APK / bench app
+# Android build:
+bash android/build-apk.sh                       # signed APK
+
+# Live mainnet proof (re-checkable without trusting us):
+cat android/evidence/selfcustody-proof/PROOF.md
+```
+
+## Wallet parameters (inherited, cited)
+
+Every parameter mirrors MazaCore 0.16.3 (`github.com/MazaCoin/maza`, tag
+v0.16.3) with file/line citations — see `DECISIONS.md`. Headlines:
+P2PKH version byte 50 (`M...`), WIF 224, bech32 HRP `maza`, 120 s blocks,
+RPC 12832, SLIP-44 coin 13, derivation `m/44'/13'/0'/0/i` (+ `/1/i`
+change), spend at 1 confirmation, SIGHASH_ALL with low-S.
+
+Note on derivation: the MOBILE wallet follows the SLIP-44 standard
+`m/44'/13'/0'/0/i` (matching the Komodo registry config); MazaCore's own
+desktop wallet.dat uses a raw HD seed at `m/0'/0'/k` (wallet.cpp:185) —
+seed import from a desktop wallet.dat into the mobile wallet is a planned
+lane, not an established fact.
+
+## Architecture (self-custody flow)
+
+```
+Android app                          walletbench (token-gated)
+  BIP39 seed (on device)   --watch-->  importaddress (no keys)
+  derive m/44'/13'                    listunspent -> /api/watch/utxos
+  build+sign locally      --bytes-->  sendrawtransaction (/api/broadcast)
+  history/balance         <--watch--  listunspent/listtransactions
+```
+
+The bench (custodial `mobile-play` account) flow remains for the play
+funds; its tab-bar SEND is the custodial path, while the WALLET tab holds
+the self-custody wallet (seed + its own send form).
+
+## Running your own Electrum server
+
+See `docs/electrumx/README.md` — pinned ElectrumX installer, MAZA coin
+profile, verify checklist. The multi-algo PoW is a non-issue for indexing:
+the block identity hash is plain double-SHA256 for every block regardless
+of PoW algorithm (`CBlockHeader::GetHash()` = `SerializeHash`, proven live
+on genuine MinotaurX blocks), so ElectrumX ingests the whole chain with no
+PoW oracle.
+
+## Android APK / BlueStacks bench
 
 `android/build-apk.sh` builds a signed APK (aapt2/javac/d8/apksigner — no
 Gradle, no external libraries). The app talks to the walletbench API with
-stateless auth: `Authorization: Bearer <token>` on every request (GETs and
-POSTs). Default endpoint: `http://100.121.150.22:18701` — the DNS2 tunnel
-(`deploy/maza-bench-tunnel.service`, bound to DNS2's tailnet IP only) that
-forwards to the bench on samihost; the samihost tailnet IP directly is
-blocked for non-granted ports by the tailnet ACL. Launcher icon is the
+stateless auth: `Authorization: Bearer <token>` on every request; the token
+never rides in a URL. Default endpoint: `http://100.121.150.22:18701` — the
+DNS2 tunnel (`deploy/maza-bench-tunnel.service`, bound to DNS2's tailnet IP
+only) forwarding to the bench on samihost (the samihost tailnet IP directly
+is blocked for non-granted ports by the tailnet ACL). Launcher icon is the
 official MazaCoin roundel, Sami-supplied (sha256-pinned in
-`walletbench/static/icon.png`).
+`walletbench/static/icon.png`). The bench unlock token rotates on demand
+and goes to Sami by DM only.
 
 ## Verification
 
@@ -83,7 +110,21 @@ bash deploy/install-electrumx-dev.sh          # clone + pin-check + install
 python3 indexer/run_indexer.py --check-only   # validate wiring, no sockets
 ```
 
-No external dependencies for the offline suite; the ElectrumX integration
-tests (registration via `Env(coin=...)`, server entry-point fixtures, tree
-fingerprints, runner check) run whenever the pinned `e-x` tree is installed
-and skip cleanly otherwise.
+No external dependencies for the offline backend suite (the ElectrumX
+integration tests run whenever the pinned `e-x` tree is installed and skip
+cleanly otherwise); `tools/` needs `pip install -r tools/requirements.txt`.
+
+## Status
+
+- Decision table locked (`DECISIONS.md`, 2026-11-15).
+- **Wallet bench v0** live since 2026-11-15: custodial play wallet
+  (`mobile-play` account), raw-tx sends with explicit input selection.
+- **Self-custody v0.5 SHIPPED 2026-11-16**: on-device BIP39 seed, local
+  signing, watch-only backend; live mainnet proof
+  (`android/evidence/selfcustody-proof/PROOF.md`): phone-signed tx
+  ce514b350d2c...cd4e confirmed, SIGNATURE VALID + LOW-S offline gate.
+- Coin profile + fixtures from BOTH PoW eras reproduce the daemon's own
+  block hashes exactly; chain constants anchored to vendored MazaCore
+  excerpts (`vendor/`, sha256-pinned).
+- Open: indexer deployment, release keystore + distribution, QR scanning,
+  payment URIs, MazaPay checkout integration (backlog M-items).

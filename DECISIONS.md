@@ -81,16 +81,33 @@ chain code on three fields (noted per item).
 - Network exposure: tailnet-only bind (WB_LISTEN_HOST = tailscale IPv4),
   never 0.0.0.0; unlock token required for every API surface.
 
-## D8 — Seed phrases (answered 2026-11-16)
-- Bench edition (v0): **NO seed phrase support.** The keys live in the
-  samihost mazad wallet; the only seed there is the node wallet's master
-  seed, which controls ALL wallet funds including the 11,500-MAZA
-  mazapay-bridge deposit. Exposing or exporting it from a phone screen
-  would put bridge funds at risk — refused by design.
-- v1 self-custody lane (client-side keys + the indexer) is where seed
-  phrases arrive: per-wallet BIP39 mnemonics with import/export, generated
-  on-device, never touching the node wallet. Until then, backup story =
-  the bench is a play wallet; meaningful funds wait for v1.
+## D8 — Seed phrases (SUPERSEDED 2026-11-16: Sami directed finishing it)
+- ~~Bench edition: no seed phrase support~~ → **v0.5 self-custody mode SHIPPED**: the APK generates a BIP39 12-word mnemonic on-device, derives keys at `m/44'/13'` (SLIP-44 coin 13, matching Komodo + the registry), builds and signs raw transactions ON DEVICE, and the backend never sees a private key — it only watches imported addresses and broadcasts signed bytes.
+- Correctness: BIP39/BIP32/BIP44 verified against published vectors via TWO independent implementations (Kimi's Java + Hermes' Python oracle) before landing; signing proven end-to-end on a regtest node (instant blocks, throwaway coins) before mainnet.
+- The node wallet's master seed is STILL never exposed — watch-only `importaddress` covers the app's addresses.
+- Old bench (custodial `mobile-play` account) remains for the play funds; v0.5 wallets are self-custodial. Meaningful funds can move to a v0.5 wallet once Sami backs up its seed.
+
+## D9 — Bench funds address-book loss (2026-11-16, resolved)
+- Symptom: `/var/lib/maza-wallet-bench/state.json` (the address book) vanished
+  between 05:26 and 06:29 UTC; the service cold-started onto a fresh address
+  and the UI showed balance 0. Investigated an install that DELETES nothing —
+  the deleter is unknown (possibly an external actor or a cron); hardened
+  regardless: the installer now takes a timestamped `state.json.bak-<stamp>`
+  before every restart (last 5 kept).
+- Funds were NEVER at risk: they live in the mazad wallet, the state file is
+  only a pointer. Restored the book from chain forensics
+  (`listtransactions` + `getreceivedbyaddress`): balance 48.9999 intact.
+- During the same window a REAL 1.0000 MAZA send left the bench to
+  MLRe5sWp7LE3skDMQhFbkfd2n5XcZdpKMs (tx c3ceb87e…, 202+ confs) — the first
+  USER-initiated transmission (Sami, from the app's SEND tab). Change went to
+  MCCqc3Ckf7rZ3v3meFSJkDBGAQVoiFmBNL (now in the bench book).
+- Verification instruments built: `tools/oracle.py` (BIP39/BIP32 official
+  vectors + MAZA profile; validated against MazaCore via importprivkey →
+  validateaddress) and `tools/txverify.py` (offline SIGHASH_ALL +
+  ECDSA-verify of a raw tx; VALIDATES a real MazaCore-signed mainnet tx).
+- MazaCore quirks: `-regtest` genesis assertion aborts (broken in-tree);
+  testnet mining stalls after the first difficulty adjustment (mined blocks
+  only while the apparent-stall rule allowed floor difficulty).
 
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
