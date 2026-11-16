@@ -309,6 +309,10 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             # Receives/changes carry a bench address; outgoing sends name the
             # EXTERNAL recipient, so attribute them by recorded txid instead —
             # otherwise every payment the user makes vanishes from history.
+            # A "send" addressed TO a bench address is the funding tx seen
+            # from another account's side — not a payment the user made.
+            if t.get("category") == "send" and t.get("address") in ours:
+                continue
             if t.get("address") in ours or t.get("txid") in our_txids:
                 clean.append({
                     "category": t.get("category"), "amount": amount,

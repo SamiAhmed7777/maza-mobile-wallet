@@ -335,6 +335,17 @@ class BenchTestCase(unittest.TestCase):
         self.assertEqual(sends[0]["amount"], -5.0)
         self.assertEqual(sends[0]["address"], to)
 
+    def test_self_addressed_funding_send_hidden_from_history(self):
+        # A funding tx seen from another account's side reads "send -50 to
+        # our own address" — it must not appear as a user payment.
+        addr, cookie = self.fund_bench(50.0)
+        self.chain.txs.insert(0, {"category": "send", "amount": -50.0,
+                                  "confirmations": 2, "time": 0,
+                                  "address": addr, "txid": "f" * 64})
+        state, _ = self.state()
+        sends = [t for t in state["txs"] if t["category"] == "send"]
+        self.assertEqual(len(sends), 0)  # the funding "send" must be hidden
+
     # --- static / pages ------------------------------------------------------
     def test_page_served(self):
         status, headers, _ = self.request("GET", "/")
