@@ -1,0 +1,19 @@
+=== M21 unlock-path watch re-import — build + suite evidence ===
+date: 2026-11-16 11:32:58 UTC
+
+--- android/build-apk.sh (selftest gate = stage 1/6, then javac):
+[1/6] crypto selftest (gate — any FAIL aborts the build before packaging)
+ALL 19 CHECKS PASSED
+[4/6] javac
+SIGNED OK: /root/maza-mobile-wallet/android/maza-wallet-bench.apk (271316 bytes)
+
+--- walletbench suite:
+Ran 95 tests in 40.110s
+
+OK (skipped=4)
+
+--- trigger-path grep (new call site reachable from showWallet):
+191:        selfCustody.onUnlocked();
+216:        selectTab(0);
+230:        if (i == TAB_WALLET && selfCustody != null) selfCustody.onShown();
+151:    public void onUnlocked() {

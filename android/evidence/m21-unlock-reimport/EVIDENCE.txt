@@ -1,0 +1,26 @@
+=== M21 unlock-path watch re-import — build + suite evidence (POST-FOLD bytes) ===
+date: 2026-11-16 11:39:49 UTC
+
+--- android/build-apk.sh (selftest gate = stage 1/6, then javac):
+[1/6] crypto selftest (gate — any FAIL aborts the build before packaging)
+ALL 19 CHECKS PASSED
+[4/6] javac
+SIGNED OK: /root/maza-mobile-wallet/android/maza-wallet-bench.apk (271316 bytes)
+
+--- walletbench suite:
+Ran 95 tests in 31.813s
+
+OK (skipped=4)
+
+--- trigger-path grep (new call site reachable from showWallet):
+191:        selfCustody.onUnlocked();
+216:        selectTab(0);
+230:        if (i == TAB_WALLET && selfCustody != null) selfCustody.onShown();
+151:    public void onUnlocked() {
+772:                    // Judge polish fold: the import may complete after a
+
+--- shipped-vs-graded source hashes:
+9cb22534f594ba8d1cc060b84ed8a3e83f28fe51cdb987e0a234f3929d306685  android/src/com/mazawallet/SelfCustody.java
+475643c6a45a6541c9930cf84e0b22a2b3b478b8c2059a8fcf360e683f0c9b17  android/src/com/mazawallet/MainActivity.java
+344d2bed608d123768d621a988f42252c41dba46474db840efb077719090c59a  android/evidence/m21-unlock-reimport/graded-bundle/SelfCustody.java
+475643c6a45a6541c9930cf84e0b22a2b3b478b8c2059a8fcf360e683f0c9b17  android/evidence/m21-unlock-reimport/graded-bundle/MainActivity.java

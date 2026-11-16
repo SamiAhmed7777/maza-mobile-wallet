@@ -1,0 +1,42 @@
+diff --git a/android/maza-wallet-bench.apk.idsig b/android/maza-wallet-bench.apk.idsig
+index 38e5ffc..b4a98b6 100644
+Binary files a/android/maza-wallet-bench.apk.idsig and b/android/maza-wallet-bench.apk.idsig differ
+diff --git a/android/src/com/mazawallet/MainActivity.java b/android/src/com/mazawallet/MainActivity.java
+index bcb9b2d..8d92b32 100644
+--- a/android/src/com/mazawallet/MainActivity.java
++++ b/android/src/com/mazawallet/MainActivity.java
+@@ -183,6 +183,12 @@ public class MainActivity extends Activity implements SelfCustody.Host {
+         buildSendTab();
+         buildHistoryTab();
+         buildWalletTab();
++        // Unlock path watch re-import (M21): the landing tab is BALANCE, so
++        // the WALLET tab's onShown() will not fire until the user switches
++        // there. Fire the idempotent re-import now — a creation-time import
++        // that died mid-flight must not leave the wallet blind for the
++        // session (no-op while no seed exists).
++        selfCustody.onUnlocked();
+ 
+         // Bottom tab bar: 4 equal-weight buttons, always visible.
+         View divider = new View(this);
+diff --git a/android/src/com/mazawallet/SelfCustody.java b/android/src/com/mazawallet/SelfCustody.java
+index cf0e294..cd17d47 100644
+--- a/android/src/com/mazawallet/SelfCustody.java
++++ b/android/src/com/mazawallet/SelfCustody.java
+@@ -141,6 +141,17 @@ public final class SelfCustody {
+         }
+     }
+ 
++    /** Called once per successful unlock, before any tab is shown. Unlock
++     *  lands on BALANCE (MainActivity.selectTab(0)), so onShown() would not
++     *  fire until the user happens to tap WALLET — a creation-time import
++     *  that died mid-flight (the live M2 incident) would stay blind the
++     *  whole session. Re-import the watch window right at unlock; the
++     *  backend import is idempotent (dedupes addresses, 200 on re-import).
++     *  No-op while no seed exists (fresh install: nothing to watch yet). */
++    public void onUnlocked() {
++        if (seedExists()) ensureWatchImported();
++    }
++
+     // ---------------------------------------------------------------- state
+ 
+     private boolean seedExists() {

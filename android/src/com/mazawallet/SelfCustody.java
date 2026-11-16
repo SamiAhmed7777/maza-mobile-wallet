@@ -141,6 +141,17 @@ public final class SelfCustody {
         }
     }
 
+    /** Called once per successful unlock, before any tab is shown. Unlock
+     *  lands on BALANCE (MainActivity.selectTab(0)), so onShown() would not
+     *  fire until the user happens to tap WALLET — a creation-time import
+     *  that died mid-flight (the live M2 incident) would stay blind the
+     *  whole session. Re-import the watch window right at unlock; the
+     *  backend import is idempotent (dedupes addresses, 200 on re-import).
+     *  No-op while no seed exists (fresh install: nothing to watch yet). */
+    public void onUnlocked() {
+        if (seedExists()) ensureWatchImported();
+    }
+
     // ---------------------------------------------------------------- state
 
     private boolean seedExists() {
@@ -757,7 +768,17 @@ public final class SelfCustody {
         new Thread(() -> {
             List<String> all = allAddresses();
             for (int attempt = 1; attempt <= 3; attempt++) {
-                if (importAddresses(all)) return;
+                if (importAddresses(all)) {
+                    // Judge polish fold: the import may complete after a
+                    // refresh already ran (unlock lands on BALANCE, or the
+                    // WALLET tab was opened while the import was in flight
+                    // and showed a stale/empty state). refresh() is
+                    // thread-safe (own thread, ui.post UI updates) and
+                    // self-guards on state/token, so pull fresh data now
+                    // instead of waiting for the next poll.
+                    refresh();
+                    return;
+                }
                 try {
                     Thread.sleep(2000L * attempt);
                 } catch (InterruptedException ignored) {

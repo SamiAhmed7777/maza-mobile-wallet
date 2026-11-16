@@ -183,6 +183,12 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         buildSendTab();
         buildHistoryTab();
         buildWalletTab();
+        // Unlock path watch re-import (M21): the landing tab is BALANCE, so
+        // the WALLET tab's onShown() will not fire until the user switches
+        // there. Fire the idempotent re-import now — a creation-time import
+        // that died mid-flight must not leave the wallet blind for the
+        // session (no-op while no seed exists).
+        selfCustody.onUnlocked();
 
         // Bottom tab bar: 4 equal-weight buttons, always visible.
         View divider = new View(this);
