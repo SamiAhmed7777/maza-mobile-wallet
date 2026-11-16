@@ -1,0 +1,5 @@
+### CMD: bash android/build-apk.sh (bench mode regression, r3 script bytes)
+[6/6] apksigner
+SIGNED OK: /root/maza-mobile-wallet/android/maza-wallet-bench.apk (271316 bytes)
+### note: bench path functionally unchanged — same stages, SIGNED OK; classes.dex
+### zip-entry mtimes make cross-build md5s differ (timestamp analysis in prior rounds).

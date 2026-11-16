@@ -28,3 +28,7 @@ Thumbs.db
 
 # Vendored clones (installed by deploy/install-electrumx-dev.sh)
 third_party/
+
+# Release APKs + sidecars land here (gitignored — binaries stay out of git;
+# sha256 recorded in android/evidence/m5-release-build/ instead)
+android/releases/

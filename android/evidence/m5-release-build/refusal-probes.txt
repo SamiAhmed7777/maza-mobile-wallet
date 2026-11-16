@@ -1,0 +1,59 @@
+### Refusal probes against FINAL script bytes (sha 9a7a7a2400bd8ecb2f5c18593ba0bb91830a5e13c4a856f857d1eb707d42ca89)
+
+### PROBE A: missing keystore -> FATAL exit 1
+### CMD: MAZA_RELEASE_KEYSTORE=/root/.maza-wallet/does-not-exist.keystore bash android/build-apk.sh --release
+### EXIT=1
+FATAL: release keystore not found at /root/.maza-wallet/does-not-exist.keystore — create it once with:
+
+### PROBE B: world-readable passfile -> FATAL exit 1
+### CMD: MAZA_RELEASE_KEYSTORE_PASS=/tmp/m5-probe-pass.txt bash android/build-apk.sh --release
+### EXIT=1
+FATAL: /tmp/m5-probe-pass.txt must be mode 0600/0400 (is 644) — refusing to use an exposed signing credential
+
+### PROBE C: missing passfile -> FATAL exit 1
+### CMD: MAZA_RELEASE_KEYSTORE_PASS=/tmp/m5-never-created.pass bash android/build-apk.sh --release
+### EXIT=1
+FATAL: release keystore password file missing at /tmp/m5-never-created.pass
+
+### PROBE D1: invalid versionCode (RELEASE_VERSION_CODE=abc) -> FATAL exit 1
+### EXIT=1
+FATAL: invalid versionCode 'abc' for release build
+
+### PROBE D2: invalid versionName (RELEASE_VERSION_NAME=1..0) -> FATAL exit 1
+### EXIT=1
+FATAL: invalid versionName '1..0' — must be digit-led dotted segments (e.g. 1.0.0; rejects '.', '1..0', '.1', '1.')
+
+### PROBE E: wrong password -> apksigner fails, no APK written
+### EXIT=2
+Failed to load signer "signer #1"
+java.io.IOException: keystore password was incorrect
+### OK: no output APK written on failed sign
+(probe scratch files removed)
+
+### PROBE F (VERBATIM replay of the emitted hint — the exact text the script prints,
+### captured from stderr with SCRATCH env paths substituted in, executed as captured):
+### FATAL EXIT=1 (expected 1)
+### captured hint text (verbatim from stderr, scratch paths substituted by the script itself):
+  |   openssl rand -base64 30 | tr -d "\n" > /tmp/m5-hint/test.keystore.pass && chmod 600 /tmp/m5-hint/test.keystore.pass
+  |   PW="$(head -n1 /tmp/m5-hint/test.keystore.pass)" && printf "%s\n%s\n" "$PW" "$PW" > /tmp/m5-hint/test.keystore.pass  # 2 lines: ks + key password (apksigner file: reads lines sequentially)
+  |   keytool -genkeypair -alias mazarelease -keyalg RSA -keysize 2048 -validity 10000 \
+  |     -dname "CN=mazawallet-release" -keystore /tmp/m5-hint/test.keystore \
+  |   -storepass "$(head -n1 /tmp/m5-hint/test.keystore.pass)" -keypass "$(head -n1 /tmp/m5-hint/test.keystore.pass)"  # head -n1: keytool needs the SINGLE password, not the two-line file
+
+### executing the captured text verbatim (bash hint-verbatim.txt):
+Generating 2,048 bit RSA key pair and self-signed certificate (SHA384withRSA) with a validity of 10,000 days
+	for: CN=mazawallet-release
+### hint execution EXIT=0
+
+### consumer 1 — keytool opens the hint-created keystore with head -n1 password:
+Keystore type: PKCS12
+Your keystore contains 1 entry
+
+### consumer 2 — apksigner signs with the hint-created keystore + two-line passfile (roundtrip on a COPY):
+### apksigner sign with hint-created keystore: OK
+Signer #1 certificate DN: CN=mazawallet-release
+Signer #1 certificate SHA-256 digest: aaf223c6f71691048e0eab02d4126071398cb85761ccd5c56c7041e2d0ca864c
+
+### negative control — the raw two-line file content (cat form) does NOT open the keystore:
+### OK: cat-form rejected — head -n1 is the required form
+(hint-test scratch dir removed)

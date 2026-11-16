@@ -1,0 +1,5 @@
+### focused badging excerpt (same APK, same run):
+package: name='com.mazawallet' versionCode='2' versionName='1.0.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+sdkVersion:'24'
+targetSdkVersion:'34'
+d30a48a9b6ccf04708d51b7494ccebff3d88aafe97e2bad894afd299f4bd1b77  android/releases/maza-wallet-v1.0.0.apk
