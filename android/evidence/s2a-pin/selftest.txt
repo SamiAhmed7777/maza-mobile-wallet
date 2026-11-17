@@ -1,0 +1,64 @@
+Compiling android/src/com/mazawallet/crypto ...
+Running SelfTest ...
+
+-- BIP39 (official Trezor vectors)
+PASS bip39 entropy 0x00.. -> mnemonic
+PASS bip39 entropy 0x7f.. -> mnemonic
+PASS bip39 seed(mnemonic, TREZOR)
+PASS bip39 seed(mnemonic, "")
+-- RIPEMD-160 (spec test vectors)
+PASS ripemd160("")
+PASS ripemd160("abc")
+PASS ripemd160(quick brown fox)
+-- Base58Check
+PASS base58check roundtrip
+PASS base58check leading zeros
+-- BIP32 (bip-0032 Test Vector 1)
+PASS bip32 xprv m
+PASS bip32 xprv m/0'
+PASS bip32 xprv m/0'/1
+-- MAZA profile (canonical mnemonic seed, coin 13)
+PASS maza address m/44'/13'/0'/0/0
+PASS maza address m/44'/13'/0'/0/1
+PASS maza address m/44'/13'/0'/0/2
+PASS maza WIF m/44'/13'/0'/0/0
+PASS maza p2pkh scriptPubKey
+-- BTC cross-check (same mnemonic, m/44'/0'/0'/0/0, version 0x00)
+PASS btc address m/44'/0'/0'/0/0
+-- TxBuilder (legacy P2PKH, SIGHASH_ALL)
+PASS txbuilder sign + verify
+-- SeedCryptAes (at-rest envelope)
+PASS seedcrypt blob = 12B IV + plain + 16B tag
+PASS seedcrypt random IV per encryption
+PASS seedcrypt round trip
+PASS seedcrypt tamper rejected
+PASS seedcrypt wrong key rejected
+-- Pbkdf2 (S-2a PIN verifier primitive)
+PASS pbkdf2 reproduces BIP39 TREZOR seed
+PASS pbkdf2 anchor A (210k iters, hashlib-cross-derived)
+PASS pbkdf2 salt sensitivity
+PASS pbkdf2 iteration sensitivity
+PASS pbkdf2 wrong-pin divergence
+-- LockPolicy (S-2a PIN lock state machine)
+PASS lock: starts unlocked
+PASS lock: inside window unlocked
+PASS lock: fires at inactivity deadline
+PASS lock: stays locked without activity
+PASS lock: activity alone cannot unlock
+PASS lock: activity extends deadline
+PASS lock: short background stays unlocked
+PASS lock: long background locks on resume
+PASS lock: manual lockNow engages
+PASS lock: wrong pin -> WRONG_PIN
+PASS lock: 5th consecutive wrong -> WRONG_PIN (backoff opens after)
+PASS lock: 6th attempt within backoff -> THROTTLED
+PASS lock: throttle window reported
+PASS lock: backoff expiry re-allows (30s base)
+PASS lock: accept unlocks and resets streak
+PASS lock: fresh 4 wrong then expiry keeps streak
+PASS lock: session with verifier starts locked
+PASS lock: session without verifier starts unlocked
+PASS lock: tap after deadline locks before it counts
+PASS lock: in-window tap still extends deadline
+
+ALL 49 CHECKS PASSED

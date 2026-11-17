@@ -142,6 +142,12 @@ public final class SelfTest {
         section("SeedCryptAes (at-rest envelope)");
         seedCryptChecks();
 
+        section("Pbkdf2 (S-2a PIN verifier primitive)");
+        pbkdf2Checks();
+
+        section("LockPolicy (S-2a PIN lock state machine)");
+        lockPolicyChecks();
+
         System.out.println();
         if (failures == 0) {
             System.out.println("ALL " + total + " CHECKS PASSED");
@@ -182,6 +188,141 @@ public final class SelfTest {
         byte[] other = new byte[32];
         check("seedcrypt wrong key rejected", !com.mazawallet.crypto.SeedCryptAes.canDecrypt(
                 com.mazawallet.crypto.SeedCryptAes.keyFor(other), blob1));
+    }
+
+    /** Pbkdf2 (PBKDF2-HMAC-SHA512) anchors for the S-2a PIN verifier:
+     *  the official BIP39 TREZOR vector (seed = PBKDF2-HMAC-SHA512(mnemonic,
+     *  "mnemonic"+passphrase, 2048, 64)) plus direct anchors cross-derived
+     *  with Python 3 hashlib.pbkdf2_hmac (OpenSSL) — the same independent-
+     *  oracle pattern as tools/oracle.py. NEVER edit these to make code
+     *  pass; regenerate from source if the primitive ever changes. */
+    private static void pbkdf2Checks() {
+        // Official anchor: the TREZOR vector pinned above is a PBKDF2
+        // output — deriving it through Pbkdf2 must byte-match Bip39.toSeed.
+        String mn = "abandon abandon abandon abandon abandon abandon"
+                + " abandon abandon abandon abandon abandon about";
+        byte[] official = Pbkdf2.derive(mn.toCharArray(),
+                "mnemonicTREZOR".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                2048, 64);
+        check("pbkdf2 reproduces BIP39 TREZOR seed",
+                Hex.toHex(official).equals("c55257c360c07c72029aebc1b53c05ed0362ada38ead3e"
+                        + "3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf14163"
+                        + "0c7a3c4ab7c81b2f001698e7463b04"),
+                Hex.toHex(official));
+
+        // Direct anchors: pin "1234", salt 000102...0f, 210000 iters (OWASP
+        // guidance for PBKDF2-HMAC-SHA512), dkLen 32.
+        byte[] salt = new byte[16];
+        for (int i = 0; i < 16; i++) salt[i] = (byte) i;
+        byte[] a = Pbkdf2.derive("1234".toCharArray(), salt, 210_000, 32);
+        check("pbkdf2 anchor A (210k iters, hashlib-cross-derived)",
+                Hex.toHex(a).equals("d36d40de08e7ca17044e1b32d97f4e5b"
+                        + "cd9c222bf4485b72cf120fde3b8c865d"),
+                Hex.toHex(a));
+
+        byte[] saltB = salt.clone();
+        saltB[15] ^= (byte) 0xFF;  // one byte differs -> different verifier (0f -> f0)
+        byte[] b = Pbkdf2.derive("1234".toCharArray(), saltB, 210_000, 32);
+        check("pbkdf2 salt sensitivity",
+                Hex.toHex(b).equals("42f1bee947a3271f96c739de3a3a9962"
+                        + "36b108da3c1a1814aa680055de379aa3")
+                        && !java.util.Arrays.equals(a, b));
+
+        byte[] c = Pbkdf2.derive("1234".toCharArray(), salt, 2048, 32);
+        check("pbkdf2 iteration sensitivity",
+                Hex.toHex(c).equals("20aa2315fba2f302b067cb8f83921be3"
+                        + "fefed5c83cef879307740b01a3381d4a")
+                        && !java.util.Arrays.equals(a, c));
+
+        // Wrong PIN must not match: different verifier for "1235".
+        byte[] d = Pbkdf2.derive("1235".toCharArray(), salt, 210_000, 32);
+        check("pbkdf2 wrong-pin divergence", !java.util.Arrays.equals(a, d));
+    }
+
+    /** LockPolicy transitions (S-2a): lazy inactivity lock, background-
+     *  return lock, accepted/wrong/throttled verify, streak surviving
+     *  auto-lock. Fake clock throughout (ms). */
+    private static void lockPolicyChecks() {
+        long T = 300_000L; // 5 min auto-lock window
+
+        LockPolicy lp = new LockPolicy(T, 0);
+        check("lock: starts unlocked", !lp.isLocked(0));
+        check("lock: inside window unlocked", !lp.isLocked(T - 1));
+        check("lock: fires at inactivity deadline", lp.isLocked(T));
+        check("lock: stays locked without activity", lp.isLocked(T + 1));
+
+        // Activity pushes the deadline but never unlocks a locked gate.
+        lp.onActivity(T + 2);
+        check("lock: activity alone cannot unlock", lp.isLocked(T + 2));
+
+        LockPolicy lp2 = new LockPolicy(T, 0);
+        lp2.onActivity(200_000);
+        check("lock: activity extends deadline", !lp2.isLocked(499_999) && lp2.isLocked(500_000));
+
+        // Background-return lock: short background stays unlocked, long locks.
+        LockPolicy lp3 = new LockPolicy(T, 0);
+        lp3.onBackground(100_000);
+        lp3.onResume(100_000 + T - 1);
+        check("lock: short background stays unlocked", !lp3.isLocked(100_001));
+        lp3.onBackground(600_000);
+        lp3.onResume(600_000 + T);
+        check("lock: long background locks on resume", lp3.isLocked(600_000 + T));
+
+        // Verify outcomes.
+        LockPolicy lp4 = new LockPolicy(T, 0);
+        lp4.isLocked(0);
+        lp4.lockNow();
+        check("lock: manual lockNow engages", lp4.isLocked(1));
+        check("lock: wrong pin -> WRONG_PIN",
+                lp4.verifyAttempt(2, false) == LockPolicy.WRONG_PIN);
+        for (long t = 3; t <= 5; t++) {
+            lp4.verifyAttempt(t, false);
+        }
+        check("lock: 5th consecutive wrong -> WRONG_PIN (backoff opens after)",
+                lp4.verifyAttempt(6, false) == LockPolicy.WRONG_PIN);
+        check("lock: 6th attempt within backoff -> THROTTLED",
+                lp4.verifyAttempt(7, false) == LockPolicy.THROTTLED);
+        check("lock: throttle window reported", lp4.throttleRemainingMs(8) > 0);
+        check("lock: backoff expiry re-allows (30s base)",
+                lp4.verifyAttempt(6 + 30_000, false) == LockPolicy.WRONG_PIN
+                        && lp4.throttleRemainingMs(6 + 30_000 + 1) > 0);
+
+        // Accept clears the streak; streak SURVIVES an auto-lock so
+        // "4 wrong, wait for lock, repeat" cannot dodge the backoff.
+        LockPolicy lp5 = new LockPolicy(T, 0);
+        lp5.lockNow();
+        lp5.verifyAttempt(1, false);
+        lp5.verifyAttempt(2, false);
+        lp5.verifyAttempt(3, false);
+        lp5.verifyAttempt(4, false);
+        check("lock: accept unlocks and resets streak",
+                lp5.verifyAttempt(5, true) == LockPolicy.ACCEPTED
+                        && !lp5.isLocked(5));
+        for (long t = 6; t <= 9; t++) lp5.verifyAttempt(t, false);
+        check("lock: fresh 4 wrong then expiry keeps streak",
+                lp5.isLocked(9 + T) && lp5.verifyAttempt(9 + T + 1, false)
+                        == LockPolicy.WRONG_PIN
+                        && lp5.throttleRemainingMs(9 + T + 2) > 0);
+
+        // Shell contract: a session with a stored verifier starts LOCKED;
+        // without one it starts unlocked (gate inert).
+        check("lock: session with verifier starts locked",
+                LockPolicy.forSession(true, T, 0).isLocked(1));
+        check("lock: session without verifier starts unlocked",
+                !LockPolicy.forSession(false, T, 0).isLocked(1));
+
+        // Judge r2: a tap arriving AFTER the deadline must resolve the lock
+        // BEFORE the touch extends the deadline — otherwise the tap would
+        // sail through the next gate check (the 10s tick cannot be trusted).
+        LockPolicy lp6 = new LockPolicy(T, 0);
+        lp6.onActivity(T + 1); // first touch lands past the deadline
+        check("lock: tap after deadline locks before it counts",
+                lp6.isLocked(T + 1));
+        // And a tap INSIDE the window still extends it (no regression).
+        LockPolicy lp7 = new LockPolicy(T, 0);
+        lp7.onActivity(200_000);
+        check("lock: in-window tap still extends deadline",
+                !lp7.isLocked(499_999));
     }
 
     /** Sign a fake 1-in/2-out tx with the fixed WIF key; verify each sig. */

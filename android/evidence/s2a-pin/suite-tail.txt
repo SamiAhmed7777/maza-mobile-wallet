@@ -1,0 +1,8 @@
+# refreshed 2026-11-16 ~23:2x PST by adopting loop (24a7311de928) on the FINAL bytes
+Ran 216 tests in 94.752s
+
+OK (skipped=4)
+=== POST-FOLD re-run ===
+Ran 216 tests in 90.590s
+
+OK (skipped=4)

@@ -1,0 +1,11 @@
+# PBKDF2-HMAC-SHA512 anchors for crypto/Pbkdf2.java (S-2a)
+# Independent oracle: Python 3 hashlib.pbkdf2_hmac (OpenSSL) -
+# the same Java<->Python agreement pattern as tools/oracle.py (M2).
+A: pin=1234 salt=000102030405060708090a0b0c0d0e0f iter=210000 dkLen=32
+    -> d36d40de08e7ca17044e1b32d97f4e5bcd9c222bf4485b72cf120fde3b8c865d
+B: pin=1234 salt=000102030405060708090a0b0c0d0ef0 iter=210000 dkLen=32
+    -> 42f1bee947a3271f96c739de3a3a996236b108da3c1a1814aa680055de379aa3
+C: pin=1234 salt=000102030405060708090a0b0c0d0e0f iter=2048 dkLen=32
+    -> 20aa2315fba2f302b067cb8f83921be3fefed5c83cef879307740b01a3381d4a
+TREZOR seed via hashlib (cross-checks the SelfTest pin):
+    c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04

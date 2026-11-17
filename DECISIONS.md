@@ -149,6 +149,60 @@ chain code on three fields (noted per item).
   fee rate (D4), confirmation default (D1), and URI scheme are untouched —
   no Payu routing needed.
 
+## D11 — PIN lock + auto-lock (S-2a, added 2026-11-16)
+- APP-SECURITY decision (spec Phase 5.5/5.6), NOT coin policy — no Payu
+  routing. Implemented: `crypto/LockPolicy` (policy, selftest-pinned),
+  `crypto/Pbkdf2` (primitive), `PinGuard` (storage shell),
+  `MainActivity` (lock UI + gates). Device proofs = S-2b.
+- Verifier: PBKDF2-HMAC-SHA512, 210,000 iterations (OWASP guidance for
+  PBKDF2-HMAC-SHA512), 16-byte SecureRandom salt, 32-byte verifier,
+  `MessageDigest.isEqual` constant-time compare. PBKDF2WithHmacSHA512 is the
+  SAME platform primitive `Bip39.toSeed` uses — proven on-device by every
+  seed-creation proof (M1/M2/M21/M22). Vector-pinned in SelfTest: the
+  official BIP39 TREZOR seed (a PBKDF2 output) reproduces byte-for-byte
+  through Pbkdf2, plus hashlib(OpenSSL)-cross-derived anchors. NEVER edited
+  to make code pass (standing rule).
+- Storage: MODE_PRIVATE prefs (`pin.salt` hex / `pin.iter` / `pin.hash` hex /
+  `pin.autolock_ms`). The PIN itself is never stored, never logged; char[]
+  zeroed after use. Accepted residual: the verifier lives in app-private
+  prefs, not Keystore-wrapped (sandboxed storage; S-8 threat model may
+  revisit). Offline-brute-force surface is bounded by the seed's own
+  Keystore AES-GCM envelope (S-1) — the PIN gates UI access, it is not the
+  root of key secrecy.
+- Gate: WALLET tab (the seed surface, incl. its send card) + the SEND tab's
+  send action require the PIN while locked. A process WITH a stored
+  verifier starts LOCKED (LockPolicy.forSession — authentication is required
+  at every fresh start, not only after inactivity). Auto-lock after 5 min
+  of zero touches (default; `pin.autolock_ms` is the S-4 settings hook),
+  evaluated LAZILY at every gate check (a missed timer tick can never leave
+  the gate open; the 10s tick only shows the cover) plus background >=
+  autolock locks on resume — the background/resume bracket runs on EVERY
+  resume, Connect screen included. Dispatch-level touch tracking (activity
+  never unlocks). Clock = SystemClock.elapsedRealtime() (monotonic; wall-
+  clock changes cannot stretch security windows).
+- Wrong-PIN throttle: 5 consecutive failures open a 30s backoff, doubling
+  per extra failure, capped at 15 min. THROTTLED refuses WITHOUT hashing —
+  enforced in the SHELL (verifyAttempt checks throttleUntilMs() before any
+  PBKDF2 work, synchronized so overlapping verify threads cannot race the
+  window). The streak survives auto-lock (reset only on accept), so "4
+  wrong, wait, repeat" cannot dodge it. Accepted residual: the streak/
+  backoff state is memory-resident — a process restart clears it (screen-
+  lock UX, not disk forensics; S-8 revisits if the threat model wants
+  persisted counters).
+- Verifier-store states: ABSENT (no pin.* keys -> gate inert, pre-PIN
+  behavior), VALID (parseable salt(16B)+hash(32B)+int iter), CORRUPT
+  (anything else) — CORRUPT fail-closes: the gate is permanently engaged
+  and nothing verifies, so a partial/corrupt store can never read as "no
+  PIN set" (judge r1). Recovery for that never-in-practice state is
+  app-data reset; the seed is independent (S-1 Keystore envelope).
+- Change/Remove REQUIRE the current PIN (a removable-without-PIN gate is
+  decorative) — including from the already-unlocked WALLET tab, as
+  defense-in-depth against a briefly-borrowed unlocked phone.
+- Build-toolchain note (verified live): this repo's d8 (R8 8.2.2-dev) NPEs
+  dexing ANONYMOUS inner classes and nested enum classes
+  (`String.length()` NPE, class named in `origin:`); lambdas + named
+  classes dex fine. Codebase shape stays lambda-based; avoid `new X(){}`.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

@@ -1,14 +1,15 @@
 package com.mazawallet.crypto;
 
-/** Hex encode/decode helpers. Package-private; no android deps. */
-final class Hex {
+/** Hex encode/decode helpers. Public so the android-context classes outside
+ *  the crypto package (PinGuard S-2a) can reuse them; no android deps. */
+public final class Hex {
 
     private static final char[] DIGITS =
             "0123456789abcdef".toCharArray();
 
     private Hex() {}
 
-    static String toHex(byte[] data) {
+    public static String toHex(byte[] data) {
         StringBuilder sb = new StringBuilder(data.length * 2);
         for (byte b : data) {
             sb.append(DIGITS[(b >> 4) & 0x0F]);
@@ -17,7 +18,7 @@ final class Hex {
         return sb.toString();
     }
 
-    static byte[] fromHex(String hex) {
+    public static byte[] fromHex(String hex) {
         if (hex.length() % 2 != 0) {
             throw new IllegalArgumentException("odd hex length");
         }

@@ -53,6 +53,12 @@ public final class SelfCustody {
         String baseUrl();
         String token(); // null while locked out
         void onUnauthorized();
+        /** S-2a: true when protected actions (send / create / import seed)
+         *  may proceed. MainActivity's implementation shows the PIN cover
+         *  and returns false while the lock is engaged — SelfCustody calls
+         *  this at the START of every protected handler so an in-flight tap
+         *  that raced an expiry cannot act (judge r2). */
+        boolean gateOpen();
     }
 
     private static final String SEED_FILE = "selfcustody.seed";
@@ -249,6 +255,8 @@ public final class SelfCustody {
     }
 
     private void startCreate() {
+        // S-2a: seed-creation gate (destructive/protected action).
+        if (!host.gateOpen()) return;
         byte[] entropy = new byte[16];
         new SecureRandom().nextBytes(entropy);
         String[] words = Bip39.entropyToMnemonic(entropy, wordlist).split(" ");
@@ -320,6 +328,8 @@ public final class SelfCustody {
         Button go = new Button(act);
         go.setText("Import");
         go.setOnClickListener(v -> {
+            // S-2a: seed-import gate (destructive/protected action).
+            if (!host.gateOpen()) return;
             String raw = field.getText().toString();
             String[] parts = raw.trim().toLowerCase(Locale.ROOT).split("\\s+");
             if (parts.length != 12 || (parts.length == 1 && parts[0].isEmpty())) {
@@ -593,6 +603,9 @@ public final class SelfCustody {
     // ------------------------------------------------------------------ send
 
     private void doSend() {
+        // S-2a: spend gate — an in-flight tap that raced an expiry must not
+        // act before the 10s cover tick arrives (judge r2).
+        if (!host.gateOpen()) return;
         final String to = toEt.getText().toString().trim();
         final String amtStr = amountEt.getText().toString().trim();
         if (to.isEmpty() || amtStr.isEmpty()) {
