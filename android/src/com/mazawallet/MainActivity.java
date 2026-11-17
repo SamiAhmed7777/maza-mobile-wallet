@@ -67,8 +67,11 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     /** Palette for THIS activity's live theme, resolved in onCreate() right
      *  after ThemeController.applyTheme() and before the first view is built
      *  (UiTheme). Every surface and ink in this file comes from it, so the
-     *  whole screen follows dark/light. A theme change recreates the activity,
-     *  so onCreate() re-resolves and the UI repaints in the new palette. */
+     *  whole screen follows dark/light. W3-a: a theme chosen in Settings is
+     *  picked up by repaintForThemeChange() on resume, which re-resolves this
+     *  field and rebuilds the views in place - the session (token, balance,
+     *  history, selected tab, lock state) survives, because nothing on that
+     *  path restarts the activity. */
     private UiTheme.Palette pal;
 
     private static final String[] TABS = {"BALANCE", "RECEIVE", "SEND", "HISTORY", "WALLET"};
@@ -132,7 +135,26 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     private Button sendBtn;
     private TextView sendResultTv;
     private LinearLayout historyList;
+    /** Explicit list state line (S-5): "Loading history..." / the failure
+     *  reason. Cleared once a snapshot renders, so a list that could not load
+     *  never looks like a wallet with no transactions. */
+    private TextView historyStatusTv;
+    /** True while the status line above holds a FAILURE (not "Loading..."),
+     *  so a repaint can put the same explicit state back. */
+    private boolean historyLoadFailed;
     private SelfCustody selfCustody;
+
+    // Session-derived state the views do not own, kept so a W3-a repaint can
+    // put it back into freshly built views: the last applied snapshot, the
+    // send-line message as a ROLE (not an ARGB, so the new palette re-inks it)
+    // and whether an unlock request is still in flight.
+    private WalletState lastState;
+    private static final int RESULT_NEUTRAL = 0;
+    private static final int RESULT_OK = 1;
+    private static final int RESULT_ERROR = 2;
+    private String sendResultText = "";
+    private int sendResultRole = RESULT_NEUTRAL;
+    private boolean connecting;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -201,9 +223,24 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         super.onPause();
     }
 
+    /** OS day/night flip: the manifest declares uiMode as a handled config
+     *  change, so the activity is NOT recreated and the memory-only session
+     *  survives; re-resolve the palette and repaint in place, the same path
+     *  the Settings-driven switch takes (W3-a follow-up). */
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        repaintForThemeChange();
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        // W3-a: Settings is a separate activity, so a theme chosen there lands
+        // here as this screen resuming. Re-resolve the palette and repaint in
+        // place when it changed - BEFORE the lock overlay decisions below, so
+        // the rebuilt cover is the one they act on.
+        repaintForThemeChange();
         // Returning after >= the auto-lock window in background re-locks
         // (device out of the user's hands). The POLICY bracket runs on EVERY
         // resume regardless of which screen is showing (judge r1: skipping
@@ -272,7 +309,27 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         card.addView(connectBtn, mp(0, dp(8), 0, 0));
     }
 
+    /** Build the wallet UI and start the session-bound work (poll loop, lock
+     *  tick, QR). The unlock path; W3-a's repaint calls buildWalletUi() itself
+     *  so a theme switch does not re-trigger the M21 watch import. */
     private void showWallet() {
+        buildWalletUi();
+        // Unlock path watch re-import (M21): the landing tab is BALANCE, so
+        // the WALLET tab's onShown() will not fire until the user switches
+        // there. Fire the idempotent re-import now - a creation-time import
+        // that died mid-flight must not leave the wallet blind for the
+        // session (no-op while no seed exists).
+        selfCustody.onUnlocked();
+        loadQr();
+        schedulePoll();
+        ui.removeCallbacks(lockTick);
+        ui.postDelayed(lockTick, 10_000);
+    }
+
+    /** Build every wallet view into the CURRENT palette and show it (landing
+     *  on BALANCE). No network and no session mutation, so it is safe to re-run
+     *  over a live session - that is exactly what the W3-a repaint does. */
+    private void buildWalletUi() {
         // Reset the selected-tab index: a successful unlock REBUILDS the whole
         // wallet UI, and selectTab(0) below must count as the initial
         // selection (no navigation refresh) so each unlock/reconnect performs
@@ -293,12 +350,6 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         buildSendTab();
         buildHistoryTab();
         buildWalletTab();
-        // Unlock path watch re-import (M21): the landing tab is BALANCE, so
-        // the WALLET tab's onShown() will not fire until the user switches
-        // there. Fire the idempotent re-import now - a creation-time import
-        // that died mid-flight must not leave the wallet blind for the
-        // session (no-op while no seed exists).
-        selfCustody.onUnlocked();
 
         // Bottom tab bar: 4 equal-weight buttons, always visible.
         View divider = new View(this);
@@ -333,7 +384,104 @@ public class MainActivity extends Activity implements SelfCustody.Host {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(rootWrap);
         selectTab(0);
+    }
+
+    // ------------------------------------- W3-a: live theme repaint
+
+    /** Re-resolve the palette for the SAVED theme and repaint only when it
+     *  actually changed. Called from onResume: Settings is its own activity, so
+     *  a theme chosen there arrives here as this screen resuming.
+     *
+     *  <p>The rebuild is IN PLACE - no recreate(), no finish(), no new Intent.
+     *  The bearer token is memory-only, so restarting the activity would drop
+     *  the session and bounce the user to the Connect card; repaintInPlace()
+     *  instead replaces the views and puts the session state back. */
+    private void repaintForThemeChange() {
+        if (prefs == null) return;
+        // Same entry point Settings uses, so "system" is resolved against THIS
+        // activity's configuration and a forced light/dark is honored exactly.
+        ThemeController.applyTheme(this, SettingsActivity.themeMode(prefs));
+        UiTheme.Palette next = UiTheme.palette(this);
+        if (samePalette(pal, next)) return;
+        repaintInPlace(next);
+    }
+
+    /** True when both palettes resolve to the same ten values. Compared slot by
+     *  slot (not by identity) because UiTheme hands out a fresh Palette per
+     *  resolve; a palette that differs in ANY slot needs the repaint. */
+    static boolean samePalette(UiTheme.Palette a, UiTheme.Palette b) {
+        if (a == null || b == null) return a == b;
+        return a.isLight() == b.isLight()
+                && a.background() == b.background()
+                && a.surface() == b.surface()
+                && a.bar() == b.bar()
+                && a.divider() == b.divider()
+                && a.textPrimary() == b.textPrimary()
+                && a.textSecondary() == b.textSecondary()
+                && a.accent() == b.accent()
+                && a.danger() == b.danger()
+                && a.success() == b.success();
+    }
+
+    /** W3-a: replace every view with the new palette while the connected
+     *  session stays exactly as it was. Everything the session owns is captured
+     *  first, because buildWalletUi()/showConnect() mint NEW widgets: the
+     *  snapshot (balance, account, address, history), the selected tab, a
+     *  visible PIN cover, the half-typed send form and the last message. Nothing
+     *  here touches token, baseUrl or pinGuard. */
+    private void repaintInPlace(UiTheme.Palette next) {
+        final boolean connected = token != null;
+        final int prevTab = tab;
+        final boolean lockShown =
+                lockOverlay != null && lockOverlay.getVisibility() == View.VISIBLE;
+        final String toText = toEt == null ? "" : toEt.getText().toString();
+        final String amtText = amountEt == null ? "" : amountEt.getText().toString();
+        final String resultText = sendResultText;
+        final int resultRole = sendResultRole;
+        final String syncText = lastSyncTv == null ? "" : lastSyncTv.getText().toString();
+        final String historyMsg =
+                historyStatusTv == null ? "" : historyStatusTv.getText().toString();
+        final boolean historyErr = historyLoadFailed;
+        final String connectMsg = connectErr == null ? "" : connectErr.getText().toString();
+        final String urlText = urlEt == null ? "" : urlEt.getText().toString();
+        final String tokenText = tokenEt == null ? "" : tokenEt.getText().toString();
+        final boolean wasConnecting = connecting;
+        final WalletState state = lastState;
+
+        pal = next; // every view built below reads the new palette
+
+        if (connected == false) {
+            // Connect card: no session to keep, but the typed URL/token and the
+            // last message are the user's work - put them back.
+            showConnect(connectMsg);
+            if (urlEt != null) urlEt.setText(urlText);
+            if (tokenEt != null) tokenEt.setText(tokenText);
+            if (wasConnecting && connectBtn != null) {
+                // An unlock is still in flight; do not offer a second one.
+                connectBtn.setEnabled(false);
+                connectErr.setTextColor(pal.textSecondary());
+                connectErr.setText("Connecting...");
+            }
+            return;
+        }
+
+        buildWalletUi();
+        if (toEt != null) toEt.setText(toText);
+        if (amountEt != null) amountEt.setText(amtText);
+        if (resultText.length() > 0) sendResult(resultText, resultRole);
+        if (state != null) {
+            paintState(state, false);
+        } else if (historyErr) {
+            // Nothing loaded before the switch: keep the explicit failure line
+            // instead of leaving the rebuilt list blank (S-5).
+            historyFailed(historyMsg);
+        }
         loadQr();
+        // Same tab as before the switch (0 is already selected by the build).
+        if (prevTab != 0) selectTab(prevTab);
+        // The cover follows the palette too, and keeps its throttle message.
+        if (lockShown) showLock();
+        if (syncText.length() > 0) note(syncText); // keep the real freshness line
         schedulePoll();
         ui.removeCallbacks(lockTick);
         ui.postDelayed(lockTick, 10_000);
@@ -492,6 +640,13 @@ public class MainActivity extends Activity implements SelfCustody.Host {
 
         col.addView(label("HISTORY", 13, pal.accent(), Typeface.BOLD));
 
+        // S-5: explicit list state. It says "Loading..." until a snapshot
+        // arrives, then clears; a failed fetch writes the reason here instead
+        // of leaving an empty column that reads as "no transactions".
+        historyStatusTv = label(getString(R.string.history_loading), 12,
+                pal.textSecondary(), Typeface.NORMAL);
+        col.addView(historyStatusTv, mp(0, dp(4), 0, 0));
+
         historyList = column();
         col.addView(historyList, mp(0, dp(4), 0, 0));
 
@@ -545,6 +700,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     // ------------------------------------------------------------- actions
 
     private void doUnlock() {
+        if (connecting) return; // one unlock in flight at a time
         final String url = stripSlash(urlEt.getText().toString().trim());
         final String tok = tokenEt.getText().toString().trim();
         if (url.length() == 0 || tok.length() == 0) {
@@ -552,9 +708,10 @@ public class MainActivity extends Activity implements SelfCustody.Host {
             return;
         }
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            connectErr.setText("URL must start with http:// or https://");
+            connectErr.setText(R.string.err_url_scheme);
             return;
         }
+        connecting = true;
         connectBtn.setEnabled(false);
         connectErr.setTextColor(pal.textSecondary());
         connectErr.setText("Connecting...");
@@ -564,23 +721,31 @@ public class MainActivity extends Activity implements SelfCustody.Host {
                 baseUrl = url;
                 token = tok;
                 JSONObject body = new JSONObject().put("token", tok);
-                Api.Resp r = Api.http(baseUrl, token, "POST", "/api/unlock", body);
+                // S-5: retry-safe POST (token validation, no side effect) - the
+                // table in Net allows 3 attempts with backoff, so a flaky link
+                // does not turn a good token into "cannot reach server".
+                Api.Resp r = Net.withRetry("POST", "/api/unlock",
+                        () -> Api.http(baseUrl, token, "POST", "/api/unlock", body));
                 if (r.code == 200) {
                     prefs.edit().putString(KEY_URL, url).apply();
                     ui.post(() -> {
+                        connecting = false;
                         showWallet();
                         refresh();
                     });
                     return;
                 }
-                err = r.code == 401 ? "Invalid token." : r.errorText();
+                err = r.code == 401
+                        ? getString(R.string.net_invalid_token)
+                        : getString(R.string.net_error_server, r.code);
             } catch (IOException e) {
-                err = "Cannot reach server: " + e.getMessage();
+                err = netCopy(e);
             } catch (JSONException e) {
-                err = "Bad response: " + e.getMessage();
+                err = getString(R.string.net_bad_response);
             }
             final String msg = err;
             ui.post(() -> {
+                connecting = false;
                 token = null;
                 connectErr.setTextColor(pal.danger());
                 connectErr.setText(msg);
@@ -594,60 +759,69 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         // so it requires the PIN while locked (same policy as the WALLET tab).
         if (pinGuard != null && pinGuard.gateNeeded()) {
             pendingGatedTab = 2;
-            sendResult("Wallet locked - enter your PIN to send.", pal.danger());
+            sendResult("Wallet locked - enter your PIN to send.", RESULT_ERROR);
             showLock();
             return;
         }
         final String to = toEt.getText().toString().trim();
         final String amtStr = amountEt.getText().toString().trim();
         if (to.length() == 0 || amtStr.length() == 0) {
-            sendResult("Enter address and amount.", pal.danger());
+            sendResult("Enter address and amount.", RESULT_ERROR);
             return;
         }
         final double amt;
         try {
             amt = Double.parseDouble(amtStr);
         } catch (NumberFormatException e) {
-            sendResult("Invalid amount.", pal.danger());
+            sendResult("Invalid amount.", RESULT_ERROR);
             return;
         }
         if (amt <= 0 || Double.isFinite(amt) == false) {
-            sendResult("Amount must be positive.", pal.danger());
+            sendResult("Amount must be positive.", RESULT_ERROR);
             return;
         }
         sendBtn.setEnabled(false);
-        sendResult("Sending...", pal.textSecondary());
+        sendResult("Sending...", RESULT_NEUTRAL);
         new Thread(() -> {
             String msg;
-            int color;
+            int role;
             try {
                 JSONObject body = new JSONObject().put("to", to).put("amount", amt);
-                Api.Resp r = Api.http(baseUrl, token, "POST", "/api/send", body);
+                // S-5: SPEND. Net's table gives /api/send exactly ONE attempt
+                // (never auto-retry): a second try could broadcast the same
+                // payment twice, because the first attempt may have reached the
+                // node and only the response was lost.
+                Api.Resp r = Net.withRetry("POST", "/api/send",
+                        () -> Api.http(baseUrl, token, "POST", "/api/send", body));
                 if (r.code == 200) {
                     String txid = r.json().optString("txid", "");
                     msg = txid.length() == 0
                             ? "Sent (bench account)."
                             : "Sent (bench account): " + shortTxid(txid);
-                    color = pal.success();
+                    role = RESULT_OK;
                     ui.post(this::refresh);
                 } else if (r.code == 401) {
                     ui.post(this::lockOut);
                     return;
                 } else {
-                    msg = r.errorText();
-                    color = pal.danger();
+                    // A status code IS an answer: the server refused, so this
+                    // is a definitive failure, not an unknown outcome.
+                    msg = getString(R.string.send_failed, r.errorText());
+                    role = RESULT_ERROR;
                 }
             } catch (IOException e) {
-                msg = "Network error: " + e.getMessage();
-                color = pal.danger();
+                // Transport failure on a spend: outcome UNKNOWN - say so and
+                // point at HISTORY instead of inviting a double-send.
+                msg = getString(R.string.send_unknown, netCopy(e));
+                role = RESULT_ERROR;
             } catch (JSONException e) {
-                msg = "Bad server response.";
-                color = pal.danger();
+                msg = getString(R.string.send_unknown, getString(R.string.net_bad_response));
+                role = RESULT_ERROR;
             }
             final String m = msg;
-            final int c = color;
+            final int rl = role;
             ui.post(() -> {
-                sendResult(m, c);
+                sendResult(m, rl);
                 sendBtn.setEnabled(true);
             });
         }, "send").start();
@@ -658,14 +832,16 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         ui.removeCallbacks(pollTask);
         new Thread(() -> {
             try {
-                Api.Resp r = Api.http(baseUrl, token, "GET", "/api/state", null);  // Bearer header, never the token in URLs
+                // S-5: read - retried by Net (3 attempts, exponential backoff).
+                Api.Resp r = Net.withRetry("GET", "/api/state",
+                        () -> Api.http(baseUrl, token, "GET", "/api/state", null));
                 if (r.code == 401) {
                     ui.post(this::lockOut);
                     return;
                 }
                 if (r.code != 200) {
                     ui.post(() -> {
-                        note("Update failed: " + r.errorText());
+                        updateFailed(getString(R.string.net_error_server, r.code));
                         schedulePoll();
                     });
                     return;
@@ -678,43 +854,90 @@ public class MainActivity extends Activity implements SelfCustody.Host {
                 });
             } catch (IOException e) {
                 ui.post(() -> {
-                    note("Update failed: " + e.getMessage());
+                    updateFailed(netCopy(e));
                     schedulePoll();
                 });
             } catch (JSONException e) {
                 ui.post(() -> {
-                    note("Bad response from server.");
+                    updateFailed(getString(R.string.net_bad_response));
                     schedulePoll();
                 });
             }
         }, "state").start();
     }
 
+    /** S-5: no silent empty states. A failed refresh writes ONE reason onto
+     *  the sync line (naming the last-loaded data when there is any) and onto
+     *  the history list status, which would otherwise sit on "Loading
+     *  history..." forever. */
+    private void updateFailed(String reason) {
+        if (lastState == null) {
+            // Nothing has ever loaded: say so under the balance instead of
+            // leaving the "..." placeholder looking like an in-flight load.
+            if (balanceTv != null && "...".equals(balanceTv.getText().toString())) {
+                balanceTv.setText("--");
+                accountTv.setText(getString(R.string.balance_unavailable));
+            }
+            note(getString(R.string.net_update_failed, reason));
+        } else {
+            note(getString(R.string.balance_stale, reason));
+        }
+        historyFailed(getString(R.string.history_failed, reason));
+    }
+
+    /** Paint the explicit history failure line (danger ink, current palette). */
+    private void historyFailed(String msg) {
+        historyLoadFailed = true;
+        if (historyStatusTv == null) return;
+        historyStatusTv.setTextColor(pal.danger());
+        historyStatusTv.setText(msg);
+    }
+
     /** Update all views in place; never rebuilds the tab bar or switches tab. */
     private void applyState(WalletState ws) {
+        paintState(ws, true);
+    }
+
+    /** Paint one state snapshot into the CURRENT views.
+     *  {@code fetchQr} is false on the W3-a repaint path: those views were just
+     *  built (the address must therefore always be written) but the QR request
+     *  was already issued by the caller, so it is not sent twice. */
+    private void paintState(WalletState ws, boolean fetchQr) {
+        lastState = ws;
         fee = ws.fee;
         balanceTv.setText(fmtAmount(ws.balance) + " MAZA");
         accountTv.setText("account " + ws.account + " \u00B7 fee "
                 + fmtAmount(ws.fee) + " MAZA");
         feeHintTv.setText("fee " + fmtAmount(ws.fee) + " MAZA");
-        if (ws.address.equals(lastAddress) == false) {
-            lastAddress = ws.address;
+        boolean addressChanged = ws.address.equals(lastAddress) == false;
+        if (addressChanged || fetchQr == false) {
             addressTv.setText(ws.address);
-            loadQr();
+            lastAddress = ws.address;
+            if (addressChanged && fetchQr) loadQr();
         }
+        renderHistory(ws);
+        note("Last sync " + SYNC_FMT.format(new Date()));
+    }
 
+    /** History rows, newest first, with the explicit empty state and without a
+     *  stale status line (S-5). */
+    private void renderHistory(WalletState ws) {
         ArrayList<Tx> txs = new ArrayList<>(ws.txs);
         Collections.sort(txs, (a, b) -> Long.compare(b.time, a.time)); // newest first
         historyList.removeAllViews();
         int n = Math.min(txs.size(), MAX_ROWS);
         if (n == 0) {
-            historyList.addView(label("No transactions yet", 13, pal.textSecondary(), Typeface.NORMAL));
+            historyList.addView(label(getString(R.string.history_empty), 13,
+                    pal.textSecondary(), Typeface.NORMAL));
         }
         for (int i = 0; i < n; i++) {
             historyList.addView(txRow(txs.get(i)));
         }
-
-        note("Last sync " + SYNC_FMT.format(new Date()));
+        historyLoadFailed = false;
+        if (historyStatusTv != null) {
+            historyStatusTv.setText("");
+            historyStatusTv.setTextColor(pal.textSecondary());
+        }
     }
 
     private View txRow(Tx t) {
@@ -756,22 +979,24 @@ public class MainActivity extends Activity implements SelfCustody.Host {
 
     private void loadQr() {
         if (token == null) return;
-        qrStatusTv.setText("Loading QR...");
+        qrStatusTv.setText(getString(R.string.qr_loading));
         qrStatusTv.setTextColor(pal.textSecondary());
         new Thread(() -> {
             try {
-                Api.Resp r = Api.http(baseUrl, token, "GET", "/api/qr.png", null);  // Bearer header, no token in URL
+                // S-5: read - retried by Net (an image request is idempotent).
+                Api.Resp r = Net.withRetry("GET", "/api/qr.png",
+                        () -> Api.http(baseUrl, token, "GET", "/api/qr.png", null));
                 if (r.code == 401) {
                     ui.post(this::lockOut);
                     return;
                 }
                 if (r.code != 200) {
-                    ui.post(() -> qrErr("QR unavailable (HTTP " + r.code + ")"));
+                    ui.post(() -> qrErr(getString(R.string.qr_failed, "HTTP " + r.code)));
                     return;
                 }
                 final Bitmap bmp = BitmapFactory.decodeByteArray(r.body, 0, r.body.length);
                 if (bmp == null) {
-                    ui.post(() -> qrErr("Bad QR image"));
+                    ui.post(() -> qrErr(getString(R.string.qr_bad_image)));
                     return;
                 }
                 ui.post(() -> {
@@ -779,19 +1004,32 @@ public class MainActivity extends Activity implements SelfCustody.Host {
                     qrStatusTv.setText("");
                 });
             } catch (IOException e) {
-                ui.post(() -> qrErr("QR load failed"));
+                final String why = netCopy(e);
+                ui.post(() -> qrErr(getString(R.string.qr_failed, why)));
             }
         }, "qr").start();
     }
 
     private void qrErr(String m) {
+        if (qrStatusTv == null) return;
         qrStatusTv.setText(m);
         qrStatusTv.setTextColor(pal.danger());
     }
 
     private void lockOut() {
         token = null;
-        showConnect("Session expired - please reconnect.");
+        showConnect(getString(R.string.net_session_expired));
+    }
+
+    /** S-5: user-facing copy for a transport failure. No path shows a raw
+     *  exception message any more; timeout, offline and unreachable each get
+     *  their own sentence so the user knows what to try next. */
+    private String netCopy(IOException e) {
+        int kind = Net.classify(e);
+        if (kind == Net.FAIL_OFFLINE) return getString(R.string.net_error_offline);
+        if (kind == Net.FAIL_TIMEOUT) return getString(R.string.net_error_timeout);
+        if (kind == Net.FAIL_UNREACHABLE) return getString(R.string.net_error_unreachable);
+        return getString(R.string.net_error_generic);
     }
 
     // ------------------------------------------------- S-2a PIN lock UI
@@ -1055,9 +1293,20 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         if (a != null) java.util.Arrays.fill(a, '\0');
     }
 
-    private void sendResult(String msg, int color) {
+    /** Send-line message. The ROLE (not an ARGB) is remembered as well, so a
+     *  W3-a repaint can re-ink the same message from the new palette. */
+    private void sendResult(String msg, int role) {
+        sendResultText = msg;
+        sendResultRole = role;
+        if (sendResultTv == null) return;
         sendResultTv.setText(msg);
-        sendResultTv.setTextColor(color);
+        sendResultTv.setTextColor(roleColor(role));
+    }
+
+    private int roleColor(int role) {
+        if (role == RESULT_ERROR) return pal.danger();
+        if (role == RESULT_OK) return pal.success();
+        return pal.textSecondary();
     }
 
     private void note(String m) {

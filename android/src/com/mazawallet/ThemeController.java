@@ -14,9 +14,10 @@ import java.util.Locale;
  *
  * <p>USAGE: call {@code ThemeController.applyTheme(this, mode)} as the first
  * statement of {@code onCreate}, BEFORE {@code setContentView}. Applying a
- * theme after the content view is attached has no visible effect until the
- * activity is recreated, so this class never calls {@code recreate()} on its
- * own: the caller decides when a change should rebuild the UI.
+ * theme after the content view is attached has no VISIBLE effect by itself -
+ * the caller decides when to rebuild: MainActivity re-resolves on resume and
+ * repaints in place via {@code repaintForThemeChange()} (W3-a), which never
+ * restarts the activity, so the memory-only session survives the switch.
  *
  * <p>Palettes live in {@code res/values/colors.xml} (maza_dark_* /
  * maza_light_*) and are wired up by {@code res/values/styles.xml}

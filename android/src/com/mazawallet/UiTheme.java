@@ -35,9 +35,11 @@ import android.util.TypedValue;
  * LIFETIME
  * --------
  * One Palette per activity, resolved in onCreate() AFTER applyTheme() and
- * before the first view is built. A theme change recreates the activity, so
- * onCreate() re-resolves and the whole screen repaints in the new palette.
- * Palette is immutable, so worker threads may read it.
+ * before the first view is built. A theme change is picked up WITHOUT an
+ * activity restart: MainActivity.repaintForThemeChange() re-resolves on
+ * resume (and on uiMode configuration changes) and repaints in place, so
+ * the memory-only session survives both the Settings-driven switch and an
+ * OS day/night flip. Palette is immutable, so worker threads may read it.
  */
 public final class UiTheme {
 

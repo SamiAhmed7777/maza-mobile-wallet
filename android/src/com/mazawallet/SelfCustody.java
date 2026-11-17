@@ -467,8 +467,9 @@ public final class SelfCustody {
         if (state != ST_WALLET || host.token() == null) return;
         new Thread(() -> {
             try {
-                Api.Resp r = Api.http(host.baseUrl(), host.token(), "GET",
-                        "/api/watch/utxos", null);
+                Api.Resp r = Net.withRetry("GET", "/api/watch/utxos",
+                        () -> Api.http(host.baseUrl(), host.token(), "GET",
+                                "/api/watch/utxos", null));
                 if (r.code == 401) {
                     unauthorized();
                     return;
@@ -495,8 +496,9 @@ public final class SelfCustody {
                     return;
                 }
 
-                Api.Resp h = Api.http(host.baseUrl(), host.token(), "GET",
-                        "/api/watch/history", null);
+                Api.Resp h = Net.withRetry("GET", "/api/watch/history",
+                        () -> Api.http(host.baseUrl(), host.token(), "GET",
+                                "/api/watch/history", null));
                 if (h.code == 401) {
                     unauthorized();
                     return;
@@ -572,8 +574,9 @@ public final class SelfCustody {
         final String addr = currentAddress();
         new Thread(() -> {
             try {
-                Api.Resp r = Api.http(host.baseUrl(), host.token(), "GET",
-                        "/api/qr.png?addr=" + addr, null);
+                Api.Resp r = Net.withRetry("GET", "/api/qr.png?addr=" + addr,
+                        () -> Api.http(host.baseUrl(), host.token(), "GET",
+                                "/api/qr.png?addr=" + addr, null));
                 if (r.code == 401) {
                     unauthorized();
                     return;
@@ -659,8 +662,9 @@ public final class SelfCustody {
     /** UTXO selection (largest-first, confirmed only), sign, import change, broadcast. */
     private void sendFlow(byte[] toHash160, long amountSats)
             throws IOException, JSONException {
-        Api.Resp r = Api.http(host.baseUrl(), host.token(), "GET",
-                "/api/watch/utxos", null);
+        Api.Resp r = Net.withRetry("GET", "/api/watch/utxos",
+                () -> Api.http(host.baseUrl(), host.token(), "GET",
+                        "/api/watch/utxos", null));
         if (r.code == 401) throw new Unauthorized();
         if (r.code != 200) throw new IllegalArgumentException(r.errorText());
 
@@ -733,8 +737,9 @@ public final class SelfCustody {
         }
 
         JSONObject body = new JSONObject().put("hex", hex);
-        Api.Resp b = Api.http(host.baseUrl(), host.token(), "POST",
-                "/api/broadcast", body);
+        Api.Resp b = Net.withRetry("POST", "/api/broadcast",
+                () -> Api.http(host.baseUrl(), host.token(), "POST",
+                        "/api/broadcast", body));
         if (b.code == 401) throw new Unauthorized();
         if (b.code != 200) throw new IllegalArgumentException(b.errorText());
         String txid = b.json().optString("txid", "");
@@ -758,8 +763,9 @@ public final class SelfCustody {
             JSONArray arr = new JSONArray();
             for (String a : addresses) arr.put(a);
             JSONObject body = new JSONObject().put("addresses", arr);
-            Api.Resp r = Api.http(host.baseUrl(), host.token(), "POST",
-                    "/api/watch/import", body);
+            Api.Resp r = Net.withRetry("POST", "/api/watch/import",
+                    () -> Api.http(host.baseUrl(), host.token(), "POST",
+                            "/api/watch/import", body));
             if (r.code == 401) {
                 unauthorized();
                 return false;
@@ -770,30 +776,26 @@ public final class SelfCustody {
         }
     }
 
-    /** Re-imports the full address window and retries: a swallowed failure
-     *  here leaves the wallet blind (balance/history silently empty) - the
-     *  judge blocker that also bit the live M2 proof. Runs at startup and
-     *  after wallet creation. */
+    /** Re-imports the full address window: a swallowed failure here leaves
+     *  the wallet blind (balance/history silently empty) - the judge blocker
+     *  that also bit the live M2 proof. Runs at startup and after wallet
+     *  creation. The retry budget is owned by Net alone (3 attempts with
+     *  exponential backoff on /api/watch/import) - this method intentionally
+     *  adds NO outer loop, so the total request count is exactly the route's
+     *  budget. */
     private void ensureWatchImported() {
         new Thread(() -> {
             List<String> all = allAddresses();
-            for (int attempt = 1; attempt <= 3; attempt++) {
-                if (importAddresses(all)) {
-                    // Judge polish fold: the import may complete after a
-                    // refresh already ran (unlock lands on BALANCE, or the
-                    // WALLET tab was opened while the import was in flight
-                    // and showed a stale/empty state). refresh() is
-                    // thread-safe (own thread, ui.post UI updates) and
-                    // self-guards on state/token, so pull fresh data now
-                    // instead of waiting for the next poll.
-                    refresh();
-                    return;
-                }
-                try {
-                    Thread.sleep(2000L * attempt);
-                } catch (InterruptedException ignored) {
-                    return;
-                }
+            if (importAddresses(all)) {
+                // Judge polish fold: the import may complete after a
+                // refresh already ran (unlock lands on BALANCE, or the
+                // WALLET tab was opened while the import was in flight
+                // and showed a stale/empty state). refresh() is
+                // thread-safe (own thread, ui.post UI updates) and
+                // self-guards on state/token, so pull fresh data now
+                // instead of waiting for the next poll.
+                refresh();
+                return;
             }
             ui.post(() -> note("Watch import failed; balance may be stale.",
                     pal.danger()));

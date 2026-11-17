@@ -114,8 +114,8 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | QR scanning | GAP → M8 | camera scanning |
 | encrypted wallet persistence | PARTIAL — code DONE, device proof pending | = Phase 4.2 (SeedVault code landed, device half outstanding) |
 | app restart + recovery | DONE | M21 evidence: fresh process → watch set re-imports on unlock; wallet renders |
-| network interruption + reconnection | PARTIAL | import retry 3x backoff (SelfCustody:772-785); full-path hardening = S-5 |
-| error handling | PARTIAL | catch-all API error surfacing; S-5 completes UX copy |
+| network interruption + reconnection | PARTIAL → code LANDED (wave 3) | Net.java retry table governs the WHOLE surface (reads + unlock + watch/import: 3 attempts with exponential backoff; spend POSTs pinned at exactly 1 attempt — never double-submitted); OUTSTANDING: the airplane-mode device test |
+| error handling | PARTIAL → code LANDED (wave 3) | user-facing copy for timeout/offline/401/expired wired everywhere via Net + strings.xml, no silent empty states; airplane-mode device run outstanding |
 | mobile build compatibility | DONE | release-signed APK v1.1.0 (v2+v3, versionCode=3) installs on emulator; real-device install pending (M6) |
 | testnet / controlled environment | PARTIAL | mainnet tests ran under a 50-MAZA-capped token-gated harness (never uncapped); a MazaCore testnet node already runs on samihost; app testnet switch = S-6 |
 | never broadcast unauthorized mainnet txs | DONE | all mainnet sends were Sami-directed, amount-capped, own-input-selected, offline-verified first |
@@ -137,7 +137,7 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | 10 security assessment | DONE (2026-11-17) | docs/SECURITY.md — scope, architecture/trust boundaries, S-1+S-2 evidence, token handling, 4-threat model, spending-path scope table (custodial /api/send vs self-custody watch/broadcast), controls inventory, 13 accepted risks, 8 open items; every cited path existence-verified |
 | 11 testing report | DONE (2026-11-17) | docs/TESTING-REPORT.md — per-phase checklists + RULES 1-8 table + measured transcripts (parent-refreshed post-merge) + INCOMPLETE list; independent txid recompute, txverify VALID/LOW-S, s2b SHA256SUMS 47/47 re-verified by the writing lane |
 | 12 outstanding requirements | DONE | this matrix's GAP/PARTIAL rows + the operational backlog — snapshot committed as deploy/backlog-snapshot-20261116.txt (live copy is host-side at /root/maza-mobile-backlog.md) |
-| Android APK | DONE | v1.1.0, versionCode=3, v2+v3 release-signed — the exact artifact sha256 013b964f… is attached in this audit's worktree and sha-recorded in deploy/ENDPOINT-VERIFICATION.md §2; the older in-repo android/releases/maza-wallet-v1.0.0.apk (d30a48a9…) is SUPERSEDED (tailnet-era default URL) |
+| Android APK | DONE | v1.1.0, versionCode=3, v2+v3 release-signed — the release artifact sha256 013b964f… is recorded in deploy/ENDPOINT-VERIFICATION.md §2 (operator-side record; review artifacts exclude APK binaries); the older in-repo android/releases/maza-wallet-v1.0.0.apk (d30a48a9…) is SUPERSEDED (tailnet-era default URL) |
 | iOS | DEFERRED | Android-native stack; iOS is a separate-architecture effort (documented decision, not silently dropped) |
 
 ## Development rules compliance

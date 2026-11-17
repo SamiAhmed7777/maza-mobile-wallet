@@ -19,19 +19,14 @@ incomplete").
 | Governing spec | docs/SPEC.md (phases 4-8 + RULES 1-8) |
 | Prior audit | docs/SPEC-AUDIT.md (compliance matrix) |
 
-Two areas of this document are refreshed by the integrating parent after the
-four parallel lanes merge:
-
-- "Measured on this changeset (parent refreshes post-merge)" - re-run the
-  three commands on the merged tree and replace the transcripts and the
-  numbers table.
-- "Statuses and incomplete list (parent updates post-merge)" - update the
-  per-phase statuses and the INCOMPLETE list to reflect what actually merged
-  (S-3 light mode, S-4 settings, S-8 security doc) and which device proofs
-  are still outstanding.
-
-Everything else in this report is evidence citation and should remain valid
-across the merge.
+Two areas of this document were originally written for the integrating
+parent to refresh after the parallel lanes merged; the parent HAS refreshed
+them (section 1.0 is now the authoritative current-merged-tree record, and
+sections 1.2-1.6 are marked SUPERSEDED). All lane-era status rows in section
+3 have been reconciled to the merged state as of the wave-3 changeset:
+anything describing S-3/S-4/S-5/S-8/S-9 or the repaint as pending is stale
+only where this file says SUPERSEDED or where an explicit OUTSTANDING
+residual is named (e.g. the airplane-mode device run).
 
 ## 0. Scope, method, status legend
 
@@ -91,35 +86,47 @@ plus the r1/r2 judge-round fixes) with TZ=UTC. Where these numbers differ
 from 1.2-1.6 (which remain valid for base 361af1c), THIS subsection is
 authoritative:
 
-- Command 1 - Python suite: `Ran 253 tests ... OK (skipped=4)` (216 base +
+- Command 1 - Python suite: `Ran 284 tests ... OK (skipped=4)` (216 base +
   21 contrast tests incl. the expected-failure ledger gate + 7 settings
-  resume/retune wiring tests + 9 post-merge additions; the 4 skips are the
-  pre-existing ElectrumX integration self-skips - the pinned dependency is
-  unavailable on this host; the contrast ledger is EMPTY since the wave-2
-  reskin, so its former skip is gone).
+  resume/retune wiring tests + 27 W3 network/repaint tests + 13 post-merge
+  integration folds; the 4 skips are the pre-existing ElectrumX integration
+  self-skips - the pinned dependency is unavailable on this host; the
+  contrast ledger is EMPTY since the wave-2 reskin, so its former skip is
+  gone).
 - Command 2 - crypto self-test: `ALL 96 CHECKS PASSED` (49 base + 22 S-4
   checks + 13 settings-resume-gate checks + 12 pin-retune checks: window
   edges, streak/backoff untouched, in-session retune semantics, and the
   cross-activity bracket scenarios).
-- Command 3 - APK build: `SIGNED OK`, 308337 bytes. APK HASH NOTE:
+- Command 3 - APK build: `SIGNED OK`, 312433 bytes. APK HASH NOTE:
   apksigner output is not byte-reproducible, so every build has a different
   sha256; the recorded transcript run in TRANSCRIPTS.txt produced
-  5662e0b767562683320d2d54dda07a0ef928f1f80444b31e580c92598a9487d0.
+  b0f892210b7da4ece79360e6744521b544a673452862881e07f1feaf7759449a (that
+  bundled APK is the wave-3 review copy's own build; a later parent-host
+  rebuild of the same tree hashes differently, e.g.
+  6f654331e9cbc96e9c221b7b0b8c2e87590effc94708e45523f1cf6da8dc409f - the
+  per-build hash is identity for ONE build only, never for the tree).
   "SIGNED OK + battery green on the same tree" is the invariant, not any
   single hash.
 - Release battery (operator-side
   /root/.hermes/skills/maza-mobile-wallet/scripts/beta-gate.sh):
   `BATTERY-CLEAN` (PASS=13 FAIL=0).
-- Merged changeset inventory (17 paths): docs/SECURITY.md,
+- Merged changeset inventory (WAVE 2 + WAVE 3, current): docs/SECURITY.md,
   docs/TESTING-REPORT.md, docs/SPEC-AUDIT.md,
   android/res/values/{colors,styles,strings}.xml,
   android/res/layout/{activity_settings,view_wallet_manage}.xml,
-  android/src/com/mazawallet/{ThemeController,SettingsActivity}.java,
+  android/src/com/mazawallet/{ThemeController,UiTheme,SettingsActivity}.java,
   android/src/com/mazawallet/MainActivity.java,
+  android/src/com/mazawallet/SelfCustody.java,
+  android/src/com/mazawallet/PinGuard.java,
   android/src/com/mazawallet/SeedVault.java,
+  android/src/com/mazawallet/Net.java,
   android/src/com/mazawallet/crypto/{LockPolicy,SelfTest,SettingsResumePolicy}.java,
   android/AndroidManifest.xml, tests/test_theme_contrast.py,
-  tests/test_settings_resume_gate.py.
+  tests/test_settings_resume_gate.py, tests/test_w3_network_repaint.py,
+  android/evidence/w3-device/ (98-file device-evidence package),
+  DECISIONS.md (D11 note). Wave-2 also carried docs/SECURITY.md + the
+  settings/layouts; wave 3 added the repaint, Net routing folds, uiMode
+  handling, and this documentation refresh.
 
 ### 1.1 Environment
 
@@ -643,7 +650,7 @@ what is still outstanding (wave-2 reskin, device proofs, S-5/S-6, biometric).
 | Item | Status | Evidence / what is missing |
 |---|---|---|
 | dark display mode | PASS | Default palette rendered on device in the M21/M22b screenshots |
-| light display mode | DONE code (2026-11-17, wave 2) — device proof pending | android/res/values colors.xml + styles.xml (both palettes; dark byte-identical, frozen DARK_RENDER_BASELINE), ThemeController (UI_MODE_NIGHT_MASK), UiTheme palette resolution across ALL screens (15 constants / 113 sites converted; zero ARGB literals in MainActivity/SelfCustody), contrast ledger EMPTY (machine-checked gate), PIN dialogs + dialog themes palette-driven; known residual: live theme-switch repaint of MainActivity = backlog item W3-a; device screenshots pending |
+| light display mode | DONE code + on-device proof (2026-11-17) | android/res/values colors.xml + styles.xml (both palettes; dark byte-identical, frozen DARK_RENDER_BASELINE), ThemeController (UI_MODE_NIGHT_MASK), UiTheme palette resolution across ALL screens (15 constants / 113 sites converted; zero ARGB literals in MainActivity/SelfCustody), contrast ledger EMPTY (machine-checked gate), PIN dialogs + dialog themes palette-driven; LIVE theme switch proven on device in BOTH directions with the session preserved (android/evidence/w3-device/ 40-52: luminance 241.2 -> 34.0 -> 241.2, logcat no-restart proof); OS day/night flip handled without recreation (uiMode + onConfigurationChanged) |
 | mobile-first responsive layout | PARTIAL | Programmatic single-activity layout proven at 1600x900 emulator resolution; no proof at phone form factors |
 | large readable balance | PASS | BALANCE tab and WALLET tab balance cards (m21/m22b dumps) |
 | easy QR scanning | PENDING (M8) | No camera or scan code in android/src (grep-verified absent) |
@@ -655,7 +662,7 @@ what is still outstanding (wave-2 reskin, device proofs, S-5/S-6, biometric).
 | nav: transactions | PASS | HISTORY tab (index 3) |
 | nav: wallet management | DONE (S-4, 2026-11-17) | SettingsActivity WALLET MANAGEMENT page: receive addresses, PIN-gated seed re-show (FLAG_SECURE), double-confirm + typed-WIPE wipe with current-PIN re-verification and Keystore alias cleanup; device screenshots pending |
 | nav: settings | DONE (S-4, 2026-11-17) | SettingsActivity from the SECURITY card: endpoint editor (same saved URL pref), auto-lock 5/10/30 min applying IMMEDIATELY (in-session retune via PinGuard.retuneAutolockMs, wave 2), theme selector System/Light/Dark via ThemeController; device screenshots pending |
-| ordinary-user intuitiveness | PARTIAL | Plain-language pass done (BENCH ACCOUNT vs SELF-CUSTODY wording, fee shown); S-3/S-4 landed, app-wide light reskin landed (wave 2); on-device UX proofs + live theme-switch repaint pending |
+| ordinary-user intuitiveness | PARTIAL | Plain-language pass done (BENCH ACCOUNT vs SELF-CUSTODY wording, fee shown); S-3/S-4 landed, app-wide light reskin landed, LIVE theme switch proven on device; remaining: on-device proofs for the S-5 error copy (airplane-mode run) |
 | native MAZA branding | PASS | Branded header and launcher icons (branding/, mipmap-*) |
 
 ### 3.3 Phase 6 - blockchain connectivity
@@ -694,8 +701,8 @@ what is still outstanding (wave-2 reskin, device proofs, S-5/S-6, biometric).
 | QR scanning | PENDING (M8) | No camera code present |
 | encrypted wallet persistence | PARTIAL | SeedVault envelope code + selftest checks; device restart over the encrypted store not yet proven (same gap as 4.2) |
 | application restart and recovery | PASS | M21: fresh process -> watch set re-imported on unlock -> wallet renders (section 2.2) |
-| network interruption and reconnection | PARTIAL | Watch import retries 3x with 2 s x attempt backoff and surfaces "Watch import failed; balance may be stale." (SelfCustody.ensureWatchImported); Api.java connect 10 s / read 15 s timeouts. Uniform retry/offline copy is S-5; no airplane-mode device test yet |
-| error handling | PARTIAL | API errors surface to the user; per-path copy and no-silent-empty-state work is S-5 |
+| network interruption and reconnection | PARTIAL → code LANDED (wave 3) | Net.java owns ONE retry table for the whole surface: reads + unlock + watch/import get 3 attempts with exponential backoff (300/600/1200ms, 5s cap), spend POSTs (/api/send, /api/broadcast) are pinned at EXACTLY 1 attempt so a payment is never double-submitted; SelfCustody's old hand-rolled outer loop was removed so the total budget is exactly Net's; failure copy surfaces per-path ("Watch import failed; balance may be stale."). OUTSTANDING: the airplane-mode device test |
+| error handling | PARTIAL → code LANDED (wave 3) | user-facing copy for timeout/offline/unreachable/401/expired/HTTP-N moved to strings.xml and wired via Net; no raw exception text reaches the user; no silent empty states (HISTORY opens on "Loading history...", failures name the reason). OUTSTANDING: airplane-mode device run |
 | mobile build compatibility | PASS | APK builds with the raw toolchain on this host (section 1.4, SIGNED OK). Earlier device proofs installed the same bench line on Android 9 / API 28 (sections 2.2-2.4); this lane's build was not installed. Real-phone install pending (M6) |
 | testnet or controlled environment | PARTIAL | All mainnet tests ran against a 50 MAZA-capped, token-gated harness (never uncapped); a MazaCore testnet node runs on the operator host but the app-side testnet switch is S-6 and needs a testnet-backed endpoint |
 | never broadcast unauthorized or unintended mainnet txs | PASS | Both mainnet sends were Sami-directed, amount-capped, own-input-selected, and offline-verified before submission (section 2.1) |
@@ -737,32 +744,38 @@ what is still outstanding (wave-2 reskin, device proofs, S-5/S-6, biometric).
 
 LANDED on 2026-11-17 (parallel burst, all four lanes merged into this tree):
 
-- S-3 light mode: LANDED app-wide (wave 2, 2026-11-17): all 15 hardcoded
-  color constants converted (113 sites) to UiTheme palette resolution off the
-  live theme; the EXPECTED_BELOW_THRESHOLD ledger is EMPTY (machine-checked
-  burn-down gate green); dark render is byte-identical (frozen DARK_RENDER_
-  BASELINE test); PIN dialogs + dialog themes covered. Known UX residual
-  (new backlog item): choosing a theme in Settings recreates only Settings -
-  a live MainActivity keeps its palette until recreated (session-preserving
-  rebuild queued as a wave-3 item; token is memory-only so a plain
-  recreate() would bounce to Connect). Device screenshots of light mode
-  pending.
+- S-3 light mode: LANDED app-wide + LIVE theme switch proven on device
+  (wave 2 reskin + wave 3 repaint; android/evidence/w3-device/ 40-52):
+  all 15 hardcoded color constants converted (113 sites) to UiTheme palette
+  resolution off the live theme; the EXPECTED_BELOW_THRESHOLD ledger is
+  EMPTY (machine-checked burn-down gate green); dark render is byte-identical
+  (frozen DARK_RENDER_BASELINE test); PIN dialogs + dialog themes covered;
+  choosing a theme in Settings now repaints MainActivity IN PLACE on return
+  with the session preserved (no recreate; logcat no-restart proof), and an
+  OS day/night flip takes the same path (uiMode handled, no recreation).
+  Light-mode screenshots captured (w3-device 09-13, 19-27, 46, 51).
 - S-4 settings + wallet management: DONE (SettingsActivity from the SECURITY
   card: endpoint editor on the same saved URL pref, auto-lock 5/10/30 min
   applying IMMEDIATELY via PinGuard.retuneAutolockMs (wave 2: window-only
   change, streak/backoff untouched, 12 dedicated checks), theme selector
   System/Light/Dark; WALLET MANAGEMENT: receive addresses, PIN-gated seed
   re-show with FLAG_SECURE + scrub on dismiss, double-confirm + typed-WIPE
-  wipe). Device screenshots pending.
+  wipe with current-PIN re-verification). Settings screens captured on
+  device (w3-device 05-08, 43-45); the WIPE destructive step is proven only
+  up to the guard chain (36-37; the destructive confirm + post-wipe state
+  are queued for a disposable-wallet device pass - see PROOF.md section 5).
 - S-8 security assessment: DONE (docs/SECURITY.md; every cited path
   existence-verified by the writing lane).
 - S-9 testing report: DONE (this document; 1.0 refreshed post-merge).
 
 Not started or gated:
 
-- S-5 network-interruption and error hardening: only the watch-import retry
-  plus HTTP timeouts exist today; no airplane-mode device test; error copy
-  and no-silent-empty-state work outstanding.
+- S-5 network-interruption and error hardening: CODE LANDED (wave 3) - Net.java
+  owns ONE retry table for the whole wallet (reads + unlock + watch/import at
+  3 attempts with exponential backoff; spend POSTs pinned at exactly 1
+  attempt, mutation-tested), SelfCustody routed through it, error copy for
+  timeout/offline/401/expired wired everywhere, no silent empty states.
+  OUTSTANDING: the airplane-mode device test and per-error-copy screenshots.
 - S-6 testnet mode: app-side endpoint and address-version switch is not
   implemented; testnet testing is gated on a testnet-backed endpoint. All
   testing so far is mainnet against a capped harness.
@@ -796,7 +809,7 @@ Not started or gated:
 From a clean checkout of the merged tree:
 
 ```
-python3 -m unittest discover -s tests      # expect: Ran 253 tests, OK (skipped=4)
+python3 -m unittest discover -s tests      # expect: Ran 284 tests, OK (skipped=4)
 bash android/selftest.sh                   # expect: ALL 96 CHECKS PASSED
 bash android/build-apk.sh                  # expect: 6/6 stages, SIGNED OK + sha256
 sha256sum android/maza-wallet-bench.apk    # artifact identity for the run

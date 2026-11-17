@@ -1,0 +1,33 @@
+# logcat excerpt (device clock, PST) - adb shell logcat -d -v time | grep com.mazawallet
+# filtered on activity-lifecycle markers only. Captured after the reverse switch.
+# Point: between the Settings launch (08:21:07) and the BACK-to-wallet capture (08:22:00)
+# there is NO 'START u0 {cmp=com.mazawallet/.MainActivity}' line - MainActivity was
+# RESUMED and repainted in place, never recreated.
+11-17 07:21:27.290 I/ActivityManager( 2156): START u0 {flg=0x10000000 cmp=com.mazawallet/.MainActivity} from uid 2000
+11-17 07:21:27.291 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet.MainActivity callingPackage: null bstSpecialAppKeyboardHandlingEnabled = false
+11-17 07:21:27.309 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet/.MainActivity callingPackage: bstSpecialAppKeyboardHandlingEnabled = false
+11-17 07:23:35.463 I/ActivityManager( 2156): START u0 {cmp=com.mazawallet/.SettingsActivity} from uid 10068
+11-17 07:23:35.464 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet.SettingsActivity callingPackage: com.mazawallet bstSpecialAppKeyboardHandlingEnabled = false
+11-17 07:23:35.470 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet/.SettingsActivity callingPackage: bstSpecialAppKeyboardHandlingEnabled = false
+11-17 07:29:55.674 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet/.MainActivity callingPackage: bstSpecialAppKeyboardHandlingEnabled = false
+11-17 07:29:55.903 D/ActivityManager( 2156): onWindowsDrawn: packageName = com.mazawallet, name = com.mazawallet.MainActivity, mCallingPackage = null
+11-17 08:07:50.705 W/ActivityManager( 2156): Force removing ActivityRecord{e73535e u0 com.mazawallet/.MainActivity t139}: app died, no saved state
+11-17 08:08:40.244 I/ActivityManager( 2156): START u0 {flg=0x10000000 cmp=com.mazawallet/.MainActivity} from uid 2000
+11-17 08:08:40.245 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet.MainActivity callingPackage: null bstSpecialAppKeyboardHandlingEnabled = false
+11-17 08:08:40.260 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet/.MainActivity callingPackage: bstSpecialAppKeyboardHandlingEnabled = false
+11-17 08:15:28.935 I/ActivityManager( 2156): START u0 {cmp=com.mazawallet/.SettingsActivity} from uid 10068
+11-17 08:15:28.938 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet.SettingsActivity callingPackage: com.mazawallet bstSpecialAppKeyboardHandlingEnabled = false
+11-17 08:15:28.945 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet/.SettingsActivity callingPackage: bstSpecialAppKeyboardHandlingEnabled = false
+11-17 08:15:29.151 D/ActivityManager( 2156): onWindowsDrawn: packageName = com.mazawallet, name = com.mazawallet.SettingsActivity, mCallingPackage = null
+11-17 08:15:29.151 I/ActivityManager( 2156): Displayed com.mazawallet/.SettingsActivity: +201ms
+11-17 08:16:08.878 D/ActivityManager( 2156): onWindowsDrawn: packageName = com.mazawallet, name = com.mazawallet.SettingsActivity, mCallingPackage = null
+11-17 08:16:33.282 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet/.MainActivity callingPackage: bstSpecialAppKeyboardHandlingEnabled = false
+11-17 08:16:33.452 D/ActivityManager( 2156): onWindowsDrawn: packageName = com.mazawallet, name = com.mazawallet.MainActivity, mCallingPackage = null
+11-17 08:21:07.085 I/ActivityManager( 2156): START u0 {cmp=com.mazawallet/.SettingsActivity} from uid 10068
+11-17 08:21:07.087 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet.SettingsActivity callingPackage: com.mazawallet bstSpecialAppKeyboardHandlingEnabled = false
+11-17 08:21:07.094 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet/.SettingsActivity callingPackage: bstSpecialAppKeyboardHandlingEnabled = false
+11-17 08:21:07.212 D/ActivityManager( 2156): onWindowsDrawn: packageName = com.mazawallet, name = com.mazawallet.SettingsActivity, mCallingPackage = null
+11-17 08:21:07.212 I/ActivityManager( 2156): Displayed com.mazawallet/.SettingsActivity: +114ms
+11-17 08:21:37.422 D/ActivityManager( 2156): onWindowsDrawn: packageName = com.mazawallet, name = com.mazawallet.SettingsActivity, mCallingPackage = null
+11-17 08:22:00.032 D/ActivityManager( 2156): TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet/.MainActivity callingPackage: bstSpecialAppKeyboardHandlingEnabled = false
+11-17 08:22:00.207 D/ActivityManager( 2156): onWindowsDrawn: packageName = com.mazawallet, name = com.mazawallet.MainActivity, mCallingPackage = null

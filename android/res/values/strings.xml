@@ -64,4 +64,28 @@
     <string name="seed_dialog_title">Seed phrase</string>
     <string name="seed_dialog_note">Write these words down. Anyone with them can spend this wallet.</string>
     <string name="addresses_unavailable">Could not read the seed on this device.</string>
+
+    <!-- W3-UX (wave 3): S-5 network-hardening copy. Every failure a user can
+         hit has an explicit sentence: timeout, offline, unreachable, HTTP
+         error, expired session, and the unknown-outcome spend case (never
+         invite a retry that could double-send). Additions only; pure ASCII. -->
+    <string name="net_error_offline">No network connection. Check mobile data or Wi-Fi, then try again.</string>
+    <string name="net_error_timeout">The server did not answer in time. Check your connection and try again.</string>
+    <string name="net_error_unreachable">Cannot reach the server. Check the server URL and your connection.</string>
+    <string name="net_error_generic">Network error. Try again in a moment.</string>
+    <string name="net_error_server">Server error (HTTP %1$d). Try again in a moment.</string>
+    <string name="net_bad_response">Unexpected response from the server.</string>
+    <string name="net_session_expired">Session expired - please reconnect.</string>
+    <string name="net_invalid_token">Invalid token. Check the bench token and try again.</string>
+    <string name="net_update_failed">Update failed: %1$s</string>
+    <string name="balance_stale">Update failed: %1$s - showing the last loaded balance.</string>
+    <string name="balance_unavailable">Balance not loaded.</string>
+    <string name="history_loading">Loading history...</string>
+    <string name="history_empty">No transactions yet</string>
+    <string name="history_failed">Could not load history: %1$s</string>
+    <string name="qr_loading">Loading QR...</string>
+    <string name="qr_failed">QR code unavailable: %1$s</string>
+    <string name="qr_bad_image">QR code unavailable: the server sent an unreadable image.</string>
+    <string name="send_failed">Send failed: %1$s</string>
+    <string name="send_unknown">Send not confirmed (%1$s). Check HISTORY before trying again - the transaction may have been submitted.</string>
 </resources>
