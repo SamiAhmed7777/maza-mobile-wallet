@@ -139,6 +139,9 @@ public final class SelfTest {
         section("TxBuilder (legacy P2PKH, SIGHASH_ALL)");
         check("txbuilder sign + verify", txBuilderCheck(k0));
 
+        section("SeedCryptAes (at-rest envelope)");
+        seedCryptChecks();
+
         System.out.println();
         if (failures == 0) {
             System.out.println("ALL " + total + " CHECKS PASSED");
@@ -146,6 +149,39 @@ public final class SelfTest {
             System.out.println("FAILURES: " + failures + " of " + total);
         }
         System.exit(failures == 0 ? 0 : 1);
+    }
+
+    /** SeedCryptAes at-rest envelope: round trip, tamper, wrong key,
+     *  IV uniqueness, exact wire format. */
+    private static void seedCryptChecks() {
+        byte[] key = new byte[32];
+        for (int i = 0; i < 32; i++) key[i] = (byte) (0xA0 + i);
+        byte[] plain = "abandon abandon abandon abandon abandon abandon".getBytes(
+                java.nio.charset.StandardCharsets.UTF_8);
+
+        byte[] blob1 = com.mazawallet.crypto.SeedCryptAes.encrypt(
+                com.mazawallet.crypto.SeedCryptAes.keyFor(key), plain);
+        byte[] blob2 = com.mazawallet.crypto.SeedCryptAes.encrypt(
+                com.mazawallet.crypto.SeedCryptAes.keyFor(key), plain);
+        check("seedcrypt blob = 12B IV + plain + 16B tag",
+                blob1.length == 12 + plain.length + 16);
+        check("seedcrypt random IV per encryption",
+                !java.util.Arrays.equals(
+                        java.util.Arrays.copyOfRange(blob1, 0, 12),
+                        java.util.Arrays.copyOfRange(blob2, 0, 12)));
+
+        byte[] round = com.mazawallet.crypto.SeedCryptAes.decrypt(
+                com.mazawallet.crypto.SeedCryptAes.keyFor(key), blob1);
+        check("seedcrypt round trip", java.util.Arrays.equals(round, plain));
+
+        byte[] tampered = blob1.clone();
+        tampered[tampered.length - 1] ^= 0x01; // flip last tag byte
+        check("seedcrypt tamper rejected", !com.mazawallet.crypto.SeedCryptAes.canDecrypt(
+                com.mazawallet.crypto.SeedCryptAes.keyFor(key), tampered));
+
+        byte[] other = new byte[32];
+        check("seedcrypt wrong key rejected", !com.mazawallet.crypto.SeedCryptAes.canDecrypt(
+                com.mazawallet.crypto.SeedCryptAes.keyFor(other), blob1));
     }
 
     /** Sign a fake 1-in/2-out tx with the fixed WIF key; verify each sig. */

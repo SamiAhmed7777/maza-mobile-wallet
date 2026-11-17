@@ -159,20 +159,16 @@ public final class SelfCustody {
     }
 
     private String readSeed() {
-        try {
-            java.io.InputStream in = act.openFileInput(SEED_FILE);
-            byte[] data = Api.readAll(in);
-            return new String(data, java.nio.charset.StandardCharsets.UTF_8).trim();
-        } catch (IOException e) {
-            return "";
-        }
+        // Seed-at-rest vault: AndroidKeyStore AES-GCM envelope; migrates a
+        // legacy plaintext file in place on first read (SeedVault).
+        return SeedVault.loadOrMigrate(act, SEED_FILE);
     }
 
-    /** Writes the mnemonic to app-private storage. Never logged, never shown again. */
+    /** Writes the mnemonic to app-private storage, encrypted at rest with
+     *  an AndroidKeyStore AES-256-GCM key (SeedVault). Never logged, never
+     *  shown again, plaintext never hits disk. */
     private void writeSeed(String mnemonic) throws IOException {
-        java.io.FileOutputStream out = act.openFileOutput(SEED_FILE, Context.MODE_PRIVATE);
-        out.write(mnemonic.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        out.close();
+        SeedVault.save(act, SEED_FILE, mnemonic);
     }
 
     private Bip32.Node account() {
