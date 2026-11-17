@@ -72,14 +72,15 @@ Maven Central `com/google/zxing/core/3.5.3`, upstream `.sha1`
 tests/test_scan_origin_contract.py re-verifies the pin files against the
 shipped bytes and the jar content census.
 
-**Adoption honesty (M8a scope):** at THIS commit the jar is packaged into
-`classes.dex` and gated, but nothing in `android/src` imports it yet — the
-importing scanner screen is the next sub-item (M8b). The M8a changeset
-deliberately ships the dependency + its supply-chain fence + the
-scan-origin policy (`android/src/com/mazawallet/crypto/ScanOrigin.java`:
+**Adoption honesty (updated M8b, 2026-11-17):** M8b code half one now WIRES
+the import — `android/src/com/mazawallet/QrScanner.java` is the only
+zxing-consuming class (MultiFormatReader, QR-only hints, PlanarYUVLuminanceSource,
+HybridBinarizer; decode in memory, nothing fetched/opened/stored). The M8a
+scope shipped the dependency + its supply-chain fence + the scan-origin
+policy (`android/src/com/mazawallet/crypto/ScanOrigin.java`:
 scanned payload text may only ever become a validated MAZA address; URLs
 and foreign schemes are never fetched or opened; `maza:` URI parameters
-fail-closed until M9) and defers all decode-object usage to M8b.
+fail-closed until M9).
 
 **Vendored data (not code):** `android/res/raw/bip39_english.txt` — the BIP39
 English wordlist, 2048 words, data-only:

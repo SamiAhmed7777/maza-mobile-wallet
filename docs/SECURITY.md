@@ -488,10 +488,18 @@ could have typed. The controls (all in
   rejection reasons are user-safe and never echo the payload.
 - The decoder itself is a sha256-pinned vendored jar enforced by the
   build (see DECISIONS D13 / docs/DEPENDENCY-LICENSES.md §1).
-- CAMERA permission is NOT declared yet — it arrives with the M8b camera
-  surface and the operator beta battery's permission audit is widened in
-  the same change (a declared-but-unused dangerous permission is worse
-  than a late permission).
+- CAMERA permission IS declared (M8b) and runtime-requested only when the
+  user taps Scan — the request lands WITH the surface (ScanFlowPolicy rows
+  gate the flow in MainActivity). The camera feed is decoded in memory and
+  discarded frame by frame: no image capture, no storage, no preview
+  recording. The operator beta battery's permission audit was widened to
+  exactly INTERNET + USE_BIOMETRIC + CAMERA in the same change, and CAMERA
+  left the source dangerous-API grep (the permission allowlist in the
+  battery is its audit surface now).
+- The scan surface is an in-activity overlay (no child activity): the live
+  session guard stays authoritative, and the camera is released when the
+  lock cover shows, when the screen pauses, on destroy, and on any wallet
+  rebuild (theme repaint/unlock) — a locked wallet holds no camera.
 
 ## 7. Spending-path scope (do not generalize these claims)
 

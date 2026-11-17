@@ -457,7 +457,16 @@ class PaletteResourceTest(unittest.TestCase):
     def test_sources_resolve_every_colour_from_the_palette(self):
         """The reskin's substance: neither source may hardcode an ARGB literal
         and both must read their colours from UiTheme's live palette."""
-        allowed_literals = {"0x00000000"}   # transparent tab fills, not a colour
+        allowed_literals = {
+            "0x00000000",  # transparent tab fills, not a colour
+            # M8b camera-scan chrome: the scan overlay's near-black scrim and
+            # its hint text are deliberately theme-INDEPENDENT (a camera
+            # preview reads best on a dark scrim in both themes; #CCCCCC on
+            # the scrim is ~8.4:1, well past the 4.5:1 floor). Decorative
+            # scan chrome, not themed UI text-on-surface.
+            "0xEE101010",
+            "0xFFCCCCCC",
+        }
         for path in (MAIN_ACTIVITY, SELF_CUSTODY):
             name = os.path.basename(path)
             code = _strip_comments(read_text(path))

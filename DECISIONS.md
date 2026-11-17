@@ -304,6 +304,29 @@ evidence.
 - **M8a scope honesty:** the jar is packaged and gated at M8a; the
   importing scanner screen is M8b (next sub-item). No CAMERA permission
   is declared until M8b lands the camera surface with it.
+- **M8b wiring (code half one, added 2026-11-17):** the camera scan
+  surface shipped as an IN-ACTIVITY overlay on the SEND tab (no child
+  activity — the live session guard stays authoritative; no child-screen
+  lock plumbing). Engine = raw camera2 + ImageReader YUV_420_888 +
+  MultiFormatReader with QR-only hints (the M8a zxing jar; decode in
+  memory, nothing fetched/opened/stored). The platform-typed callbacks
+  are TOP-LEVEL package-private classes (QrCallbacks.java) per the
+  bisected d8 nested-class rule; the ImageReader listener is a method
+  reference. ScanFlowPolicy (pure Java, SelfTest-driven) decides the
+  flow: Scan tap → overlay or CAMERA runtime request (lands WITH the
+  surface); decoded payload → ScanOrigin.parse → accepted fills the SEND
+  field and closes the scanner, rejected shows the user-safe reason and
+  keeps scanning. Camera released on lock-cover show / pause / destroy /
+  wallet rebuild — a locked wallet holds no camera. The beta battery's
+  permission allowlist widened to INTERNET+USE_BIOMETRIC+CAMERA in the
+  same change. Judge r1 blocker fix (urn:ump:6mhimsa3lwoppssgvpd2koiyvv66pjxwnplil6vjpfcmvraalxaq):
+  the CCW frame rotation moved to pure `crypto/LumaRotate.java` with the
+  correct W-1-r source-column bound (the first rotate90 used h-1-r, an
+  ArrayIndexOutOfBoundsException on every portrait frame of a 640x480
+  landscape buffer) and is desktop-tested on non-square matrices in
+  SelfTest.lumaRotateChecks (+8 rows; per-attempt skip-not-crash guard +
+  one-per-streak "Still looking..." status added in the same fix).
+  On-device scan proof = M8b-ii (device evidence tick).
 
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all

@@ -172,8 +172,11 @@ confirm the server itself is healthy before troubleshooting the phone.
 - Biometric unlock is offered only on the lock screen and only on
   Android 10+ devices with biometrics enrolled; everything inside the
   wallet is PIN-based.
-- QR camera scanning, payment-URI requests, testnet mode, and receive
-  notifications are not in the app yet (see `README.md` - What works
-  today, and `docs/SPEC-AUDIT.md` for the plan).
+- QR camera scanning is in the app from 2026-11-17 (SEND tab "Scan QR":
+  the camera reads a MAZA QR and the validated address lands in the
+  recipient field; scanned content is never opened as a link). Payment-URI
+  requests, testnet mode, and receive notifications are not in the app
+  yet (see `README.md` - What works today, and `docs/SPEC-AUDIT.md` for
+  the plan).
 - The bench account is a shared capped play wallet for testing, not a
   place to hold real amounts.

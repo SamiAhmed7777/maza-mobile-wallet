@@ -148,14 +148,17 @@ class MainActivityBiometricWiring(unittest.TestCase):
     def test_manifest_declares_exactly_internet_plus_use_biometric(self):
         """platform BiometricPrompt.authenticate() requires USE_BIOMETRIC
         (developer.android.com BiometricPrompt reference, javap-verified
-        constants); it is a normal-level permission. Nothing else may ride
+        constants); it is a normal-level permission. M8b added CAMERA (the
+        SEND-tab QR scan surface, runtime-requested). Nothing else may ride
         in - the beta battery asserts this exact set."""
         src = read(MANIFEST)
         self.assertIn('<uses-permission android:name="android.permission.INTERNET" />', src)
         self.assertIn('<uses-permission android:name="android.permission.USE_BIOMETRIC" />', src)
+        self.assertIn('<uses-permission android:name="android.permission.CAMERA" />', src)
         perms = [ln.strip() for ln in src.splitlines()
                  if "<uses-permission" in ln]
-        self.assertEqual(len(perms), 2, "exactly INTERNET + USE_BIOMETRIC")
+        self.assertEqual(len(perms), 3,
+                         "exactly INTERNET + USE_BIOMETRIC + CAMERA")
 
     def test_strings_carry_the_biometric_copy(self):
         src = read(STRINGS)

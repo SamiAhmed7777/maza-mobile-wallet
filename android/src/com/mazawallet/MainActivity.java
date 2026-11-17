@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
@@ -23,6 +24,7 @@ import android.text.Editable;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -36,6 +38,8 @@ import android.widget.Toast;
 
 import com.mazawallet.crypto.BiometricPolicy;
 import com.mazawallet.crypto.LockPolicy;
+import com.mazawallet.crypto.ScanFlowPolicy;
+import com.mazawallet.crypto.ScanOrigin;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -59,7 +63,8 @@ import java.util.concurrent.Executor;
  * "Authorization: Bearer <token>" (the app keeps no cookie jar). The token
  * is memory-only: never persisted, never in URLs.
  */
-public class MainActivity extends Activity implements SelfCustody.Host {
+public class MainActivity extends Activity
+        implements SelfCustody.Host, QrScanner.Listener {
 
     /** Prefs file + endpoint key shared with SettingsActivity (package
      *  visible on purpose: the settings screen edits the SAME saved URL the
@@ -136,6 +141,9 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     // Tab navigation: content container + one ScrollView per tab. Built once
     // in showWallet(); polls never rebuild the tab bar or switch tabs.
     private FrameLayout content;
+    /** Root wrapper the wallet UI, the scan overlay (M8b) and the lock cover
+     *  stack into - scan rides BELOW the lock cover, above the wallet. */
+    private FrameLayout walletWrap;
     private final ScrollView[] tabViews = new ScrollView[TABS.length];
     private final Button[] tabBtns = new Button[TABS.length];
     private int tab = 0;
@@ -152,6 +160,12 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     private TextView feeHintTv;
     private Button sendBtn;
     private TextView sendResultTv;
+    // M8b QR scan: overlay + engine live only while the scan surface is up.
+    private FrameLayout scanOverlay;
+    private TextView scanStatusTv;
+    private QrScanner qrScanner;
+    /** CAMERA runtime-request id (ScanFlowPolicy flow in MainActivity). */
+    private static final int REQ_SCAN_CAMERA = 4201;
     private LinearLayout historyList;
     /** Explicit list state line (S-5): "Loading history..." / the failure
      *  reason. Cleared once a snapshot renders, so a list that could not load
@@ -231,6 +245,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     protected void onDestroy() {
         ui.removeCallbacks(pollTask);
         ui.removeCallbacks(lockTick);
+        closeScan(); // M8b: no camera outlives this activity
         cancelBiometricPrompt(); // S-2b-ii: no prompt survives this activity
         if (sActiveGuard == pinGuard) sActiveGuard = null;
         super.onDestroy();
@@ -238,6 +253,10 @@ public class MainActivity extends Activity implements SelfCustody.Host {
 
     @Override
     protected void onPause() {
+        // M8b: release the camera whenever the screen leaves the foreground
+        // (the platform would reclaim it anyway - explicit release avoids the
+        // wedged-camera race). Returning re-opens via a fresh Scan tap.
+        closeScan();
         if (pinGuard != null) pinGuard.onBackground();
         super.onPause();
     }
@@ -349,6 +368,9 @@ public class MainActivity extends Activity implements SelfCustody.Host {
      *  on BALANCE). No network and no session mutation, so it is safe to re-run
      *  over a live session - that is exactly what the W3-a repaint does. */
     private void buildWalletUi() {
+        // M8b: a rebuild (unlock or theme repaint) discards any live scan
+        // surface - stale view references must never survive the rebuild.
+        closeScan();
         // Reset the selected-tab index: a successful unlock REBUILDS the whole
         // wallet UI, and selectTab(0) below must count as the initial
         // selection (no navigation refresh) so each unlock/reconnect performs
@@ -402,6 +424,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         rootWrap.addView(lockOverlay, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(rootWrap);
+        walletWrap = rootWrap;
         selectTab(0);
     }
 
@@ -635,6 +658,14 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         toEt.setTypeface(Typeface.MONOSPACE);
         col.addView(toEt, mp(0, dp(4), 0, 0));
 
+        // M8b: scan a MAZA QR into the recipient field. The camera surface is
+        // an in-activity overlay (the session guard stays live; no child
+        // screen), gated by ScanFlowPolicy + the CAMERA runtime request.
+        Button scanBtn = new Button(this);
+        scanBtn.setText("Scan QR");
+        scanBtn.setOnClickListener(v -> onScanTapped());
+        col.addView(scanBtn, mp(0, dp(4), 0, 0));
+
         amountEt = input("", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         amountEt.setHint("Amount (MAZA)");
         col.addView(amountEt, mp(0, dp(4), 0, 0));
@@ -651,6 +682,146 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         col.addView(sendResultTv, mp(0, dp(4), 0, 0));
 
         addTab(col, 2);
+    }
+
+    // ------------------------------------- M8b: QR scan into SEND
+
+    /** Scan button tapped: ScanFlowPolicy row 1 decides open vs runtime
+     *  request (the request lands WITH the surface - grant opens it). */
+    private void onScanTapped() {
+        if (walletWrap == null) return;
+        boolean granted = checkSelfPermission("android.permission.CAMERA")
+                == PackageManager.PERMISSION_GRANTED;
+        int action = ScanFlowPolicy.onScanTapped(granted);
+        if (action == ScanFlowPolicy.OPEN_SCAN) {
+            openScan();
+        } else {
+            requestPermissions(
+                    new String[]{"android.permission.CAMERA"}, REQ_SCAN_CAMERA);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQ_SCAN_CAMERA) return;
+        boolean granted = grantResults != null && grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+        int action = ScanFlowPolicy.onPermissionResult(granted);
+        if (action == ScanFlowPolicy.OPEN_SCAN) {
+            openScan();
+        } else if (action == ScanFlowPolicy.SHOW_HINT) {
+            sendResultTv.setText(ScanFlowPolicy.DENIED_HINT);
+        }
+    }
+
+    /** Build the scan overlay above the wallet, below the lock cover, and
+     *  start the camera engine. The engine reports decoded payloads to THIS
+     *  activity (QrScanner.Listener; top-level class implementing OUR OWN
+     *  interface is the d8-safe shape - platform supertypes stay in the
+     *  top-level QrCallbacks classes). */
+    private void openScan() {
+        if (walletWrap == null) return;
+        closeScan();
+        scanOverlay = new FrameLayout(this);
+        scanOverlay.setBackgroundColor(0xEE101010);
+        scanOverlay.setClickable(true); // swallow touches behind the camera
+
+        SurfaceView sv = new SurfaceView(this);
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        int maxW = (int) (dm.widthPixels * 0.9f);
+        int maxH = (int) (dm.heightPixels * 0.55f);
+        // 4:3 landscape preview scaled to fit; the holder's fixed buffer size
+        // is chosen inside QrScanner - the view bounds only scale it.
+        int vw = maxW;
+        int vh = vw * 3 / 4;
+        if (vh > maxH) {
+            vh = maxH;
+            vw = vh * 4 / 3;
+        }
+        scanOverlay.addView(sv, new FrameLayout.LayoutParams(vw, vh, Gravity.CENTER));
+
+        scanStatusTv = label(getString(R.string.scan_hint), 13, 0xFFCCCCCC,
+                Typeface.NORMAL);
+        scanStatusTv.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams stLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+        stLp.bottomMargin = dp(64);
+        scanOverlay.addView(scanStatusTv, stLp);
+
+        Button cancel = new Button(this);
+        cancel.setText(getString(R.string.scan_cancel));
+        cancel.setOnClickListener(v -> closeScan());
+        FrameLayout.LayoutParams cLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        cLp.bottomMargin = dp(8);
+        scanOverlay.addView(cancel, cLp);
+
+        // Index 1 = above the wallet root, BELOW the lock cover (showLock()
+        // closes the scanner first - a locked wallet holds no camera).
+        walletWrap.addView(scanOverlay, 1, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        qrScanner = new QrScanner(this, sv, this);
+        qrScanner.start();
+    }
+
+    /** Release the camera and tear the overlay down; never throws (a stale
+     *  overlay must never wedge the send form). */
+    private void closeScan() {
+        if (qrScanner != null) {
+            try {
+                qrScanner.stop();
+            } catch (RuntimeException ignored) {
+                // release-path failure is never user-facing
+            }
+            qrScanner = null;
+        }
+        if (scanOverlay != null) {
+            ViewGroup parent = (ViewGroup) scanOverlay.getParent();
+            if (parent != null) {
+                try {
+                    parent.removeView(scanOverlay);
+                } catch (RuntimeException ignored) {
+                    // already detached
+                }
+            }
+        }
+        scanOverlay = null;
+        scanStatusTv = null;
+    }
+
+    /** QrScanner.Listener: decoded payload text lands on the BG thread. The
+     *  ONLY consumer is ScanOrigin.parse (M8a origin discipline) - accepted
+     *  text fills the SEND field and closes the scanner; a rejection shows
+     *  its user-safe reason on the overlay and KEEPS scanning. */
+    @Override
+    public void onDecoded(String payloadText) {
+        final ScanOrigin.Result r = ScanOrigin.parse(payloadText);
+        ui.post(() -> {
+            int action = ScanFlowPolicy.onDecoded(r.ok);
+            if (action == ScanFlowPolicy.FILL_AND_CLOSE) {
+                sendResultTv.setText("");
+                toEt.setText(r.address);
+                toEt.requestFocus();
+                closeScan();
+            } else if (action == ScanFlowPolicy.KEEP_SCANNING
+                    && scanStatusTv != null) {
+                scanStatusTv.setText(r.reason);
+            }
+        });
+    }
+
+    /** QrScanner.Listener: camera progress/failure copy (BG thread). */
+    @Override
+    public void onStatus(String message) {
+        ui.post(() -> {
+            if (scanStatusTv != null) scanStatusTv.setText(message);
+        });
     }
 
     private void buildHistoryTab() {
@@ -1089,6 +1260,9 @@ public class MainActivity extends Activity implements SelfCustody.Host {
 
     private void showLock() {
         if (lockOverlay == null || pinGuard == null) return;
+        // M8b: a locked wallet holds no camera - stop the scanner before the
+        // cover renders (the cover also rides above the overlay visually).
+        closeScan();
         pinEt.setText("");
         pinErrTv.setTextColor(pal.textSecondary());
         pinErrTv.setText(pinGuard.throttled()

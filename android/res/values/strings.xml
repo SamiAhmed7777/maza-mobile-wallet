@@ -95,4 +95,11 @@
     <string name="biometric_subtitle">Confirm your fingerprint to open the wallet.</string>
     <string name="biometric_use_pin">Use PIN</string>
     <string name="biometric_unlock_button">Unlock with biometrics</string>
+
+    <!-- M8b QR scan overlay copy. ScanOrigin's rejection reasons are carried
+         by ScanFlowPolicy/ScanOrigin constants (desktop-selftested); these
+         resource strings are the static overlay chrome. Additions only;
+         pure ASCII. -->
+    <string name="scan_hint">Point the camera at a MAZA QR code</string>
+    <string name="scan_cancel">Cancel</string>
 </resources>

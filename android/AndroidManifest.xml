@@ -8,6 +8,10 @@
     <!-- S-2b-ii: platform BiometricPrompt.authenticate() requires this
          normal-level permission (auto-granted, no runtime prompt). -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- M8b: QR scan on the SEND tab. Runtime-requested when the user taps
+         Scan (ScanFlowPolicy gates the flow); the camera feed is decoded
+         in memory only - no image capture, no storage. -->
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <uses-sdk
         android:minSdkVersion="24"

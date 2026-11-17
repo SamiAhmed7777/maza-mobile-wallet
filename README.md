@@ -45,8 +45,9 @@ builds the missing piece on chain-code defaults.
   block hashes exactly; constants anchored to sha256-pinned MazaCore
   excerpts (`vendor/`).
 - In flight / open: PIN + biometric lock, device proofs for the
-  encrypted-seed and lock lanes, APK distribution channel, QR scanning,
-  payment URIs, MazaPay checkout integration, indexer deployment (blocked
+  encrypted-seed and lock lanes, APK distribution channel, QR-scan
+  on-device proof (scan surface code shipped 2026-11-17), payment URIs,
+  MazaPay checkout integration, indexer deployment (blocked
   on a txindex build decision — see `docs/electrumx/TROUBLESHOOTING.md`).
 
 ## Quickstart
