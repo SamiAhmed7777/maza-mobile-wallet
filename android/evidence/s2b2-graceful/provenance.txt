@@ -1,0 +1,6 @@
+APK: /root/maza-mobile-wallet/android/maza-wallet-bench.apk
+sha256 b8332f08a6979288afac74597031d9972742cb1e8eab6c4d1f8daf8e66068d3b
+size  316529 bytes
+md5   6bc3fb2024e196cfba4fb4f21810b829
+provenance: built by android/build-apk.sh from the commit 330359e tree (post-fold build recorded in that commit message); pushed to SAMI-PC BlueStacks emulator-5554 via adb push + pm install -r on 2026-11-17 ~12:08 PST; installed base.apk md5 matches host md5; firstInstallTime 2026-11-15 18:39:10 unchanged (update-not-wipe); lastUpdateTime 2026-11-17 12:08:51.
+Note: apksigner output is not byte-reproducible; this hash is identity for THIS build only (house rule).
