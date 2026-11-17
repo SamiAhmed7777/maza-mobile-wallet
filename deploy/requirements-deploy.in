@@ -1,0 +1,3 @@
+# Capture INPUT for deploy/requirements-resolved-py312.txt (kept so the
+# documented uv command is checkout-contained; see docs/DEPENDENCY-LICENSES.md §4).
+e-x[leveldb] @ git+https://github.com/spesmilo/electrumx@ee28cd8ddcc61019d78880ad59582b9b4ce3cc99

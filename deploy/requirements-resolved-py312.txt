@@ -1,0 +1,53 @@
+# Captured Python 3.12 RUNTIME dependency resolution of the ElectrumX kit deploy
+# closure (2026-11-16) - a constraints capture, NOT a complete artifact lockfile:
+# it pins runtime dependency versions only (no hashes; build-isolation/build
+# dependencies unpinned; no other interpreter target captured).
+# Generated WITHOUT installing, on the dev host, Python 3.12 target (from
+# the checkout root):
+#   uv pip compile deploy/requirements-deploy.in -o resolved-deploy.txt --python-version 3.12
+# where requirements-deploy.in is exactly one line:
+#   e-x[leveldb] @ git+https://github.com/spesmilo/electrumx@ee28cd8ddcc61019d78880ad59582b9b4ce3cc99
+# This file pins the package versions pip resolves FOR the install (aiohttp,
+# aiorpcx, websockets, plyvel and the transitive closure); the electrumx
+# source itself is NOT constrained here — deploy/install-electrumx-dev.sh
+# enforces the commit pin by git checkout. plyvel==1.5.1 is included, so a
+# constrained install ON THE CAPTURED TARGET (Python 3.12) repeats the same
+# runtime dependency resolution, leveldb extra included.
+#   pip install -c deploy/requirements-resolved-py312.txt -e ./electrumx[leveldb]
+# Per-package license review: docs/DEPENDENCY-LICENSES.md section 4.
+# plyvel BUILDS against the LevelDB C library (system libleveldb headers).
+aiohappyeyeballs==2.7.1
+    # via aiohttp
+aiohttp==3.14.5
+    # via e-x
+aiorpcx==0.25.0
+    # via e-x
+aiosignal==1.4.0
+    # via aiohttp
+attrs==26.1.0
+    # via aiohttp
+    # via -r requirements-deploy.in
+frozenlist==1.8.0
+    # via
+    #   aiohttp
+    #   aiosignal
+idna==3.20
+    # via yarl
+multidict==7.2.1
+    # via
+    #   aiohttp
+    #   yarl
+plyvel==1.5.1
+    # via e-x
+propcache==0.5.4
+    # via
+    #   aiohttp
+    #   yarl
+typing-extensions==4.16.0
+    # via
+    #   aiohttp
+    #   aiosignal
+websockets==17.4
+    # via aiorpcx
+yarl==1.25.1
+    # via aiohttp

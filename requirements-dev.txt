@@ -13,6 +13,12 @@
 # C headers) — deploy/install-electrumx-dev.sh does this and verifies the
 # import. The tree requires Python >= 3.10 (pyproject.toml at the pin).
 #
+# A captured resolution of the kit's dependency closure (Python 3.12 target,
+# 2026-11-16) ships as deploy/requirements-resolved-py312.txt — use it with
+# `pip install -c deploy/requirements-resolved-py312.txt ...` to repeat the
+# captured Python-3.12 runtime dependency resolution at deploy time (no
+# hashes; per-package license review: docs/DEPENDENCY-LICENSES.md §4).
+#
 # PyPI `electrumx` 1.20.2 is a stale, altcoin-stripped build (5 coin classes,
 # no DeserializerSegWit) — the tests detect and reject it. The deployment
 # venv on samihost uses this same pin; Python 3.12 there, 3.14 works too.

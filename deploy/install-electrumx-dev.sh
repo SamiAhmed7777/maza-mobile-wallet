@@ -17,6 +17,19 @@ PIN="ee28cd8ddcc61019d78880ad59582b9b4ce3cc99"
 DEST="${1:-third_party/electrumx}"
 PYBIN="${2:-python3}"
 
+# The captured dependency resolution ships as a pip constraints file NEXT TO
+# this script (repo root: deploy/requirements-resolved-py312.txt): it pins
+# the versions pip would otherwise resolve loosely from the upstream ranges
+# (aiohttp, aiorpcx, websockets, plyvel and transitives — Python 3.12
+# capture, 2026-11-16). electrumx itself is NOT constrained here; the git
+# checkout below enforces the commit pin. Fail loudly if the file is absent.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONSTRAINTS="$SCRIPT_DIR/requirements-resolved-py312.txt"
+if [ ! -f "$CONSTRAINTS" ]; then
+  echo "FATAL: constraints file missing: $CONSTRAINTS" >&2
+  echo "deploy/requirements-resolved-py312.txt must ship next to this installer." >&2
+  exit 1
+fi
 # Distinguish a MISSING interpreter from an OLD one (a missing python3 must
 # not be reported as "too old").
 if ! command -v "$PYBIN" >/dev/null 2>&1; then
@@ -32,6 +45,19 @@ if ! "$PYBIN" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'
   echo "electrumx tree declares requires-python = \">=3.10\" (pyproject.toml" >&2
   echo "at the pin). Point venv-python at a >=3.10 interpreter and retry." >&2
   exit 1
+fi
+
+# The constraints capture was taken for Python 3.12 ONLY (no hashes, no
+# build-dep pinning, no other interpreter target — see the manifest header).
+# Other supported interpreters have NO captured constraints: applying 3.12
+# pins to them would misrepresent the resolution. Warn loudly and install
+# unconstrained there; the resolution on those targets is NOT the capture.
+PYVER="$("$PYBIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+if [ "$PYVER" = "3.12" ]; then
+  echo "constraints: applying $CONSTRAINTS (Python $PYVER matches the capture target)"
+else
+  echo "WARNING: no captured constraints for Python $PYVER (capture target: 3.12) — installing WITHOUT constraints; the resolution will NOT match deploy/requirements-resolved-py312.txt" >&2
+  CONSTRAINTS=""
 fi
 
 if [ ! -d "$DEST/.git" ]; then
@@ -59,7 +85,7 @@ fi
 #   Fedora:        dnf install -y leveldb-devel gcc-c++ python3-devel
 #   Alpine:        apk add leveldb-dev g++ python3-dev
 #   macOS:         brew install leveldb
-"$PYBIN" -m pip install -e "$DEST[leveldb]"
+"$PYBIN" -m pip install ${CONSTRAINTS:+-c "$CONSTRAINTS"} -e "${DEST}[leveldb]"
 
 # Post-install fingerprint check (must match tests' expectations).
 "$PYBIN" - <<'EOF'

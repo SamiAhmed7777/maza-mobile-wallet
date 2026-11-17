@@ -26,11 +26,15 @@ Compared against Komodo's AtomicDEX Mobile architecture on three axes:
 2. LICENSE: this audit did NOT fetch the AtomicDEX Mobile license — a
    license review is unnecessary to reject a non-adoption, and the spec's
    own dependency-license review (RULE 8) is scoped to components we
-   actually incorporate. Our incorporation inventory is ZERO third-party
-   runtime components (every .java file under android/src is first-party;
-   build tools aapt2/javac/d8/apksigner are Apache-2.0 Android SDK build
-   tools; the only vendored data is the public BIP39 English wordlist,
-   Trezor CC0). Formal report = S-7.
+   actually incorporate. The APK's incorporation inventory is ZERO
+   third-party libraries (every .java file under android/src is first-party;
+   build tools aapt2/javac/d8/apksigner are Android SDK build tools under
+   the SDK license; the only vendored data is the public BIP39 English
+   wordlist — byte-identical to bitcoin/bips + trezor/python-mnemonic, no
+   per-file license grant exists, posture recorded in the report). The
+   server runtime incorporates exactly one vendored third-party component
+   (walletbench/vendor/qrcodegen.py — Nayuki, MIT, header in-file; Python
+   stdlib otherwise). Formal report = S-7 (DONE): docs/DEPENDENCY-LICENSES.md.
 3. RULE 1: the existing stack is mainnet-proven (on-chain confirmed
    phone-signed tx, offline-verified signatures) — not "demonstrably
    unsuitable", so a restart or rewrite is ruled out by the spec itself.
@@ -129,7 +133,7 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | 6 send + receive | DONE | mainnet-proven send; receive = address + QR |
 | 7 history | DONE | HISTORY tab, timestamped rows |
 | 8 build/deployment instructions | DONE | README + android/build-apk.sh + deploy/PUBLIC-HOSTING.md + docs/electrumx/README.md |
-| 9 dependency & licensing report | GAP → S-7 | inventory: zero third-party runtime deps; build tools Apache-2.0; wordlist CC0 — formalize |
+| 9 dependency & licensing report | DONE | formalized: docs/DEPENDENCY-LICENSES.md — APK: zero third-party libraries (platform APIs + first-party code only); server: Python stdlib + one vendored MIT component (qrcodegen, Nayuki); wordlist = public BIP39 data, byte-identical to bitcoin/bips + trezor/python-mnemonic (the earlier "Trezor CC0" wording here was not license-file-supported and is corrected per that report — no per-file grant exists; provenance + posture in report §1) |
 | 10 security assessment | GAP → S-8 | this Phase 4 matrix + S-1/S-2 + threat model → docs/SECURITY.md |
 | 11 testing report | GAP → S-9 | consolidate the committed evidence set → docs/TESTING-REPORT.md |
 | 12 outstanding requirements | DONE | this matrix's GAP/PARTIAL rows + the operational backlog — snapshot committed as deploy/backlog-snapshot-20261116.txt (live copy is host-side at /root/maza-mobile-backlog.md) |
@@ -147,7 +151,7 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | RULE 5 no fabricated connectivity/simulated balances | COMPLIANT | all balances from live RPC/watch APIs; every claimed number in this repo carries a command transcript |
 | RULE 6 no production-readiness claims until tested | COMPLIANT | status language: mainnet TEST with capped funds; production claims withheld pending S-items |
 | RULE 7 modular, maintainable, documented | COMPLIANT | first-party crypto kit isolated; coin profile separate; DECISIONS.md + guides |
-| RULE 8 dependency licensing + Komodo independence | COMPLIANT (vacuous today) | the rule's duty is "review before incorporation"; the incorporation inventory is ZERO third-party runtime components (every .java under android/src is first-party; only vendored data = public BIP39 wordlist, Trezor CC0), so there is nothing to review yet — the formal report is S-7. Komodo independence: no Komodo component incorporated (comparison section) |
+| RULE 8 dependency licensing + Komodo independence | COMPLIANT (review performed) | the rule's duty is "review before incorporation" — this row asserts the review DUTY was discharged, not legal clearance of every grant: the incorporation inventory: APK = ZERO third-party libraries (every .java under android/src is first-party; only vendored data = public BIP39 wordlist, byte-identical to trezor/python-mnemonic — no per-file grant exists, see docs/DEPENDENCY-LICENSES.md §1); server runtime = one vendored MIT component (qrcodegen) + stdlib. The formal report (S-7, DONE) reviews every incorporated item's license, with the explicitly unresolved BIP39 data-level grant and the PROVISIONAL resolved-package classifications recorded openly in that report. Komodo independence: no Komodo component incorporated (comparison section) |
 
 ## Implementation order (staged, per FINAL EXECUTION INSTRUCTION)
 
