@@ -1,0 +1,28 @@
+# S-2b evidence provenance — raw command outputs, captured 2026-11-17 (PST); TZ=America/Los_Angeles throughout.
+
+### CMD: sha256sum android/maza-wallet-bench.apk (repo tree)
+499192b3d0cc4d9872e70cbb38ed12188da864dbf03f54d7236635e540a3b1e9  /root/maza-mobile-wallet/android/maza-wallet-bench.apk
+
+### CMD: md5sum android/maza-wallet-bench.apk (repo tree)
+a9ace56ba5707a4c7d8993228c844c70  /root/maza-mobile-wallet/android/maza-wallet-bench.apk
+
+### CMD: stat -c '%s %n' android/maza-wallet-bench.apk
+283604 /root/maza-mobile-wallet/android/maza-wallet-bench.apk
+
+### CMD: adb -s emulator-5554 shell dumpsys package com.mazawallet | findstr "lastUpdateTime versionName firstInstallTime"   (run 2026-11-17 ~01:5x PST)
+    versionName=1.0
+    firstInstallTime=2026-11-15 18:39:10
+    lastUpdateTime=2026-11-17 00:29:46
+
+### CMD: adb -s emulator-5554 shell pm path com.mazawallet
+package:/data/app/com.mazawallet-izZZG2O1_Thqc7j3XNvcoQ==/base.apk
+
+### CMD: adb -s emulator-5554 shell md5sum /data/app/com.mazawallet-izZZG2O1_Thqc7j3XNvcoQ==/base.apk
+a9ace56ba5707a4c7d8993228c844c70  /data/app/com.mazawallet-izZZG2O1_Thqc7j3XNvcoQ==/base.apk
+
+### CMD: date -u (bench side, samihost)
+2026-11-17T09:59:53Z bench side
+
+### CMD: journalctl -u maza-wallet-bench --since "2026-11-17 00:30" | grep -iE "watch_import|auth|unlock" | tail -5
+(empty output — no WATCH_IMPORT/auth lines in the window; this lane makes no
+claim about server-side log lines, the grep is included as an honest check)
