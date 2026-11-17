@@ -1,0 +1,32 @@
+[Unit]
+Description=MAZA wallet bench TCP tunnel (SSH port-forward to a walletbench host)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# TEMPLATE — placeholder values in angle brackets; fill in YOUR addresses.
+# The maintainers' real unit stays off-repo (it carries private addresses).
+#
+#   ssh -L semantics: THIS host opens an SSH connection to the GATEWAY
+#   (<user>@<ssh-gateway-host>); the gateway then connects to the FORWARD
+#   DESTINATION (<bench-host-ip>:18701) and pipes bytes back. The forward
+#   destination is therefore resolved/reached FROM THE GATEWAY, not from
+#   this host — when the gateway IS the walletbench host, its own
+#   loopback or tailnet address is the usual destination.
+#
+#   <local-bind-ip>     : IP on THIS host to expose the tunnel on. Use a
+#                         private/admin-network address, never 0.0.0.0 — to
+#                         serve wallet users directly, put a TLS reverse proxy
+#                         in front of walletbench instead (deploy/PUBLIC-HOSTING.md).
+#   <user>@<ssh-gateway-host> : SSH login on the machine you tunnel THROUGH
+#                         (often the walletbench host itself).
+#   <bench-host-ip>     : walletbench host's address AS SEEN FROM THE SSH
+#                         GATEWAY (e.g. 127.0.0.1 when the gateway runs
+#                         walletbench locally).
+#   <key-path>          : SSH private key that can reach the gateway.
+ExecStart=/usr/bin/ssh -N -L <local-bind-ip>:18701:<bench-host-ip>:18701 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -i <key-path> -o IdentitiesOnly=yes <user>@<ssh-gateway-host>
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
