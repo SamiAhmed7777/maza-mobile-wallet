@@ -54,7 +54,15 @@ def check_only() -> int:
         print("electrumx not importable — install the pinned tree "
               "(deploy/install-electrumx-dev.sh)")
         return 3
-    coin_cls = build_coin_class()
+    try:
+        coin_cls = build_coin_class()
+    except Exception as exc:
+        print(f"coin class failed to build: {type(exc).__name__}: {exc}")
+        print("a missing-attribute diagnostic here (e.g. no attribute "
+              "'DeserializerSegWit') means the installed electrumx is NOT "
+              "the pinned git build — reinstall via "
+              "deploy/install-electrumx-dev.sh")
+        return 4
     if coin_cls is None:
         print("coin class failed to build even with electrumx importable")
         return 4

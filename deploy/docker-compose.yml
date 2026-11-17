@@ -5,6 +5,7 @@
 #   cd deploy
 #   cp electrumx.env.example electrumx.env      # gitignored — never commit it
 #   printf 'MAZA_DAEMON_URL=http://rpcuser:rpcpass@host.docker.internal:12832\n' > .env
+#   chmod 600 electrumx.env .env                # no world-readable credential files
 #   #     ^ .env is gitignored — replace rpcuser:rpcpass with YOUR mazad RPC
 #   #       credentials; the compose file interpolates it into the container's
 #   #       DAEMON_URL and REFUSES to start without it (no credentials in the

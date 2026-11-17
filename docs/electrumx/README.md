@@ -10,8 +10,12 @@ pin-enforced; header-hash proven against live mainnet type-1 MinotaurX blocks).
 Deployment-hardening numbers marked **[TBD/community]** still need measuring
 on real hardware — file PRs with what you observe. Packaged deployments are
 in-tree (Step 4b: `deploy/electrumx.service`, `deploy/docker-compose.yml`).
-Still planned: a troubleshooting guide (regtest genesis, testnet stall,
-txindex replay, ACL pitfalls).
+Still planned: a protocol-level smoke script automating the Step 5 checks.
+Companion docs: [CHAIN-PARAMS.md](CHAIN-PARAMS.md) (quick reference — every
+constant with its source), [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+(regtest genesis abort, testnet stall, txindex windows, access-control
+pitfalls, startup failures), [TAKEOVER.md](TAKEOVER.md) (monthly checks,
+safe ElectrumX upgrades, where decisions live).
 
 ## What you are building
 
@@ -77,7 +81,8 @@ implements it, pinned by fixtures from both PoW eras.)
 
 **Known MazaCore quirks** (do not debug these, they are in-tree):
 - `-regtest` aborts at startup (genesis merkle assertion vs its own constant).
-  Isolated-chain testing: use `-testnet`, not regtest.
+  For chain testing use `-testnet` — a public, shared network, not a private
+  sandbox (see the mining-stall caveat below) — not regtest.
 - Testnet mining stalls after the first difficulty adjustment (LWMA spike);
   `generatetoaddress` only mines while the apparent-stall rule allows floor
   difficulty.
@@ -118,9 +123,12 @@ bash deploy/install-electrumx-dev.sh              # default: third_party/electru
 # optional args: a checkout dir, then the python interpreter to install with
 ```
 
-- It clones ElectrumX at the pinned commit (`ELECTRUMX_PIN` in
-  `indexer/maza_coin.py`) and REFUSES to install a mismatched tree — or an
-  interpreter older than the tree's declared 3.10 floor.
+- It clones (or reuses) the upstream checkout, fetches master, checks it
+  out at the pinned commit (`ELECTRUMX_PIN` in `indexer/maza_coin.py`),
+  and verifies HEAD against the pin afterwards — a wrong repository or an
+  unavailable pin fails loudly at those git steps; it also REFUSES an
+  interpreter older than the tree's declared 3.10 floor before anything
+  installs.
 - It installs the **`leveldb` extra** (`pip install -e "...[leveldb]"` →
   plyvel): the pinned tree ships NO database backend (base deps are
   aiorpcx + aiohttp only — measured in its `pyproject.toml`, which says
@@ -307,15 +315,17 @@ fixed env file just needs `systemctl restart electrumx`.
 ### compose: `deploy/docker-compose.yml` + `deploy/Dockerfile.electrumx`
 
 The image installs electrumx with the repo's pin-enforcing installer (the
-same clone-check-fingerprint gate as bare metal, so a pin mismatch fails
-the BUILD), and the container command runs `--check-only` before serving —
-the same validate-then-serve shape as the systemd unit.
+same clone-check-fingerprint gate as bare metal: a wrong repository or an
+unavailable pin fails the BUILD at the git steps, and the fingerprint block
+rejects a wrong build), and the container command runs `--check-only`
+before serving — the same validate-then-serve shape as the systemd unit.
 
 ```bash
 cd deploy
 cp electrumx.env.example electrumx.env        # gitignored — never commit it
 printf 'MAZA_DAEMON_URL=http://rpcuser:rpcpass@host.docker.internal:12832\n' > .env
 #  ^ .env is gitignored — put YOUR mazad rpcuser:rpcpass in it
+chmod 600 electrumx.env .env                  # both carry/shape RPC credentials — no world-readable copies
 docker compose up -d --build
 docker compose logs -f electrumx
 ```
@@ -458,9 +468,11 @@ welcome PR — the repo's crypto instruments (`tools/oracle.py`,
 - The ElectrumX DB is a cache — it can be deleted and rebuilt from the node.
   The mazad `wallet.dat` is NOT a cache: back it up off-host, monthly,
   and drill the restore.
-- Upgrading ElectrumX: change the pin (`ELECTRUMX_PIN` in
-  `indexer/maza_coin.py` AND `PIN` in `deploy/install-electrumx-dev.sh`),
-  re-run the installer, re-verify Step 5.
+- Upgrading ElectrumX: follow the staged procedure in `TAKEOVER.md`
+  (pin changes in BOTH files, scratch-venv staging + validation, DB
+  decision before restart) — do not re-run the installer against the
+  production venv directly; that mutates the live installation before
+  anything validates the new version.
 - Decisions and their citations live in `DECISIONS.md`; consensus-adjacent
   changes are checked against `tools/oracle.py` (BIP39/BIP32-anchored) and
   `tools/txverify.py` (proven against a real MazaCore-signed mainnet tx).

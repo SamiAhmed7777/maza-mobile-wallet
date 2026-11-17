@@ -63,11 +63,19 @@ fi
 
 # Post-install fingerprint check (must match tests' expectations).
 "$PYBIN" - <<'EOF'
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 import electrumx.lib.tx as lib_tx
 import electrumx.lib.coins as coins
 import electrumx.lib.util as util
-assert version("e-x") == "2.0.1", f"unexpected e-x dist: {version('e-x')}"
+try:
+    dist = version("e-x")
+except PackageNotFoundError:
+    raise SystemExit(
+        "unexpected e-x dist: an electrumx IS importable but NOT installed "
+        "under the name 'e-x' — this is the stale PyPI build, not the "
+        "pinned git tree. Reinstall via deploy/install-electrumx-dev.sh."
+    )
+assert dist == "2.0.1", f"unexpected e-x dist: {dist}"
 assert hasattr(lib_tx, "DeserializerSegWit"), "DeserializerSegWit missing"
 n = len(util.subclasses(coins.Coin))
 assert n > 100, f"coin registry too small ({n}) — stale/PyPI build?"
@@ -79,6 +87,6 @@ except ImportError as exc:
         "Install the LevelDB C headers (see the comment above the pip step "
         "in deploy/install-electrumx-dev.sh) and re-run the installer."
     ) from exc
-print(f"electrumx pinned tree OK: e-x {version('e-x')}, {n} coin classes, "
+print(f"electrumx pinned tree OK: e-x {dist}, {n} coin classes, "
       f"plyvel importable")
 EOF
