@@ -159,6 +159,9 @@ public final class SelfTest {
         section("Biometric unlock policy (S-2b-ii decision table)");
         biometricPolicyChecks();
 
+        section("ScanOrigin origin discipline (M8a QR scan policy)");
+        scanOriginChecks();
+
         section("Settings screens WCAG contrast (S-4)");
         settingsContrastChecks();
 
@@ -584,6 +587,73 @@ public final class SelfTest {
         o.acceptUnlock(2);
         check("biometric-s3: accepted auth on an open gate stays open",
                 !o.isLocked(3));
+    }
+
+    /** ScanOrigin origin discipline (M8a): every accepted and rejected
+     *  shape of scanned QR payload text, behaviorally. Positive addresses
+     *  are VECTOR-DERIVED (canonical Trezor mnemonic through the MAZA
+     *  profile) plus one real in-repo mainnet anchor; negatives cover the
+     *  origin-discipline rules (no URL is ever fetched/opened, unknown
+     *  schemes rejected, URI parameters fail-closed until M9), the
+     *  base58check contract shared with the send path, and the resource
+     *  guards (length cap, multi-line). */
+    private static void scanOriginChecks() {
+        byte[] seed = Bip39.mnemonicToSeed("abandon abandon abandon abandon"
+                + " abandon abandon abandon abandon abandon abandon abandon"
+                + " about", "");
+        Bip32.Node k0 = Bip44Maza.keyAt(Bip44Maza.accountNode(seed), 0, 0);
+        String addr = Bip44Maza.address(k0);
+        check("scanorigin: derivation matches the pinned MAZA profile address",
+                addr.equals("MLhJ8cs5sG8YY6YcMs5rmqCV6hZjqF7LEE"), addr);
+
+        // --- accepted shapes
+        ScanOrigin.Result bare = ScanOrigin.parse(addr);
+        check("scanorigin: bare address accepted (address carried, no reason)",
+                bare.ok && addr.equals(bare.address) && bare.reason == null);
+        ScanOrigin.Result uri = ScanOrigin.parse("maza:" + addr);
+        check("scanorigin: maza: URI accepted",
+                uri.ok && addr.equals(uri.address));
+        ScanOrigin.Result upper = ScanOrigin.parse("MAZA:" + addr);
+        check("scanorigin: scheme prefix is case-insensitive",
+                upper.ok && addr.equals(upper.address));
+        ScanOrigin.Result padded = ScanOrigin.parse("  " + addr + "  ");
+        check("scanorigin: surrounding whitespace trimmed",
+                padded.ok && addr.equals(padded.address));
+        ScanOrigin.Result bench = ScanOrigin.parse("MWRVvgWrLRqyEEQSm7J8NuYor1X9J4J9Fa");
+        check("scanorigin: real bench-book mainnet address accepted",
+                bench.ok && "MWRVvgWrLRqyEEQSm7J8NuYor1X9J4J9Fa".equals(bench.address));
+
+        // --- rejected shapes (reasons are user-safe; content never acted on)
+        String corrupt = addr.substring(0, addr.length() - 1)
+                + (addr.endsWith("E") ? "F" : "E");
+        check("scanorigin: corrupted base58check checksum rejected",
+                !ScanOrigin.parse(corrupt).ok);
+        check("scanorigin: BTC version byte rejected (wrong coin)",
+                !ScanOrigin.parse("1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA").ok);
+        check("scanorigin: maza: URI parameters rejected until M9",
+                !ScanOrigin.parse("maza:" + addr + "?amount=1.5").ok);
+        check("scanorigin: https URL rejected - never fetched or opened",
+                !ScanOrigin.parse("https://example.com/pay?x=1").ok);
+        check("scanorigin: http URL rejected - never fetched or opened",
+                !ScanOrigin.parse("http://example.com/x").ok);
+        check("scanorigin: bare www domain rejected",
+                !ScanOrigin.parse("www.example.com").ok);
+        check("scanorigin: foreign URI scheme rejected (bitcoin: shown)",
+                !ScanOrigin.parse("bitcoin:" + addr).ok);
+        check("scanorigin: null/empty/whitespace rejected",
+                !ScanOrigin.parse(null).ok
+                        && !ScanOrigin.parse("").ok
+                        && !ScanOrigin.parse("   ").ok);
+        check("scanorigin: oversized content rejected before any decode",
+                !ScanOrigin.parse(new String(fill((byte) 'a', ScanOrigin.MAX_LENGTH + 1))).ok);
+        check("scanorigin: multi-line content rejected",
+                !ScanOrigin.parse(addr + "\nsecond line").ok);
+        ScanOrigin.Result inv = ScanOrigin.parse("not an address");
+        check("scanorigin: garbage rejected with reason and NO address",
+                !inv.ok && inv.address == null && inv.reason != null);
+        ScanOrigin.Result okInv = ScanOrigin.parse(addr);
+        check("scanorigin: ok result carries no reason",
+                okInv.ok && okInv.reason == null);
     }
 
     /** SettingsActivity.onResume regression proof (desktop-lifecycle

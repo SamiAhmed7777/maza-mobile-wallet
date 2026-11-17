@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Build the MAZA wallet APK with the raw Android toolchain
-# (aapt2 -> javac -> d8 -> zip -> [zipalign] -> apksigner). No Gradle, no AGP,
-# no external libraries — a single-Activity app that only touches android.jar.
+# (aapt2 -> javac -> d8 -> zip -> [zipalign] -> apksigner). No Gradle, no AGP;
+# the ONE vendored library is the pinned zxing core jar (android/vendor/,
+# M8a — sha256-gated below) for QR decode; everything else compiles from
+# first-party sources against android.jar only.
 #
 # Stage [1/6] (bench) / [1/7] (release) is the crypto selftest gate: the FIRST
 # build stage (only variable/path resolution precedes it — it runs before any
@@ -48,6 +50,21 @@ fi
 command -v javac >/dev/null || { echo "javac missing (JDK required)" >&2; exit 1; }
 [ -x "$BT/aapt2" ] || { echo "aapt2 missing — install build-tools;34.0.0" >&2; exit 1; }
 [ -f "$PLATFORM" ] || { echo "platform android-34 missing" >&2; exit 1; }
+
+# Vendored third-party library (the ONLY one): zxing core for QR decode
+# (M8a). Supply-chain fence: the build refuses to run unless the jar exists
+# AND its sha256 matches the committed pin, so a swapped jar can never
+# reach an APK. License (Apache-2.0) + provenance live beside the jar.
+VENDOR_JAR="$REPO/android/vendor/zxing-core-3.5.3.jar"
+VENDOR_JAR_SHA="$REPO/android/vendor/zxing-core-3.5.3.jar.sha256"
+[ -f "$VENDOR_JAR" ] || { echo "FATAL: vendored zxing jar missing: $VENDOR_JAR" >&2; exit 1; }
+[ -f "$VENDOR_JAR_SHA" ] || { echo "FATAL: vendored zxing sha256 pin missing: $VENDOR_JAR_SHA" >&2; exit 1; }
+PIN="$(tr -d '[:space:]' < "$VENDOR_JAR_SHA")"
+ACTUAL="$(sha256sum "$VENDOR_JAR" | cut -d' ' -f1)"
+if [ "$PIN" != "$ACTUAL" ]; then
+  echo "FATAL: vendored zxing jar sha256 mismatch (pin $PIN vs actual $ACTUAL)" >&2
+  exit 1
+fi
 
 # ---- release-mode inputs (resolve BEFORE any packaging; fail loud, never
 # ---- auto-generate a release signing key) -------------------------------
@@ -117,12 +134,13 @@ fi
 stage 4 "javac"
 mkdir -p "$BTMP/classes"
 mapfile -t -d '' JAVA_FILES < <(find "$REPO/android/src" -name '*.java' -print0; find "$BTMP/gen" -name '*.java' -print0 2>/dev/null || true)
-javac --release 11 -nowarn -classpath "$PLATFORM" \
+javac --release 11 -nowarn -classpath "$PLATFORM:$VENDOR_JAR" \
   -d "$BTMP/classes" "${JAVA_FILES[@]}"
 stage 5 "d8"
 mkdir -p "$BTMP/dex"
 mapfile -t -d '' CLASS_FILES < <(find "$BTMP/classes" -name '*.class' -print0)
-"$BT/d8" --release --lib "$PLATFORM" --output "$BTMP/dex" "${CLASS_FILES[@]}"
+"$BT/d8" --release --lib "$PLATFORM" --output "$BTMP/dex" \
+  "${CLASS_FILES[@]}" "$VENDOR_JAR"
 (cd "$BTMP/dex" && zip -q -uj "$BTMP/base.apk" classes.dex)
 
 if [ "$MODE" = release ]; then

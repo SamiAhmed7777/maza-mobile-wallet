@@ -276,6 +276,35 @@ chain code on three fields (noted per item).
   PIN-only, unchanged from pre-S-2b-ii builds). A sensor-equipped device
   is required for the success/cancel/lockout UI proofs.
 
+## D13 — QR scan origin discipline + the zxing decoder adoption (M8a, added 2026-11-17)
+
+M8 (QR camera scan) is split: M8a = the scan-content policy + decoder
+dependency; M8b = the camera scan screen + SEND-field wiring + device
+evidence.
+
+- **Dependency:** the QR DECODER is the vendored zxing core jar
+  (`android/vendor/zxing-core-3.5.3.jar`, `com.google.zxing:core` 3.5.3,
+  Apache-2.0, license text vendored beside it). sha256-pinned; the build
+  REFUSES to run on pin mismatch or missing jar (fail-loud before any
+  packaging). Chosen over the item text's original candidates because
+  CameraX is AndroidX and zxing-embedded needs AppCompat — this app is
+  platform-APIs only. This supersedes the "no external libraries" line in
+  the build script header and the zero-third-party APK claim in
+  docs/DEPENDENCY-LICENSES.md §1 (both updated honestly in the M8a
+  changeset; it is a build/scan capability choice, NOT coin policy).
+- **Origin discipline (ScanOrigin):** the ONLY thing scanned QR payload
+  text may become is a validated MAZA mainnet P2PKH address — the same
+  base58check contract the send path enforces on typed addresses (21-byte
+  payload, version 50). Rules: URLs and foreign schemes are NEVER
+  fetched, opened, or acted on; `maza:` URI parameters fail-closed until
+  M9 ships the payment-URI contract; length capped before decode work;
+  multi-line content rejected; reasons are user-safe and never echo the
+  rejected content. Pure Java — SelfTest drives every row on the desktop
+  JVM (18 checks, vector-derived + a real mainnet anchor).
+- **M8a scope honesty:** the jar is packaged and gated at M8a; the
+  importing scanner screen is M8b (next sub-item). No CAMERA permission
+  is declared until M8b lands the camera surface with it.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

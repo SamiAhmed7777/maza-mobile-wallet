@@ -76,7 +76,7 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | nav: wallet management | DONE (2026-11-17) | SettingsActivity WALLET MANAGEMENT page: receive addresses, PIN-gated seed re-show (FLAG_SECURE, scrub on dismiss), double-confirm + typed-WIPE wipe flow returning to fresh Connect card |
 | nav: settings | DONE (2026-11-17) | SettingsActivity from the SECURITY card: endpoint editor (same saved URL pref as Connect card), auto-lock 5/10/30 min (applies IMMEDIATELY via PinGuard.retuneAutolockMs, wave 2), theme selector System/Light/Dark via ThemeController |
 | QR generation | DONE | walletbench /api/qr.png (api.py:720, scoped to watch book) |
-| QR scanning | GAP → backlog M8 | camera scan in SEND flow |
+| QR scanning | PARTIAL — M8a landed (2026-11-17) | ScanOrigin origin-discipline policy + SelfTest rows + pinned zxing decoder (sha256-gated in the build); scan screen + SEND wiring + device proof = M8b |
 | ordinary-user intuitiveness | PARTIAL | settings + theming landed (2026-11-17); app-wide light reskin landed (wave 2); on-device UX proofs + live theme-switch repaint (W3-a) pending |
 
 ## Phase 6 — connectivity
@@ -111,7 +111,7 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | transaction construction + signing | DONE | TxBuilder + mainnet-confirmed signed tx |
 | transaction broadcasting | DONE | /api/broadcast + confirmed tx ce514b35… |
 | QR generation | DONE | /api/qr.png |
-| QR scanning | GAP → M8 | camera scanning |
+| QR scanning | PARTIAL — M8a landed | ScanOrigin policy (origin discipline, desktop-tested) + sha256-gated zxing decoder; camera scan screen = M8b |
 | encrypted wallet persistence | PARTIAL — code DONE, device proof pending | = Phase 4.2 (SeedVault code landed, device half outstanding) |
 | app restart + recovery | DONE | M21 evidence: fresh process → watch set re-imports on unlock; wallet renders |
 | network interruption + reconnection | PARTIAL → code LANDED (wave 3) | Net.java retry table governs the WHOLE surface (reads + unlock + watch/import: 3 attempts with exponential backoff; spend POSTs pinned at exactly 1 attempt — never double-submitted); OUTSTANDING: the airplane-mode device test |

@@ -1,0 +1,36 @@
+Vendored third-party library (the ONLY one in this repo) — provenance
+=====================================================================
+
+Artifact : zxing-core-3.5.3.jar (607,650 bytes)
+What     : QR code DECODING core (com.google.zxing:core). Pure Java,
+           no Android framework dependencies. Consumed by the M8b scan
+           screen; nothing in android/src imports it until that lands
+           (the M8a build packages it + gates it; the import arrives
+           with the scanner shell — disclosed in the M8a changeset).
+Why core : M8's other candidates are incompatible with this build —
+           CameraX is an AndroidX dependency and zxing-embedded
+           (journeyapps) requires AppCompat; this app is platform-APIs
+           only (no AppCompat/AndroidX by standing build rule).
+Why vendored: the build pipeline is raw javac/d8 with no Gradle, so
+           there is no dependency-resolution surface; the jar is a
+           pinned, integrity-checked file instead.
+
+Source   : Maven Central
+           https://repo1.maven.org/maven2/com/google/zxing/core/3.5.3/core-3.5.3.jar
+Fetched  : 2026-11-17, DNS2 dev host
+sha1     (upstream .sha1 file, zxing-core-3.5.3.jar.upstream-sha1):
+           ca1349214a356cd7958651b2d5a0e1f3811a9c4b — matched the
+           fetched bytes at fetch time.
+sha256   (operator pin, zxing-core-3.5.3.jar.sha256):
+           8d8064c1636fdaef7189dd9055c7d59950a8940a12f2293956446ec3c109fd82
+Enforcement: android/build-apk.sh refuses to build on pin mismatch or
+           missing jar (fail-loud, before any packaging step).
+License  : Apache-2.0 — full license text vendored alongside in
+           LICENSE-zxing.txt (the jar carries no license file itself);
+           documented in docs/DEPENDENCY-LICENSES.md section 1/8.
+
+Jar content census (verified at adoption): 332 entries, all under
+com/google/zxing/** (class files + directory entries) or META-INF
+(manifest + maven metadata only — no license text inside the jar, no
+natives, no executables). Pinned by the contract test
+tests/test_scan_origin_contract.py.

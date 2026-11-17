@@ -22,11 +22,10 @@ Layers (the duty applies per layer, not to the repo as one blob):
 | ElectrumX kit | `indexer/` + `deploy/` (M18 community kit; the APK does not depend on it) |
 | Build toolchain | produces the APK, not shipped inside it |
 
-## 1. APK runtime — zero third-party libraries
+## 1. APK runtime — first-party code + ONE vendored library
 
-All Java sources are first-party (`android/src/com/mazawallet/**` — every
-`.java` in that tree is `com.mazawallet` code; the tree is count-free here so
-this claim stays true as files are added).
+All first-party Java sources live in `android/src/com/mazawallet/**` (every
+`.java` in that tree is `com.mazawallet` code).
 Every import in that tree is an Android platform or JDK package, plus
 `org.json`, which is part of the Android platform framework (`android.jar`,
 provided by the device OS — not bundled by this repo; the AOSP implementation
@@ -46,8 +45,41 @@ import org.json.JSONException;
 import org.json.JSONObject;
 ```
 
-No AAR/JAR is bundled; `android/build-apk.sh` compiles first-party sources
-with javac and packages platform resources only.
+`android/build-apk.sh` compiles first-party sources with javac and packages
+platform resources plus the ONE vendored JAR below.
+
+**Vendored library (adopted 2026-11-17, M8a):** `android/vendor/zxing-core-3.5.3.jar`
+— the zxing QR-code DECODING core (`com.google.zxing:core` 3.5.3), pure Java,
+**Apache-2.0**. Needed for M8 (QR camera scan): the item's other candidates
+are incompatible with this build (CameraX is AndroidX; zxing-embedded
+requires AppCompat — this app is platform-APIs only). Provenance and the
+content census live in `android/vendor/NOTICE.txt`; the full Apache-2.0
+license text is vendored at `android/vendor/LICENSE-zxing.txt` (the jar
+itself carries no license file).
+
+```
+sha256sum android/vendor/zxing-core-3.5.3.jar
+```
+```
+8d8064c1636fdaef7189dd9055c7d59950a8940a12f2293956446ec3c109fd82
+```
+
+Integrity is enforced by the build: `android/build-apk.sh` refuses to run
+(fail-loud, before any packaging stage) unless the jar's sha256 matches the
+committed pin `android/vendor/zxing-core-3.5.3.jar.sha256`. Upstream provenance:
+Maven Central `com/google/zxing/core/3.5.3`, upstream `.sha1`
+`ca1349214a356cd7958651b2d5a0e1f3811a9c4b` matched at fetch (2026-11-17);
+tests/test_scan_origin_contract.py re-verifies the pin files against the
+shipped bytes and the jar content census.
+
+**Adoption honesty (M8a scope):** at THIS commit the jar is packaged into
+`classes.dex` and gated, but nothing in `android/src` imports it yet — the
+importing scanner screen is the next sub-item (M8b). The M8a changeset
+deliberately ships the dependency + its supply-chain fence + the
+scan-origin policy (`android/src/com/mazawallet/crypto/ScanOrigin.java`:
+scanned payload text may only ever become a validated MAZA address; URLs
+and foreign schemes are never fetched or opened; `maza:` URI parameters
+fail-closed until M9) and defers all decode-object usage to M8b.
 
 **Vendored data (not code):** `android/res/raw/bip39_english.txt` — the BIP39
 English wordlist, 2048 words, data-only:
@@ -288,16 +320,18 @@ Komodo-related in any other layer either.
 | Incorporated item | Layer | License check | Technically necessary? |
 |---|---|---|---|
 | BIP39 English wordlist | APK (data) | license/grant at the data level UNRESOLVED (no per-file grant exists); provenance VERIFIED (byte-identity + recorded upstream revisions, §1); trezor repo is MIT | yes — BIP39 mnemonic requires the canonical 2048-word list; hand-rolling it would break interoperability |
+| zxing core 3.5.3 jar | APK (code) | Apache-2.0, license text vendored (`android/vendor/LICENSE-zxing.txt`); sha256-pinned + build-enforced (§1) | yes — QR DECODING for M8 (camera scan); hand-rolling a QR decoder is out of scope; CameraX/zxing-embedded rejected (AndroidX/AppCompat build rule) |
 | qrcodegen.py (Nayuki) | server runtime | MIT, header vendored in-file | yes — QR rendering for `/api/qr.png`; single-file, stdlib-only, no install surface |
 | python-ecdsa | operator instruments only | MIT-style (quoted above) + public-domain portions | yes — independent ECDSA implementation to cross-check the APK's hand-rolled signer (the whole point of the oracle) |
 | electrumx pin + aiorpcX + aiohttp + websockets + plyvel + LevelDB | ElectrumX kit | MIT / MIT / Apache-2.0 / BSD-3-Clause / BSD / BSD-style (§4) | yes — the M18 community kit's indexer; ElectrumX source commit-pinned, drift-refusing; dep ranges resolved at deploy time (§4 scope note) |
-| — | APK code | nothing else | every other APK import is Android platform or JDK |
+| — | APK code | every APK import is Android platform or JDK | the zxing jar above is the one non-imported bundled artifact (consumed by M8b's import; packaged + gated since M8a) |
 
 Dependency-surface summary, scoped precisely: the repo itself carries no
 package-manager lockfile and no vendored PACKAGE TREES (its pin artifact is
 the captured constraints manifest, `deploy/requirements-resolved-py312.txt`;
-the only vendored CODE file is the single documented
-`walletbench/vendor/qrcodegen.py` — the BIP39 wordlist is vendored DATA,
+the vendored CODE artifacts are exactly two, each documented: the server-side
+`walletbench/vendor/qrcodegen.py` and the APK-side
+`android/vendor/zxing-core-3.5.3.jar` — the BIP39 wordlist is vendored DATA,
 §1); the APK build pipeline
 (`android/build-apk.sh`) uses raw aapt2/javac/d8/apksigner — no Gradle, so no
 plugin/dependency-resolution surface at all (evidence class (a): the script's

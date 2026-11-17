@@ -469,6 +469,30 @@ recipient: it can only misreport which UTXOs exist.
   evidence workflow (all proofs are screenshots) and is listed as an accepted
   risk, not an oversight.
 
+### 6.5 Scanned QR content (M8a policy, shipped 2026-11-17)
+
+Scanning attacks target the spend path: a malicious or swapped QR must not
+be able to redirect a payment anywhere other than an address the user
+could have typed. The controls (all in
+`android/src/com/mazawallet/crypto/ScanOrigin.java`, desktop-tested by
+`SelfTest.scanOriginChecks`):
+
+- Scanned payload text may only ever become a MAZA mainnet P2PKH address,
+  validated with the SAME base58check contract as typed addresses
+  (21-byte payload, version 50) — the M8b scanner cannot insert anything
+  into the SEND field that the typed path would reject.
+- URLs (http/https/www) and ANY foreign URI scheme are rejected outright:
+  scanned content is never fetched, opened, or parsed as a link.
+- `maza:` URI parameters fail-closed until M9 ships the amount contract.
+- Length is capped before decode work; multi-line content rejected;
+  rejection reasons are user-safe and never echo the payload.
+- The decoder itself is a sha256-pinned vendored jar enforced by the
+  build (see DECISIONS D13 / docs/DEPENDENCY-LICENSES.md §1).
+- CAMERA permission is NOT declared yet — it arrives with the M8b camera
+  surface and the operator beta battery's permission audit is widened in
+  the same change (a declared-but-unused dangerous permission is worse
+  than a late permission).
+
 ## 7. Spending-path scope (do not generalize these claims)
 
 | Path | Route | Who signs | Caps | Server sees |
