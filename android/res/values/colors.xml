@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MAZA Wallet palette (S-3, light mode).
+
+  WHY BOTH PALETTES LIVE IN ONE FILE, UNDER EXPLICIT NAMES:
+  the wallet selects its palette programmatically
+  (ThemeController.applyTheme -> activity.setTheme) instead of leaning on the
+  configuration qualifier. A values-night/ override would fight a user who
+  forces "light" while the device is in night mode (and the reverse), so the
+  two sets are namespaced here and the two themes in styles.xml each point at
+  exactly one of them.
+
+  The dark values are byte-identical to the constants MainActivity hardcodes
+  today (BG / CARD / BAR / DIVIDER / TEXT / MUTED / ACCENT / RED / GREEN), so
+  adopting the palette changes nothing visually in dark mode.
+
+  MAPPING to the existing hardcoded constants (integration hook):
+    MainActivity.BG       0xFF141414 -> maza_dark_background     / maza_light_background
+    MainActivity.CARD     0xFF1E1E1E -> maza_dark_surface        / maza_light_surface
+    MainActivity.BAR      0xFF1A1A1A -> maza_dark_bar            / maza_light_bar
+    MainActivity.DIVIDER  0xFF2E2E2E -> maza_dark_divider        / maza_light_divider
+    MainActivity.TEXT     0xFFFFFFFF -> maza_dark_text_primary   / maza_light_text_primary
+    MainActivity.MUTED    0xFFB3B3B3 -> maza_dark_text_secondary / maza_light_text_secondary
+    MainActivity.ACCENT   0xFFF0A000 -> maza_dark_accent         / maza_light_accent
+    MainActivity.RED      0xFFFF6B6B -> maza_dark_danger         / maza_light_danger
+    MainActivity.GREEN    0xFF6FD66F -> maza_dark_success        / maza_light_success
+  SelfCustody.java repeats the same six inks (TEXT, MUTED, ACCENT, RED,
+  GREEN on CARD) and takes the same mapping.
+
+  CONTRAST CONTRACT: every ink/surface pair defined here is asserted at
+  >= 4.5:1 for normal text and >= 3:1 for large text by
+  tests/test_theme_contrast.py. Do not change a value here without
+  re-running that test (it prints the whole table every run).
+-->
+<resources>
+
+    <!-- ===================== dark palette (today's rendering) ============ -->
+    <!-- page background (MainActivity.BG) -->
+    <color name="maza_dark_background">#FF141414</color>
+    <!-- card / dialog surface (MainActivity.CARD) -->
+    <color name="maza_dark_surface">#FF1E1E1E</color>
+    <!-- bottom tab bar (MainActivity.BAR) -->
+    <color name="maza_dark_bar">#FF1A1A1A</color>
+    <!-- hairline separators (MainActivity.DIVIDER) -->
+    <color name="maza_dark_divider">#FF2E2E2E</color>
+    <!-- primary text (MainActivity.TEXT) -->
+    <color name="maza_dark_text_primary">#FFFFFFFF</color>
+    <!-- secondary / muted text and input hints (MainActivity.MUTED) -->
+    <color name="maza_dark_text_secondary">#FFB3B3B3</color>
+    <!-- amber brand accent: section labels, selected tab (MainActivity.ACCENT) -->
+    <color name="maza_dark_accent">#FFF0A000</color>
+    <!-- errors and outgoing amounts (MainActivity.RED) -->
+    <color name="maza_dark_danger">#FFFF6B6B</color>
+    <!-- incoming amounts (MainActivity.GREEN) -->
+    <color name="maza_dark_success">#FF6FD66F</color>
+
+    <!-- ===================== light palette ============================== -->
+    <!-- Slightly warm off-white so white cards separate from the page. -->
+    <color name="maza_light_background">#FFFAFAFA</color>
+    <!-- Cards and dialog surfaces are pure white in light mode. -->
+    <color name="maza_light_surface">#FFFFFFFF</color>
+    <!-- Tab bar sits a touch darker than the page (as BAR does in dark). -->
+    <color name="maza_light_bar">#FFEFEFEF</color>
+    <!-- Hairline separators: decorative, deliberately low contrast. -->
+    <color name="maza_light_divider">#FFD0D0D0</color>
+    <!-- Primary text: near-black, 16.7:1 on the page background. -->
+    <color name="maza_light_text_primary">#FF1A1A1A</color>
+    <!-- Secondary / muted text: 8.5:1 on the page, 7.7:1 on the tab bar. -->
+    <color name="maza_light_text_secondary">#FF4A4A4A</color>
+    <!-- Amber dark enough to carry white text and to read as text itself
+         (5.7:1 on the page); the dark palette's #FFF0A000 amber is only
+         2.1:1 on a light surface, so light mode must use this darker tone. -->
+    <color name="maza_light_accent">#FF8A5A00</color>
+    <!-- Errors and outgoing amounts: 6.3:1 on the page. -->
+    <color name="maza_light_danger">#FFB3261E</color>
+    <!-- Incoming amounts: 6.3:1 on the page. -->
+    <color name="maza_light_success">#FF1B6B2E</color>
+
+</resources>

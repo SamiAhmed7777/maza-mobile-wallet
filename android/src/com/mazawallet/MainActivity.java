@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.ClipboardManager;
 import android.content.ClipData;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -53,9 +54,12 @@ import java.util.Locale;
  */
 public class MainActivity extends Activity implements SelfCustody.Host {
 
-    private static final String PREFS = "maza";
-    private static final String KEY_URL = "url";
-    private static final String DEFAULT_URL = "https://mazatest.sami-host.me"; // public TEST endpoint (see deploy/PUBLIC-HOSTING.md); field stays user-editable
+    /** Prefs file + endpoint key shared with SettingsActivity (package
+     *  visible on purpose: the settings screen edits the SAME saved URL the
+     *  Connect card reads). */
+    static final String PREFS = "maza";
+    static final String KEY_URL = "url";
+    static final String DEFAULT_URL = "https://mazatest.sami-host.me"; // public TEST endpoint (see deploy/PUBLIC-HOSTING.md); field stays user-editable
     // NO default token: credentials are never baked into source or APK.
     private static final long POLL_MS = 15000;
     private static final int MAX_ROWS = 30;
@@ -93,6 +97,10 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     // the PIN itself); this class owns only the UI surfaces. With no PIN set
     // the app behaves exactly as before (gate inert).
     private PinGuard pinGuard;
+    /** The LIVE session guard (per-instance policies start locked by design).
+     *  SettingsActivity.onResume consults this for the screen-level re-lock,
+     *  so an already-unlocked session stays open there. Nulled in onDestroy. */
+    static PinGuard sActiveGuard;
     private int pendingGatedTab = -1;      // tab to open after PIN unlock
     private FrameLayout lockOverlay;       // full-screen PIN cover (GONE)
     private EditText pinEt;
@@ -133,7 +141,17 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        // S-4: saved theme mode through lane S-3's ThemeController, BEFORE the
+        // first setContentView (showConnect() below). The manifest's inline
+        // platform theme stays the pre-attach fallback.
+        ThemeController.applyTheme(this, SettingsActivity.themeMode(prefs));
+        // S-4: make the saved auto-lock delay the one the session's LockPolicy
+        // enforces. PinGuard builds the policy from pin.autolock_ms at
+        // construction, so the settings value is reconciled into that key
+        // FIRST (SettingsActivity writes both keys; this repairs drift).
+        applySavedAutolock();
         pinGuard = new PinGuard(this);
+        sActiveGuard = pinGuard; // live session guard: SettingsActivity resume gate reads it
         // Always start at the Connect card: the token is entered per session
         // (memory-only; no stored credentials, no auto-attempt — the baked-in
         // bench-edition token was removed when the endpoint went public: a
@@ -141,10 +159,36 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         showConnect("");
     }
 
+    /** Reconcile the S-4 auto-lock setting into PinGuard's storage key.
+     *  pref_autolock_minutes (int minutes, the documented settings value) is
+     *  authoritative when present; otherwise an existing pin.autolock_ms is
+     *  adopted into it. A value outside the supported window is clamped by
+     *  SettingsActivity.autolockMinutes(), so LockPolicy never receives a
+     *  window it cannot enforce. */
+    private void applySavedAutolock() {
+        boolean hasMinutes = prefs.contains(SettingsActivity.KEY_AUTOLOCK_MINUTES);
+        boolean hasMs = prefs.contains(PinGuard.KEY_AUTOLOCK_MS);
+        // Fresh install / just-wiped device: nothing saved, so leave the store
+        // empty and let PinGuard's own default apply (a wipe must not be
+        // followed by this method writing a key back).
+        if (!hasMinutes && !hasMs) return;
+        long ms = SettingsActivity.autolockMinutes(prefs) * 60_000L;
+        long curMs;
+        try {
+            curMs = prefs.getLong(PinGuard.KEY_AUTOLOCK_MS, -1L);
+        } catch (ClassCastException wrongTyped) {
+            curMs = -1L; // legacy wrong-typed value: rewritten below
+        }
+        if (!hasMs || curMs != ms) {
+            prefs.edit().putLong(PinGuard.KEY_AUTOLOCK_MS, ms).apply();
+        }
+    }
+
     @Override
     protected void onDestroy() {
         ui.removeCallbacks(pollTask);
         ui.removeCallbacks(lockTick);
+        if (sActiveGuard == pinGuard) sActiveGuard = null;
         super.onDestroy();
     }
 
@@ -166,6 +210,11 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         if (relock && lockOverlay != null) {
             showLock();
         }
+        // S-4: the settings screen may have changed the auto-lock delay; the
+        // SECURITY card reads it from PinGuard, so re-render on return (the
+        // policy object itself keeps the window it was built with - the new
+        // value applies from the next session start).
+        if (pinSection != null) renderPinSection();
     }
 
     /** Every touch anywhere counts as user activity for the S-2a auto-lock
@@ -838,8 +887,10 @@ public class MainActivity extends Activity implements SelfCustody.Host {
 
     /** WALLET-tab SECURITY card. Set / Change / Remove; Change and Remove
      *  REQUIRE the current PIN (a removable-without-PIN gate is decorative).
-     *  Auto-lock delay display only — the editor is the S-4 settings screen
-     *  (PinGuard.KEY_AUTOLOCK_MS is the storage hook). */
+     *  Auto-lock delay display + the settings entry point (S-4: endpoint,
+     *  auto-lock editor, theme selector, wallet management). This card is
+     *  only reachable through the PIN-gated WALLET tab, so the settings screen
+     *  is entered from an already-unlocked session. */
     private void renderPinSection() {
         if (pinSection == null || pinGuard == null) return;
         pinSection.removeAllViews();
@@ -869,6 +920,17 @@ public class MainActivity extends Activity implements SelfCustody.Host {
             removeBtn.setOnClickListener(v -> showPinRemovePrompt());
             card.addView(removeBtn);
         }
+        Button settingsBtn = new Button(this);
+        settingsBtn.setText(R.string.settings_entry);
+        settingsBtn.setOnClickListener(v -> openSettings());
+        card.addView(settingsBtn, mp(0, dp(8), 0, 0));
+    }
+
+    /** S-4 entry point: settings + wallet management (one activity, two
+     *  pages). Leaves the wallet UI untouched on return so the session and
+     *  the poll loop survive. */
+    private void openSettings() {
+        startActivity(new Intent(this, SettingsActivity.class));
     }
 
     private void showPinSetPrompt(final char[] verifiedCurrent) {

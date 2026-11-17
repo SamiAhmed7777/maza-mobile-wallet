@@ -31,7 +31,14 @@ public final class LockPolicy {
     public static final long BACKOFF_BASE_MS = 30_000L;      // 5 fails -> 30s
     public static final long BACKOFF_CAP_MS = 15 * 60_000L;  // cap 15 min
 
-    private final long autolockMs;
+    /** Supported inactivity windows (S-4 settings selector: 5/10/30 min).
+     *  Bounds, not options: the shell owns the menu, this class only refuses
+     *  a window it cannot enforce meaningfully (a 1-second or 24-hour
+     *  "auto-lock" is a configuration bug, not a policy). */
+    public static final long MIN_AUTOLOCK_MS = 60_000L;        // 1 min
+    public static final long MAX_AUTOLOCK_MS = 60 * 60_000L;   // 60 min
+
+    private long autolockMs;
     private long lastActivity;
     private boolean unlocked = true;
     private boolean backgrounded = false;
@@ -58,6 +65,20 @@ public final class LockPolicy {
     }
 
     public long autolockMs() { return autolockMs; }
+
+    /** S-4 settings hook: adopt a new inactivity window at runtime. Only the
+     *  WINDOW changes - never the lock state: a longer window cannot unlock a
+     *  locked session, and a shorter one takes effect at the next
+     *  isLocked/onActivity evaluation (the lazy gate stays authoritative).
+     *  The shell persists the choice; this method never touches storage.
+     *  @throws IllegalArgumentException outside [MIN_AUTOLOCK_MS,
+     *          MAX_AUTOLOCK_MS] (a window the policy cannot enforce). */
+    public void setAutolockMs(long autolockMs) {
+        if (autolockMs < MIN_AUTOLOCK_MS || autolockMs > MAX_AUTOLOCK_MS) {
+            throw new IllegalArgumentException("autolockMs outside supported range");
+        }
+        this.autolockMs = autolockMs;
+    }
 
     /** Any user interaction. An ALREADY-EXPIRED lock resolves BEFORE the
      *  touch counts: otherwise a tap arriving just after the deadline would
@@ -97,6 +118,16 @@ public final class LockPolicy {
 
     /** Manual lock (shell convenience; same effect as expiry). */
     public void lockNow() { unlocked = false; }
+
+    /** An in-app child screen (SettingsActivity) resumed on top of the main
+     *  activity: the app never left the user's sight, so the background
+     *  bracket is cleared WITHOUT the device-out-of-sight duration lock, and
+     *  the touch counts as activity (pushes lastActivity). Contrast with
+     *  onResume(), which applies the duration lock. */
+    public void clearBackground(long now) {
+        backgrounded = false;
+        lastActivity = Math.max(lastActivity, now);
+    }
 
     public boolean isUnlocked(long now) { return !isLocked(now); }
 

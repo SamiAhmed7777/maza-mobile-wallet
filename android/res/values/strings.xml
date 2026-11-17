@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- S-4 (settings + wallet management) user-facing strings. Additions only:
+     this file is owned by the settings lane. Pure ASCII; no URLs or secrets. -->
+<resources>
+    <string name="settings_entry">Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_subtitle">Wallet configuration</string>
+
+    <string name="settings_server">SERVER</string>
+    <string name="settings_server_label">Server URL</string>
+    <string name="settings_server_save">Save endpoint</string>
+    <string name="settings_server_note">The Connect screen uses this address. Reconnect to apply a change.</string>
+    <string name="settings_autolock">AUTO-LOCK</string>
+    <string name="settings_autolock_current">Auto-lock after %1$d min</string>
+    <string name="settings_autolock_note">Locks the wallet after this much inactivity, and when it has been in the background this long. Applies from the next app start.</string>
+    <string name="settings_theme">APPEARANCE</string>
+    <string name="settings_theme_note">System follows your device day/night setting.</string>
+    <string name="settings_wallet">WALLET MANAGEMENT</string>
+    <string name="settings_wallet_note">Receive addresses, seed phrase, and wipe.</string>
+    <string name="settings_wallet_open">Open wallet management</string>
+
+    <string name="autolock_minutes">%1$d min</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+
+    <string name="wm_title">Wallet management</string>
+    <string name="wm_receive">RECEIVE ADDRESSES</string>
+    <string name="wm_receive_note">Derived on this device from your seed.</string>
+    <string name="wm_deriving">Deriving addresses...</string>
+    <string name="wm_current">current</string>
+    <string name="wm_seed">SEED PHRASE</string>
+    <string name="wm_seed_note">Revealing the seed phrase requires your PIN.</string>
+    <string name="wm_seed_button">Reveal seed phrase</string>
+    <string name="wm_wipe">WIPE WALLET</string>
+    <string name="wm_wipe_note">Deletes the seed phrase, PIN, endpoint, and settings from this device. This cannot be undone.</string>
+    <string name="wm_wipe_button">Wipe wallet</string>
+    <string name="wm_wipe_failed">Wipe failed - the wallet data is still on this device.</string>
+    <string name="wm_wipe_partial">Wallet wiped, but some settings could not be cleared.</string>
+    <string name="wm_no_seed">No wallet on this device.</string>
+    <string name="wm_back">Back</string>
+
+    <string name="dlg_cancel">Cancel</string>
+    <string name="dlg_continue">Continue</string>
+    <string name="dlg_close">Close</string>
+    <string name="seed_requires_pin">Set a PIN on the WALLET tab before revealing the seed phrase.</string>
+    <string name="pin_prompt_title">Enter your PIN</string>
+    <string name="pin_needed">Enter your PIN.</string>
+    <string name="pin_wrong">Wrong PIN.</string>
+    <string name="pin_throttled">Too many attempts - wait %1$d s.</string>
+    <string name="toast_endpoint_saved">Endpoint saved.</string>
+    <string name="toast_wiped">Wallet wiped.</string>
+    <string name="err_url_empty">Enter a server URL.</string>
+    <string name="err_url_scheme">URL must start with http:// or https://</string>
+
+    <string name="wipe_step1_title">Wipe wallet?</string>
+    <string name="wipe_step1_msg">This deletes the seed phrase, the PIN, and all settings on this device. Funds are unrecoverable unless you have the seed written down.</string>
+    <string name="wipe_step2_title">Last check</string>
+    <string name="wipe_step2_msg">Wiping cannot be undone and nothing on this device can restore the wallet afterwards.</string>
+    <string name="wipe_type_hint">Type WIPE to confirm</string>
+    <string name="wipe_type_error">Type WIPE exactly to confirm.</string>
+    <string name="wipe_confirm_button">Wipe</string>
+    <string name="seed_dialog_title">Seed phrase</string>
+    <string name="seed_dialog_note">Write these words down. Anyone with them can spend this wallet.</string>
+    <string name="addresses_unavailable">Could not read the seed on this device.</string>
+</resources>

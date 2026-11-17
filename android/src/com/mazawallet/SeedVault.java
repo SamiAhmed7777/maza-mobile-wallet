@@ -37,7 +37,7 @@ public final class SeedVault {
 
     private static final String TAG = "SeedVault";
     public static final byte[] MAGIC = {'M', 'Z', 'A', 'E', '1'};
-    private static final String KEY_ALIAS = "maza_seed_wrap";
+    static final String KEY_ALIAS = "maza_seed_wrap"; // package-visible: SettingsActivity wipe deletes the entry
     private static final String TMP_SUFFIX = ".tmp";
     private static final int[] MNEMONIC_LENGTHS = {12, 15, 18, 21, 24};
     /** Serializes seed writes process-wide: unique staging names + this

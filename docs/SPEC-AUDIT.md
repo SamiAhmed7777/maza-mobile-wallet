@@ -50,12 +50,12 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | Item | Status | Evidence (repo-relative) / gap plan |
 |---|---|---|
 | 4.1 local private-key custody | DONE | android/src/com/mazawallet/SelfCustody.java (on-device seed/keys); backend watch-only (walletbench/api.py: /api/watch/* never receives keys); mainnet proof android/evidence/selfcustody-proof/PROOF.md |
-| 4.2 encrypted wallet storage | GAP → S-1 | seed currently app-private PLAINTEXT file (SelfCustody.java SEED_FILE, MODE_PRIVATE); plan: AES-GCM at rest, key in Android Keystore, migration for existing seeds |
+| 4.2 encrypted wallet storage | PARTIAL — code DONE, device proof pending | SeedVault landed (commit d8b08ed): AndroidKeyStore AES-256-GCM, MZAE1 envelope, atomic staged writes, legacy-plaintext migration; wired into SelfCustody.readSeed/writeSeed; 5 envelope checks green in the 76-check selftest; on-device restart+migration proof outstanding (S-1 device half) |
 | 4.3 secure seed generation + recovery | DONE | Bip39.java + official Trezor vectors in crypto/SelfTest.java (49-check selftest, build stage [1/6], android/selftest.sh); recovery = in-app seed import (SelfCustody.java ST_IMPORT, renderImport()) |
-| 4.4 OS secure storage | GAP (same as 4.2) | today: MODE_PRIVATE app file only; Android Keystore integration arrives with S-1 — reclassified PARTIAL→GAP vs rev1 to be precise |
+| 4.4 OS secure storage | PARTIAL — code DONE, device proof pending | non-exportable AndroidKeyStore key backing SeedVault (see 4.2); device proof pending with 4.2 |
 | 4.5 PIN/biometric unlock | PARTIAL → S-2b | S-2a PIN half SHIPPED: hashed verifier (PBKDF2-HMAC-SHA512, 210k iters, D11), full-screen lock cover, WALLET-tab + send gating, wrong-PIN backoff (crypto/LockPolicy + crypto/Pbkdf2, selftest-pinned 49/49); biometric where supported + on-device BlueStacks proofs = S-2b |
 | 4.6 auto-lock after inactivity | PARTIAL → S-2b | S-2a code SHIPPED: 5-min inactivity auto-lock (lazy gate evaluation + 10s cover tick) + background >= window locks on resume; on-device proof (foreground inactivity + background/foreground) = S-2b |
-| 4.7 accidental key-exposure protection | PARTIAL | seed displayed once at creation only (SelfCustody renderSeed path); bench token field is masked (password=true) and memory-only (MainActivity onCreate comment); full protection (auth-gated seed re-show) lands with S-1/S-2 |
+| 4.7 accidental key-exposure protection | PARTIAL | Seed shown once at creation (SelfCustody renderSeed path); bench token field masked (password=true) and memory-only (MainActivity onCreate comment). LANDED 2026-11-17 (S-4): auth-gated seed re-show (PinGuard verify + FLAG_SECURE + scrub on dismiss) and wipe (double-confirm, typed WIPE, current-PIN re-verified immediately before destruction, best-effort Keystore wrap-alias removal); device proofs pending |
 | 4.8 secure transaction signing | DONE | crypto/TxBuilder.java: version-1 P2PKH, SIGHASH_ALL, RFC6979 nonces, DER low-S. Verification model (accurate): the wallet broadcasts ONLY transactions it constructed and signed itself; every mainnet-proof submission was independently verified offline first with tools/txverify.py (SIGHASH_ALL + ECDSA, proven against a real MazaCore-signed tx) — android/evidence/selfcustody-proof/PROOF.md. The server does NOT re-verify signatures; it relays client-signed bytes (api.py /api/broadcast), which is safe because construction+signing never leave the device |
 | 4.9 input validation / address verification | DONE | SelfCustody.java:613 (amount <= 0 / !isFinite refused); walletbench/api.py:821 (isfinite), :635/:842 (own-address refusal); crypto/Base58Check.java:35-46 (checksum verify) + walletbench/chain.py:117 (validateaddress) |
 | 4.10 malicious-tx construction protection | DONE (structural) | the app CONSTRUCTS transactions from user input via first-party primitives only — there is NO raw/imported-transaction path a hostile server could feed it (walletbench/api.py /api/broadcast accepts signed hex for RELAY only, which cannot alter construction); broadcast refuses when the change-address import fails (SelfCustody send path, judge r2 blocker); authentication gates the relay. (Accuracy note per review: auth+relay alone is not the protection — the structural no-import-path property is; both documented here) |
@@ -68,16 +68,16 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | Item | Status | Evidence / gap plan |
 |---|---|---|
 | dark surface | DONE | default palette 0xFF141414 family (MainActivity constants) |
-| light mode | GAP → S-3 | no day/night resources today |
+| light mode | PARTIAL — code groundwork complete (2026-11-17) | Theme.MazaWallet(+.Light, +Dialog variants) + colors.xml both palettes + ThemeController (UI_MODE_NIGHT_MASK detection) + 21-test contrast suite with an expected-failure burn-down ledger gate (tests/test_theme_contrast.py; 40 in-territory pairs asserted, dark palette byte-identical to shipped constants). NOT yet app-wide: MainActivity/SelfCustody still hardcode the dark constants (wave-2 reskin; 25 ledgered rows); settings screen legible in both palettes; device proof pending |
 | large readable balance | DONE | BALANCE + WALLET tab balance cards |
 | simple send/receive steps | DONE | SEND form + RECEIVE card with QR |
 | clear tx confirmations | PARTIAL | send result line + history rows; richer confirmations ride S-4 polish |
 | nav: balance/send/receive/transactions | DONE | five bottom tabs (MainActivity.java:67 TABS) |
-| nav: wallet management | GAP → S-4 | no dedicated screen today |
-| nav: settings | GAP → S-4 | no settings screen today |
+| nav: wallet management | DONE (2026-11-17) | SettingsActivity WALLET MANAGEMENT page: receive addresses, PIN-gated seed re-show (FLAG_SECURE, scrub on dismiss), double-confirm + typed-WIPE wipe flow returning to fresh Connect card |
+| nav: settings | DONE (2026-11-17) | SettingsActivity from the SECURITY card: endpoint editor (same saved URL pref as Connect card), auto-lock 5/10/30 min (applies from next launch), theme selector System/Light/Dark via ThemeController |
 | QR generation | DONE | walletbench /api/qr.png (api.py:720, scoped to watch book) |
 | QR scanning | GAP → backlog M8 | camera scan in SEND flow |
-| ordinary-user intuitiveness | PARTIAL | current UX passed the "ordinary-people language" pass; S-3/S-4 complete it |
+| ordinary-user intuitiveness | PARTIAL | settings + theming landed (2026-11-17); app-wide light palette + on-device UX proofs pending (wave 2) |
 
 ## Phase 6 — connectivity
 
@@ -95,7 +95,7 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | no new blockchain/token/substitute network | DONE | native MAZA only; SLIP-44 coin 13; no wrapped/bridged assets anywhere (DECISIONS.md) |
 | wallet interacts with actual native MAZA | DONE | mainnet tx ce514b35…cd4e confirmed (android/evidence/selfcustody-proof/PROOF.md) |
 | derivation-scheme policy (m/0'/0'/k vs m/44'/13') | PLANNED-LANE (not implemented) | MazaCore desktop wallets derive m/0'/0'/k and store a raw HD seed in wallet.dat; this mobile wallet derives m/44'/13' (SLIP-44) — INDEPENDENT, incompatible schemes. Desktop wallet.dat import IS a planned lane (DECISIONS.md D3 + README) but is NOT implemented: D3 notes derivation equivalence alone does not establish seed portability — importing requires verification of the wallet.dat raw-seed format plus deliberate key-translation design. Today, restoration in the app = its own BIP39 seed at m/44'/13' only; each wallet restores its own |
-| txindex decision (ElectrumX prerequisite) | OPEN — Sami | samihost mainnet mazad lacks txindex (probe: "Use -txindex…" on block-4300000 tx); ElectrumX refuses index-less daemons (REQUIRED_DAEMON_INDEXES, indexer/maza_coin.py); option (a) reindex prod node in place ~1-3h with a MazaPay bridge RPC window, or (b) second txindex node ~12-36h sync, zero prod impact — ASKED, awaiting Sami |
+| txindex decision (ElectrumX prerequisite) | OPEN — Payu (decision authority delegated 2026-11-17) | samihost mainnet mazad lacks txindex (probe: "Use -txindex…" on block-4300000 tx); ElectrumX refuses index-less daemons (REQUIRED_DAEMON_INDEXES, indexer/maza_coin.py); option (a) reindex prod node in place ~1-3h with a MazaPay bridge RPC window, or (b) second txindex node ~12-36h sync, zero prod impact — ASKED, awaiting Payu |
 | decentralized, no single centralized service | IN FLIGHT | ElectrumX is the standard multi-server light-wallet protocol; multiple independent hosts can serve wallets (the txindex prerequisite and its decision have their own row above) |
 
 ## Phase 7 — testing
@@ -112,7 +112,7 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | transaction broadcasting | DONE | /api/broadcast + confirmed tx ce514b35… |
 | QR generation | DONE | /api/qr.png |
 | QR scanning | GAP → M8 | camera scanning |
-| encrypted wallet persistence | GAP → S-1 | = Phase 4.2 |
+| encrypted wallet persistence | PARTIAL — code DONE, device proof pending | = Phase 4.2 (SeedVault code landed, device half outstanding) |
 | app restart + recovery | DONE | M21 evidence: fresh process → watch set re-imports on unlock; wallet renders |
 | network interruption + reconnection | PARTIAL | import retry 3x backoff (SelfCustody:772-785); full-path hardening = S-5 |
 | error handling | PARTIAL | catch-all API error surfacing; S-5 completes UX copy |
@@ -134,8 +134,8 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 | 7 history | DONE | HISTORY tab, timestamped rows |
 | 8 build/deployment instructions | DONE | README + android/build-apk.sh + deploy/PUBLIC-HOSTING.md + docs/electrumx/README.md |
 | 9 dependency & licensing report | DONE | formalized: docs/DEPENDENCY-LICENSES.md — APK: zero third-party libraries (platform APIs + first-party code only); server: Python stdlib + one vendored MIT component (qrcodegen, Nayuki); wordlist = public BIP39 data, byte-identical to bitcoin/bips + trezor/python-mnemonic (the earlier "Trezor CC0" wording here was not license-file-supported and is corrected per that report — no per-file grant exists; provenance + posture in report §1) |
-| 10 security assessment | GAP → S-8 | this Phase 4 matrix + S-1/S-2 + threat model → docs/SECURITY.md |
-| 11 testing report | GAP → S-9 | consolidate the committed evidence set → docs/TESTING-REPORT.md |
+| 10 security assessment | DONE (2026-11-17) | docs/SECURITY.md — scope, architecture/trust boundaries, S-1+S-2 evidence, token handling, 4-threat model, spending-path scope table (custodial /api/send vs self-custody watch/broadcast), controls inventory, 13 accepted risks, 8 open items; every cited path existence-verified |
+| 11 testing report | DONE (2026-11-17) | docs/TESTING-REPORT.md — per-phase checklists + RULES 1-8 table + measured transcripts (parent-refreshed post-merge) + INCOMPLETE list; independent txid recompute, txverify VALID/LOW-S, s2b SHA256SUMS 47/47 re-verified by the writing lane |
 | 12 outstanding requirements | DONE | this matrix's GAP/PARTIAL rows + the operational backlog — snapshot committed as deploy/backlog-snapshot-20261116.txt (live copy is host-side at /root/maza-mobile-backlog.md) |
 | Android APK | DONE | v1.1.0, versionCode=3, v2+v3 release-signed — the exact artifact sha256 013b964f… is attached in this audit's worktree and sha-recorded in deploy/ENDPOINT-VERIFICATION.md §2; the older in-repo android/releases/maza-wallet-v1.0.0.apk (d30a48a9…) is SUPERSEDED (tailnet-era default URL) |
 | iOS | DEFERRED | Android-native stack; iOS is a separate-architecture effort (documented decision, not silently dropped) |

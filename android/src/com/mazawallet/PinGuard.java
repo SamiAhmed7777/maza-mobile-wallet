@@ -215,6 +215,13 @@ public final class PinGuard {
 
     public void onActivity()  { policy.onActivity(elapsedNow()); }
     public void onBackground(){ policy.onBackground(elapsedNow()); }
+    /** An in-app child screen (SettingsActivity) resumed on top of this
+     *  activity: clear the background bracket WITHOUT the device-out-of-sight
+     *  duration check (the app stayed foreground; MainActivity merely paused
+     *  because the child opened) and count the transition as activity. The
+     *  bracket re-engages when the child pauses (onBackground) so a HOME
+     *  press from the child still gets the duration lock on return. */
+    public void onForegroundChildResumed() { policy.clearBackground(elapsedNow()); }
     /** @return true when returning from background must re-lock. Called on
      *  EVERY resume (Connect screen included) — the policy bracket must not
      *  depend on which screen is showing (judge r1). */

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MAZA Wallet themes (S-3, light mode).
+
+  Platform themes only: this build has NO AppCompat / androidx on the
+  classpath (raw aapt2 + javac + d8), so both themes descend from
+  @android:style/Theme.Material.* exactly like the manifest fallback
+  (@android:style/Theme.Material.NoActionBar).
+
+  HOW THEY ARE APPLIED: the manifest keeps its Material.NoActionBar default;
+  MainActivity calls ThemeController.applyTheme(this, mode) before
+  setContentView, which resolves "system" | "light" | "dark" and calls
+  activity.setTheme(R.style.Theme_MazaWallet) or
+  R.style.Theme_MazaWallet_Light. Until that call lands (S-4 settings screen),
+  the manifest default stays in force and these resources are inert.
+
+  Palette source of truth: values/colors.xml (maza_dark_* / maza_light_*).
+  Every foreground/background pair set here is asserted by
+  tests/test_theme_contrast.py.
+-->
+<resources>
+
+    <!-- ===================== DARK (today's look) ======================== -->
+    <!-- Palette values are identical to the constants the app hardcodes
+         today; the only intended difference in dark mode is that button
+         fills now come from the palette (colorButtonNormal) instead of the
+         platform's grey. -->
+    <style name="Theme.MazaWallet" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/maza_dark_background</item>
+        <item name="android:colorBackground">@color/maza_dark_background</item>
+        <item name="android:textColorPrimary">@color/maza_dark_text_primary</item>
+        <item name="android:textColorSecondary">@color/maza_dark_text_secondary</item>
+        <item name="android:textColorHint">@color/maza_dark_text_secondary</item>
+        <item name="android:colorAccent">@color/maza_dark_accent</item>
+        <item name="android:colorPrimary">@color/maza_dark_surface</item>
+        <item name="android:colorPrimaryDark">@color/maza_dark_background</item>
+        <item name="android:colorControlNormal">@color/maza_dark_text_secondary</item>
+        <item name="android:colorControlActivated">@color/maza_dark_accent</item>
+        <item name="android:colorControlHighlight">@color/maza_dark_divider</item>
+        <item name="android:colorButtonNormal">@color/maza_dark_surface</item>
+        <item name="android:statusBarColor">@color/maza_dark_background</item>
+        <item name="android:navigationBarColor">@color/maza_dark_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:alertDialogTheme">@style/Theme.MazaWallet.Dialog</item>
+    </style>
+
+    <!-- ===================== LIGHT ======================================= -->
+    <style name="Theme.MazaWallet.Light" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/maza_light_background</item>
+        <item name="android:colorBackground">@color/maza_light_background</item>
+        <item name="android:textColorPrimary">@color/maza_light_text_primary</item>
+        <item name="android:textColorSecondary">@color/maza_light_text_secondary</item>
+        <item name="android:textColorHint">@color/maza_light_text_secondary</item>
+        <item name="android:colorAccent">@color/maza_light_accent</item>
+        <item name="android:colorPrimary">@color/maza_light_surface</item>
+        <item name="android:colorPrimaryDark">@color/maza_light_bar</item>
+        <item name="android:colorControlNormal">@color/maza_light_text_secondary</item>
+        <item name="android:colorControlActivated">@color/maza_light_accent</item>
+        <item name="android:colorControlHighlight">@color/maza_light_divider</item>
+        <item name="android:colorButtonNormal">@color/maza_light_surface</item>
+        <item name="android:statusBarColor">@color/maza_light_bar</item>
+        <item name="android:navigationBarColor">@color/maza_light_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:alertDialogTheme">@style/Theme.MazaWallet.Light.Dialog</item>
+    </style>
+
+    <!-- Dialogs (PIN set / change / remove prompts) follow the palette:
+         surface fill plus palette text, hint and accent colors. The dialog
+         BODY text still comes from MainActivity's hardcoded label colors,
+         which is the cross-lane contradiction reported by the contrast test
+         as an integration blocker. -->
+    <style name="Theme.MazaWallet.Dialog" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@color/maza_dark_surface</item>
+        <item name="android:colorBackground">@color/maza_dark_surface</item>
+        <item name="android:textColorPrimary">@color/maza_dark_text_primary</item>
+        <item name="android:textColorSecondary">@color/maza_dark_text_secondary</item>
+        <item name="android:textColorHint">@color/maza_dark_text_secondary</item>
+        <item name="android:colorAccent">@color/maza_dark_accent</item>
+    </style>
+
+    <style name="Theme.MazaWallet.Light.Dialog" parent="@android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:windowBackground">@color/maza_light_surface</item>
+        <item name="android:colorBackground">@color/maza_light_surface</item>
+        <item name="android:textColorPrimary">@color/maza_light_text_primary</item>
+        <item name="android:textColorSecondary">@color/maza_light_text_secondary</item>
+        <item name="android:textColorHint">@color/maza_light_text_secondary</item>
+        <item name="android:colorAccent">@color/maza_light_accent</item>
+    </style>
+
+    <!-- Buttons are NOT restyled. The platform widget keeps its own state
+         drawable and label ColorStateList (so disabled buttons still dim);
+         the palette only redirects the fill through android:colorButtonNormal
+         above. A flat android:textColor override here would have frozen the
+         label at full strength in the disabled state. -->
+
+</resources>
