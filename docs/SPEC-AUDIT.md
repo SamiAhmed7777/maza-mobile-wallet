@@ -67,17 +67,17 @@ keys). Trading/swaps stay excluded from the core (RULE 4).
 
 | Item | Status | Evidence / gap plan |
 |---|---|---|
-| dark surface | DONE | default palette 0xFF141414 family (MainActivity constants) |
-| light mode | PARTIAL — code groundwork complete (2026-11-17) | Theme.MazaWallet(+.Light, +Dialog variants) + colors.xml both palettes + ThemeController (UI_MODE_NIGHT_MASK detection) + 21-test contrast suite with an expected-failure burn-down ledger gate (tests/test_theme_contrast.py; 40 in-territory pairs asserted, dark palette byte-identical to shipped constants). NOT yet app-wide: MainActivity/SelfCustody still hardcode the dark constants (wave-2 reskin; 25 ledgered rows); settings screen legible in both palettes; device proof pending |
+| dark surface | DONE | default palette (maza_dark_* resources via UiTheme resolution; values byte-equal to the original 0xFF141414 family, frozen in DARK_RENDER_BASELINE) |
+| light mode | DONE code (2026-11-17, wave 2) — device proof pending | Themes + ThemeController + UiTheme palette resolution: ALL hardcoded ink converted (15 constants, 113 sites; zero ARGB literals in MainActivity/SelfCustody, test-proven), EXPECTED_BELOW_THRESHOLD ledger EMPTY (machine-checked gate), dark render byte-identical (frozen DARK_RENDER_BASELINE), PIN dialogs + dialog themes palette-driven; known residual: live theme switch repaints only Settings (MainActivity session-preserving rebuild = separate backlog item); device screenshots pending |
 | large readable balance | DONE | BALANCE + WALLET tab balance cards |
 | simple send/receive steps | DONE | SEND form + RECEIVE card with QR |
 | clear tx confirmations | PARTIAL | send result line + history rows; richer confirmations ride S-4 polish |
 | nav: balance/send/receive/transactions | DONE | five bottom tabs (MainActivity.java:67 TABS) |
 | nav: wallet management | DONE (2026-11-17) | SettingsActivity WALLET MANAGEMENT page: receive addresses, PIN-gated seed re-show (FLAG_SECURE, scrub on dismiss), double-confirm + typed-WIPE wipe flow returning to fresh Connect card |
-| nav: settings | DONE (2026-11-17) | SettingsActivity from the SECURITY card: endpoint editor (same saved URL pref as Connect card), auto-lock 5/10/30 min (applies from next launch), theme selector System/Light/Dark via ThemeController |
+| nav: settings | DONE (2026-11-17) | SettingsActivity from the SECURITY card: endpoint editor (same saved URL pref as Connect card), auto-lock 5/10/30 min (applies IMMEDIATELY via PinGuard.retuneAutolockMs, wave 2), theme selector System/Light/Dark via ThemeController |
 | QR generation | DONE | walletbench /api/qr.png (api.py:720, scoped to watch book) |
 | QR scanning | GAP → backlog M8 | camera scan in SEND flow |
-| ordinary-user intuitiveness | PARTIAL | settings + theming landed (2026-11-17); app-wide light palette + on-device UX proofs pending (wave 2) |
+| ordinary-user intuitiveness | PARTIAL | settings + theming landed (2026-11-17); app-wide light reskin landed (wave 2); on-device UX proofs + live theme-switch repaint (W3-a) pending |
 
 ## Phase 6 — connectivity
 

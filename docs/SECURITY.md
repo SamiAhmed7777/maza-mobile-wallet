@@ -7,10 +7,10 @@ consolidates the security work recorded in `DECISIONS.md` (D7, D8, D11),
 does not protect against, and what remains open. It does not restate the
 product requirements; those stay in `docs/SPEC.md`.
 
-Assessment basis: branch `lane/s8-security-doc`, base commit `361af1c`
-(origin/master). Every claim below is tied to a repo path that exists at that
-commit, or to a named operator-side instrument that is explicitly marked as
-outside the repo.
+Assessment basis: master at `083a58a` plus the wave-2 changeset (UiTheme
+app-wide light reskin + in-session auto-lock retune). Every claim below is
+tied to a repo path that exists at that state, or to a named operator-side
+instrument that is explicitly marked as outside the repo.
 
 ## 1. Scope
 
@@ -540,8 +540,9 @@ expects (`docs/SPEC-AUDIT.md`, "Implementation order"):
    re-show behind the PIN with FLAG_SECURE, wipe wallet with double
    confirmation + typed acknowledgement + current-PIN re-verification
    immediately before destruction + best-effort Keystore wrap-alias removal,
-   auto-lock delay editor applying from the next app start — in-session
-   retune is a wave-2 item — and theme control). Device proofs pending.
+   auto-lock delay editor applying immediately (in-session retune via
+   PinGuard.retuneAutolockMs, landed wave 2) and theme control).
+   Device proofs pending.
 4. S-5 network/error hardening: uniform retry with backoff, timeout/401/offline
    copy, no silent empty states, and a decision on cleartext traffic.
 5. S-6 testnet mode: endpoint and address-version switch so controlled-environment

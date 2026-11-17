@@ -51,6 +51,28 @@ class SettingsForegroundLockWiring(unittest.TestCase):
         self.assertIn("session.onActivity();", src,
                       "touch forwarding must push the live deadline")
 
+    def test_autolock_persist_is_synchronous_and_gates_the_retune(self):
+        """commit() (durable) before the live retune - never apply().
+
+        DECISIONS.md D11 and the selectAutolock comment promise the persisted
+        value lands durably BEFORE the running policy is retuned; an async
+        apply() would allow a process death to leave a retuned live policy
+        with no persisted value (judge r3 blocker). This pins the contract at
+        the source level: commit() + failure abort + no apply() on this path.
+        """
+        src = read(SETTINGS)
+        i = src.find("private void selectAutolock(int minutes)")
+        self.assertTrue(i >= 0, "selectAutolock() must exist")
+        end = src.find("\n    }\n", i)  # end of the selectAutolock method body
+        self.assertTrue(end > i, "could not delimit selectAutolock()")
+        block = src[i:end]
+        self.assertIn(".commit();", block, "the two-key write must be a synchronous commit()")
+        self.assertNotIn(".apply();", block,
+                         "an async apply() would break the documented ordering guarantee")
+        self.assertIn("if (!persisted) {", block,
+                      "a failed commit must abort the retune")
+        self.assertIn("return;", block)
+
     def test_no_local_guard_in_the_resume_decision(self):
         src = read(SETTINGS)
         i = src.find("private boolean enforceResumeGate()")

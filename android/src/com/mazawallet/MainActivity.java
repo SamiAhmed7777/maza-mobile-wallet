@@ -64,15 +64,12 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     private static final long POLL_MS = 15000;
     private static final int MAX_ROWS = 30;
 
-    private static final int BG = 0xFF141414;       // near-black background
-    private static final int CARD = 0xFF1E1E1E;     // cards
-    private static final int BAR = 0xFF1A1A1A;      // tab bar background
-    private static final int DIVIDER = 0xFF2E2E2E;  // hairline dividers
-    private static final int TEXT = 0xFFFFFFFF;     // white primary text
-    private static final int MUTED = 0xFFB3B3B3;    // muted secondary text
-    private static final int ACCENT = 0xFFF0A000;   // amber brand accent
-    private static final int RED = 0xFFFF6B6B;      // send / error
-    private static final int GREEN = 0xFF6FD66F;    // receive
+    /** Palette for THIS activity's live theme, resolved in onCreate() right
+     *  after ThemeController.applyTheme() and before the first view is built
+     *  (UiTheme). Every surface and ink in this file comes from it, so the
+     *  whole screen follows dark/light. A theme change recreates the activity,
+     *  so onCreate() re-resolves and the UI repaints in the new palette. */
+    private UiTheme.Palette pal;
 
     private static final String[] TABS = {"BALANCE", "RECEIVE", "SEND", "HISTORY", "WALLET"};
     private static final int TAB_WALLET = 4;
@@ -145,6 +142,12 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         // first setContentView (showConnect() below). The manifest's inline
         // platform theme stays the pre-attach fallback.
         ThemeController.applyTheme(this, SettingsActivity.themeMode(prefs));
+        // Resolve the active theme's palette BEFORE any view is built: every
+        // surface and ink below reads from it, which is what makes the light
+        // theme render app-wide instead of just recoloring the framework
+        // widgets. Must stay AFTER applyTheme (the theme attribute is the
+        // selector) and before showConnect().
+        pal = UiTheme.palette(this);
         // S-4: make the saved auto-lock delay the one the session's LockPolicy
         // enforces. PinGuard builds the policy from pin.autolock_ms at
         // construction, so the settings value is reconciled into that key
@@ -153,7 +156,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         pinGuard = new PinGuard(this);
         sActiveGuard = pinGuard; // live session guard: SettingsActivity resume gate reads it
         // Always start at the Connect card: the token is entered per session
-        // (memory-only; no stored credentials, no auto-attempt — the baked-in
+        // (memory-only; no stored credentials, no auto-attempt - the baked-in
         // bench-edition token was removed when the endpoint went public: a
         // token shipped inside the APK would defeat the gate it guards).
         showConnect("");
@@ -211,9 +214,10 @@ public class MainActivity extends Activity implements SelfCustody.Host {
             showLock();
         }
         // S-4: the settings screen may have changed the auto-lock delay; the
-        // SECURITY card reads it from PinGuard, so re-render on return (the
-        // policy object itself keeps the window it was built with - the new
-        // value applies from the next session start).
+        // SECURITY card reads it from PinGuard, so re-render on return. The
+        // change applies immediately (SettingsActivity retunes the live
+        // policy via PinGuard.retuneAutolockMs, wave 2), so this render
+        // always reflects the running window.
         if (pinSection != null) renderPinSection();
     }
 
@@ -235,30 +239,30 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         LinearLayout col = column();
         col.setPadding(dp(20), dp(32), dp(20), dp(20));
         ScrollView root = new ScrollView(this);
-        root.setBackgroundColor(BG);
+        root.setBackgroundColor(pal.background());
         root.addView(col, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(root);
 
         addHeader(col);
 
-        col.addView(label("Connect to your bench server", 14, MUTED, Typeface.NORMAL),
+        col.addView(label("Connect to your bench server", 14, pal.textSecondary(), Typeface.NORMAL),
                 mp(0, dp(16), 0, 0));
 
         LinearLayout card = card();
         col.addView(card, mp(0, dp(16), 0, 0));
 
-        card.addView(label("Server URL", 13, MUTED, Typeface.BOLD));
+        card.addView(label("Server URL", 13, pal.textSecondary(), Typeface.BOLD));
         urlEt = input(prefs.getString(KEY_URL, DEFAULT_URL),
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         card.addView(urlEt, mp(0, 0, 0, 0));
 
-        card.addView(label("Token", 13, MUTED, Typeface.BOLD), mp(0, dp(12), 0, 0));
+        card.addView(label("Token", 13, pal.textSecondary(), Typeface.BOLD), mp(0, dp(12), 0, 0));
         tokenEt = input("", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         tokenEt.setHint("bench token");
         card.addView(tokenEt, mp(0, 0, 0, 0));
 
-        connectErr = label("", 13, RED, Typeface.NORMAL);
+        connectErr = label("", 13, pal.danger(), Typeface.NORMAL);
         card.addView(connectErr, mp(0, dp(8), 0, 0));
         if (message.length() > 0) connectErr.setText(message);
 
@@ -277,7 +281,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         // selected would double-fetch (judge r2 finding, probe scenario G/H).
         tab = 0;
         LinearLayout root = column();
-        root.setBackgroundColor(BG);
+        root.setBackgroundColor(pal.background());
 
         // Content area (weight 1) above the pinned tab bar.
         content = new FrameLayout(this);
@@ -291,18 +295,18 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         buildWalletTab();
         // Unlock path watch re-import (M21): the landing tab is BALANCE, so
         // the WALLET tab's onShown() will not fire until the user switches
-        // there. Fire the idempotent re-import now — a creation-time import
+        // there. Fire the idempotent re-import now - a creation-time import
         // that died mid-flight must not leave the wallet blind for the
         // session (no-op while no seed exists).
         selfCustody.onUnlocked();
 
         // Bottom tab bar: 4 equal-weight buttons, always visible.
         View divider = new View(this);
-        divider.setBackgroundColor(DIVIDER);
+        divider.setBackgroundColor(pal.divider());
         root.addView(divider, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
         LinearLayout bar = row();
-        bar.setBackgroundColor(BAR);
+        bar.setBackgroundColor(pal.bar());
         root.addView(bar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
         for (int i = 0; i < TABS.length; i++) {
@@ -322,7 +326,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         // 10s tick shows it promptly when the lazy gate decides it is locked.
         buildLockOverlay();
         FrameLayout rootWrap = new FrameLayout(this);
-        rootWrap.setBackgroundColor(BG);
+        rootWrap.setBackgroundColor(pal.background());
         rootWrap.addView(root, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         rootWrap.addView(lockOverlay, new FrameLayout.LayoutParams(
@@ -355,7 +359,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         tab = i;
         for (int k = 0; k < tabViews.length; k++) {
             tabViews[k].setVisibility(k == i ? View.VISIBLE : View.GONE);
-            tabBtns[k].setTextColor(k == i ? ACCENT : MUTED);
+            tabBtns[k].setTextColor(k == i ? pal.accent() : pal.textSecondary());
             tabBtns[k].setTypeface(Typeface.DEFAULT,
                     k == i ? Typeface.BOLD : Typeface.NORMAL);
         }
@@ -379,7 +383,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
 
     private void addTab(LinearLayout col, int index) {
         ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(BG);
+        sv.setBackgroundColor(pal.background());
         sv.addView(col, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         sv.setVisibility(View.GONE);
@@ -396,7 +400,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         titleLp.leftMargin = dp(12);
-        header.addView(label("MAZA Wallet", 22, TEXT, Typeface.BOLD), titleLp);
+        header.addView(label("MAZA Wallet", 22, pal.textPrimary(), Typeface.BOLD), titleLp);
         col.addView(header, mp(0, 0, 0, dp(16)));
     }
 
@@ -404,13 +408,13 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         LinearLayout col = tabColumn();
         addHeader(col);
 
-        balanceTv = label("...", 36, TEXT, Typeface.BOLD);
+        balanceTv = label("...", 36, pal.textPrimary(), Typeface.BOLD);
         col.addView(balanceTv);
 
-        accountTv = label("", 13, MUTED, Typeface.NORMAL);
+        accountTv = label("", 13, pal.textSecondary(), Typeface.NORMAL);
         col.addView(accountTv, mp(0, dp(4), 0, 0));
 
-        lastSyncTv = label("", 12, MUTED, Typeface.NORMAL);
+        lastSyncTv = label("", 12, pal.textSecondary(), Typeface.NORMAL);
         col.addView(lastSyncTv, mp(0, dp(4), 0, 0));
 
         Button refreshBtn = new Button(this);
@@ -425,9 +429,9 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         LinearLayout col = tabColumn();
         addHeader(col);
 
-        col.addView(label("RECEIVE", 13, ACCENT, Typeface.BOLD));
+        col.addView(label("RECEIVE", 13, pal.accent(), Typeface.BOLD));
 
-        addressTv = mono("...", 14, TEXT);
+        addressTv = mono("...", 14, pal.textPrimary());
         col.addView(addressTv, mp(0, dp(6), 0, 0));
 
         Button copyBtn = new Button(this);
@@ -435,7 +439,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         copyBtn.setOnClickListener(v -> copyAddress());
         col.addView(copyBtn, mp(0, dp(8), 0, 0));
 
-        qrStatusTv = label("", 12, MUTED, Typeface.NORMAL);
+        qrStatusTv = label("", 12, pal.textSecondary(), Typeface.NORMAL);
         col.addView(qrStatusTv, mp(0, dp(4), 0, 0));
 
         qrIv = new ImageView(this);
@@ -454,11 +458,11 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         // M22: the bar label stays SEND (standard bottom-tab convention),
         // but this tab spends the BENCH account, not the user's seed wallet.
         // Header copy + note make the two send flows un-confusable.
-        col.addView(label("SEND \u00B7 BENCH ACCOUNT", 13, ACCENT, Typeface.BOLD));
+        col.addView(label("SEND \u00B7 BENCH ACCOUNT", 13, pal.accent(), Typeface.BOLD));
         col.addView(label(
                 "Spends the bench server's held funds (server-side, capped). "
                         + "Your own seed wallet is on the WALLET tab.",
-                12, MUTED, Typeface.NORMAL), mp(0, dp(4), 0, 0));
+                12, pal.textSecondary(), Typeface.NORMAL), mp(0, dp(4), 0, 0));
         toEt = input("", InputType.TYPE_CLASS_TEXT);
         toEt.setHint("Recipient address (M...)");
         toEt.setTypeface(Typeface.MONOSPACE);
@@ -468,7 +472,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         amountEt.setHint("Amount (MAZA)");
         col.addView(amountEt, mp(0, dp(4), 0, 0));
 
-        feeHintTv = label("fee " + fmtAmount(fee) + " MAZA", 12, MUTED, Typeface.NORMAL);
+        feeHintTv = label("fee " + fmtAmount(fee) + " MAZA", 12, pal.textSecondary(), Typeface.NORMAL);
         col.addView(feeHintTv, mp(0, dp(2), 0, 0));
 
         sendBtn = new Button(this);
@@ -476,7 +480,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         sendBtn.setOnClickListener(v -> doSend());
         col.addView(sendBtn, mp(0, dp(8), 0, 0));
 
-        sendResultTv = mono("", 13, MUTED);
+        sendResultTv = mono("", 13, pal.textSecondary());
         col.addView(sendResultTv, mp(0, dp(4), 0, 0));
 
         addTab(col, 2);
@@ -486,7 +490,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         LinearLayout col = tabColumn();
         addHeader(col);
 
-        col.addView(label("HISTORY", 13, ACCENT, Typeface.BOLD));
+        col.addView(label("HISTORY", 13, pal.accent(), Typeface.BOLD));
 
         historyList = column();
         col.addView(historyList, mp(0, dp(4), 0, 0));
@@ -496,11 +500,11 @@ public class MainActivity extends Activity implements SelfCustody.Host {
 
     /** "My Wallet" self-custody tab; all logic lives in SelfCustody. The
      *  S-2a SECURITY card (PIN set/change/remove + auto-lock status) sits
-     *  below it — this is the settings hook; the S-4 settings screen folds
+     *  below it - this is the settings hook; the S-4 settings screen folds
      *  it in. */
     private void buildWalletTab() {
         LinearLayout col = tabColumn();
-        selfCustody = new SelfCustody(this, this);
+        selfCustody = new SelfCustody(this, this, pal);
         col.addView(selfCustody.view());
         pinSection = column();
         col.addView(pinSection, mp(0, dp(12), 0, dp(8)));
@@ -528,7 +532,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     /** S-2a: SelfCustody consults this at the START of every protected
      *  handler (send / create / import seed) so an in-flight tap that raced
      *  an expiry cannot act while the lock engages (judge r2). Showing the
-     *  cover here makes the response immediate — the 10s tick is only a
+     *  cover here makes the response immediate - the 10s tick is only a
      *  convenience, never the enforcement. */
     @Override
     public boolean gateOpen() {
@@ -552,7 +556,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
             return;
         }
         connectBtn.setEnabled(false);
-        connectErr.setTextColor(MUTED);
+        connectErr.setTextColor(pal.textSecondary());
         connectErr.setText("Connecting...");
         new Thread(() -> {
             String err = null;
@@ -578,7 +582,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
             final String msg = err;
             ui.post(() -> {
                 token = null;
-                connectErr.setTextColor(RED);
+                connectErr.setTextColor(pal.danger());
                 connectErr.setText(msg);
                 connectBtn.setEnabled(true);
             });
@@ -586,33 +590,33 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     }
 
     private void doSend() {
-        // S-2a gate: the SEND tab spends the bench account — a spend action,
+        // S-2a gate: the SEND tab spends the bench account - a spend action,
         // so it requires the PIN while locked (same policy as the WALLET tab).
         if (pinGuard != null && pinGuard.gateNeeded()) {
             pendingGatedTab = 2;
-            sendResult("Wallet locked - enter your PIN to send.", RED);
+            sendResult("Wallet locked - enter your PIN to send.", pal.danger());
             showLock();
             return;
         }
         final String to = toEt.getText().toString().trim();
         final String amtStr = amountEt.getText().toString().trim();
         if (to.length() == 0 || amtStr.length() == 0) {
-            sendResult("Enter address and amount.", RED);
+            sendResult("Enter address and amount.", pal.danger());
             return;
         }
         final double amt;
         try {
             amt = Double.parseDouble(amtStr);
         } catch (NumberFormatException e) {
-            sendResult("Invalid amount.", RED);
+            sendResult("Invalid amount.", pal.danger());
             return;
         }
         if (amt <= 0 || Double.isFinite(amt) == false) {
-            sendResult("Amount must be positive.", RED);
+            sendResult("Amount must be positive.", pal.danger());
             return;
         }
         sendBtn.setEnabled(false);
-        sendResult("Sending...", MUTED);
+        sendResult("Sending...", pal.textSecondary());
         new Thread(() -> {
             String msg;
             int color;
@@ -624,21 +628,21 @@ public class MainActivity extends Activity implements SelfCustody.Host {
                     msg = txid.length() == 0
                             ? "Sent (bench account)."
                             : "Sent (bench account): " + shortTxid(txid);
-                    color = GREEN;
+                    color = pal.success();
                     ui.post(this::refresh);
                 } else if (r.code == 401) {
                     ui.post(this::lockOut);
                     return;
                 } else {
                     msg = r.errorText();
-                    color = RED;
+                    color = pal.danger();
                 }
             } catch (IOException e) {
                 msg = "Network error: " + e.getMessage();
-                color = RED;
+                color = pal.danger();
             } catch (JSONException e) {
                 msg = "Bad server response.";
-                color = RED;
+                color = pal.danger();
             }
             final String m = msg;
             final int c = color;
@@ -704,7 +708,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         historyList.removeAllViews();
         int n = Math.min(txs.size(), MAX_ROWS);
         if (n == 0) {
-            historyList.addView(label("No transactions yet", 13, MUTED, Typeface.NORMAL));
+            historyList.addView(label("No transactions yet", 13, pal.textSecondary(), Typeface.NORMAL));
         }
         for (int i = 0; i < n; i++) {
             historyList.addView(txRow(txs.get(i)));
@@ -726,17 +730,17 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         box.setLayoutParams(mp(0, 0, 0, dp(8)));
 
         LinearLayout row1 = row();
-        row1.addView(label(glyph + " " + signed, 15, send ? RED : GREEN, Typeface.BOLD),
+        row1.addView(label(glyph + " " + signed, 15, send ? pal.danger() : pal.success(), Typeface.BOLD),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         // Absolute local timestamp from the unix time field.
-        row1.addView(label(TS_FMT.format(new Date(t.time * 1000)), 13, TEXT, Typeface.NORMAL));
+        row1.addView(label(TS_FMT.format(new Date(t.time * 1000)), 13, pal.textPrimary(), Typeface.NORMAL));
         box.addView(row1);
 
         LinearLayout row2 = row();
-        row2.addView(label(relTime(t.time), 12, MUTED, Typeface.NORMAL),
+        row2.addView(label(relTime(t.time), 12, pal.textSecondary(), Typeface.NORMAL),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         String conf = t.confs > 0 ? t.confs + " confs" : "unconfirmed";
-        row2.addView(label(conf, 12, t.confs > 0 ? MUTED : ACCENT, Typeface.NORMAL));
+        row2.addView(label(conf, 12, t.confs > 0 ? pal.textSecondary() : pal.accent(), Typeface.NORMAL));
         box.addView(row2);
 
         return box;
@@ -753,7 +757,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     private void loadQr() {
         if (token == null) return;
         qrStatusTv.setText("Loading QR...");
-        qrStatusTv.setTextColor(MUTED);
+        qrStatusTv.setTextColor(pal.textSecondary());
         new Thread(() -> {
             try {
                 Api.Resp r = Api.http(baseUrl, token, "GET", "/api/qr.png", null);  // Bearer header, no token in URL
@@ -782,7 +786,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
 
     private void qrErr(String m) {
         qrStatusTv.setText(m);
-        qrStatusTv.setTextColor(RED);
+        qrStatusTv.setTextColor(pal.danger());
     }
 
     private void lockOut() {
@@ -796,7 +800,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
      *  gate engages (tab tap / send tap / inactivity tick / long background). */
     private void buildLockOverlay() {
         lockOverlay = new FrameLayout(this);
-        lockOverlay.setBackgroundColor(BG);
+        lockOverlay.setBackgroundColor(pal.background());
         lockOverlay.setVisibility(View.GONE);
         lockOverlay.setClickable(true); // swallow touches behind the cover
         LinearLayout col = column();
@@ -805,13 +809,13 @@ public class MainActivity extends Activity implements SelfCustody.Host {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP));
         addHeader(col);
-        col.addView(label("Wallet locked", 22, TEXT, Typeface.BOLD),
+        col.addView(label("Wallet locked", 22, pal.textPrimary(), Typeface.BOLD),
                 mp(0, dp(16), 0, 0));
-        col.addView(label("Enter your PIN to continue.", 13, MUTED, Typeface.NORMAL),
+        col.addView(label("Enter your PIN to continue.", 13, pal.textSecondary(), Typeface.NORMAL),
                 mp(0, dp(4), 0, dp(16)));
         pinEt = pinInput("PIN or passphrase");
         col.addView(pinEt);
-        pinErrTv = label("", 13, RED, Typeface.NORMAL);
+        pinErrTv = label("", 13, pal.danger(), Typeface.NORMAL);
         col.addView(pinErrTv, mp(0, dp(8), 0, 0));
         pinBtn = new Button(this);
         pinBtn.setText("Unlock");
@@ -822,11 +826,11 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     private void showLock() {
         if (lockOverlay == null || pinGuard == null) return;
         pinEt.setText("");
-        pinErrTv.setTextColor(MUTED);
+        pinErrTv.setTextColor(pal.textSecondary());
         pinErrTv.setText(pinGuard.throttled()
                 ? "Too many attempts - wait " + pinGuard.throttleRemainingSec() + "s."
                 : "");
-        if (pinGuard.throttled()) pinErrTv.setTextColor(RED);
+        if (pinGuard.throttled()) pinErrTv.setTextColor(pal.danger());
         lockOverlay.setVisibility(View.VISIBLE);
         pinEt.requestFocus();
     }
@@ -837,7 +841,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     private void doPinUnlock() {
         if (pinGuard == null || lockOverlay == null) return;
         if (pinGuard.throttled()) {
-            pinErrTv.setTextColor(RED);
+            pinErrTv.setTextColor(pal.danger());
             pinErrTv.setText("Too many attempts - wait "
                     + pinGuard.throttleRemainingSec() + "s.");
             return;
@@ -845,12 +849,12 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         final char[] pin = grab(pinEt);
         if (pin.length == 0) {
             zero(pin);
-            pinErrTv.setTextColor(RED);
+            pinErrTv.setTextColor(pal.danger());
             pinErrTv.setText("Enter your PIN.");
             return;
         }
         pinBtn.setEnabled(false);
-        pinErrTv.setTextColor(MUTED);
+        pinErrTv.setTextColor(pal.textSecondary());
         pinErrTv.setText("Checking...");
         new Thread(() -> {
             final int r = pinGuard.verifyAttempt(pin);
@@ -865,7 +869,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
                 } else {
                     showLock(); // re-arms the throttle message on retry
                     if (r == LockPolicy.WRONG_PIN) {
-                        pinErrTv.setTextColor(RED);
+                        pinErrTv.setTextColor(pal.danger());
                         pinErrTv.setText("Wrong PIN - try again.");
                     }
                 }
@@ -896,12 +900,12 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         pinSection.removeAllViews();
         LinearLayout card = card();
         pinSection.addView(card);
-        card.addView(label("SECURITY", 13, ACCENT, Typeface.BOLD));
+        card.addView(label("SECURITY", 13, pal.accent(), Typeface.BOLD));
         if (!pinGuard.isSet()) {
             card.addView(label(
                     "No PIN set. A PIN locks the WALLET tab and sending behind"
                             + " a prompt.",
-                    12, MUTED, Typeface.NORMAL), mp(0, dp(4), 0, dp(8)));
+                    12, pal.textSecondary(), Typeface.NORMAL), mp(0, dp(4), 0, dp(8)));
             Button setBtn = new Button(this);
             setBtn.setText("Set PIN");
             setBtn.setOnClickListener(v -> showPinSetPrompt(null));
@@ -910,7 +914,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
             long mins = pinGuard.autolockMs() / 60_000L;
             card.addView(label("PIN lock ON \u00B7 auto-lock after " + mins
                     + " min of inactivity (also locks while backgrounded).",
-                    12, MUTED, Typeface.NORMAL), mp(0, dp(4), 0, dp(8)));
+                    12, pal.textSecondary(), Typeface.NORMAL), mp(0, dp(4), 0, dp(8)));
             Button changeBtn = new Button(this);
             changeBtn.setText("Change PIN");
             changeBtn.setOnClickListener(v -> showPinChangePrompt());
@@ -945,7 +949,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
         box.addView(e2, mp(0, dp(8), 0, 0));
         // In-dialog validation error (r2 polish fold): invalid input keeps
         // the dialog OPEN with the reason inline, instead of dismissing it.
-        final TextView errTv = label("", 13, RED, Typeface.NORMAL);
+        final TextView errTv = label("", 13, pal.danger(), Typeface.NORMAL);
         box.addView(errTv, mp(0, dp(8), 0, 0));
         b.setView(box);
         b.setPositiveButton("Save", null); // click overridden after show()
@@ -1059,7 +1063,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     private void note(String m) {
         if (lastSyncTv != null) {
             lastSyncTv.setText(m);
-            lastSyncTv.setTextColor(m.startsWith("Last sync") ? MUTED : RED);
+            lastSyncTv.setTextColor(m.startsWith("Last sync") ? pal.textSecondary() : pal.danger());
         }
     }
 
@@ -1133,7 +1137,7 @@ public class MainActivity extends Activity implements SelfCustody.Host {
 
     private LinearLayout card() {
         LinearLayout c = column();
-        c.setBackground(rounded(CARD));
+        c.setBackground(rounded(pal.surface()));
         int p = dp(16);
         c.setPadding(p, p, p, p);
         return c;
@@ -1164,8 +1168,8 @@ public class MainActivity extends Activity implements SelfCustody.Host {
     private EditText input(String text, int inputType) {
         EditText e = new EditText(this);
         e.setText(text);
-        e.setTextColor(TEXT);
-        e.setHintTextColor(MUTED);
+        e.setTextColor(pal.textPrimary());
+        e.setHintTextColor(pal.textSecondary());
         e.setSingleLine(true);
         e.setInputType(inputType);
         return e;

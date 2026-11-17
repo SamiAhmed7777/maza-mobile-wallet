@@ -55,7 +55,7 @@ public final class SelfCustody {
         void onUnauthorized();
         /** S-2a: true when protected actions (send / create / import seed)
          *  may proceed. MainActivity's implementation shows the PIN cover
-         *  and returns false while the lock is engaged — SelfCustody calls
+         *  and returns false while the lock is engaged - SelfCustody calls
          *  this at the START of every protected handler so an in-flight tap
          *  that raced an expiry cannot act (judge r2). */
         boolean gateOpen();
@@ -69,12 +69,10 @@ public final class SelfCustody {
     private static final long COIN = 100000000L;     // 1 MAZA = 1e8 sats
     private static final int ADDR_COUNT = 20;        // gap window per chain
 
-    private static final int TEXT = 0xFFFFFFFF;
-    private static final int MUTED = 0xFFB3B3B3;
-    private static final int CARD = 0xFF1E1E1E;
-    private static final int ACCENT = 0xFFF0A000;
-    private static final int RED = 0xFFFF6B6B;
-    private static final int GREEN = 0xFF6FD66F;
+    /** Palette resolved by the host screen from its LIVE theme (see UiTheme):
+     *  card fills, ink and the EditText hint color all come from here, so this
+     *  section follows dark/light exactly like MainActivity's own surfaces. */
+    private final UiTheme.Palette pal;
 
     private static final int ST_NONE = 0;
     private static final int ST_CREATE = 1;
@@ -108,9 +106,10 @@ public final class SelfCustody {
     private LinearLayout historyList;
     private TextView walletNoteTv;
 
-    public SelfCustody(Activity activity, Host host) {
+    public SelfCustody(Activity activity, Host host, UiTheme.Palette palette) {
         this.act = activity;
         this.host = host;
+        this.pal = palette;
         this.prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         this.recvIndex = prefs.getInt(KEY_RECV_IDX, 0);
         this.changeIndex = prefs.getInt(KEY_CHANGE_IDX, 0);
@@ -149,7 +148,7 @@ public final class SelfCustody {
 
     /** Called once per successful unlock, before any tab is shown. Unlock
      *  lands on BALANCE (MainActivity.selectTab(0)), so onShown() would not
-     *  fire until the user happens to tap WALLET — a creation-time import
+     *  fire until the user happens to tap WALLET - a creation-time import
      *  that died mid-flight (the live M2 incident) would stay blind the
      *  whole session. Re-import the watch window right at unlock; the
      *  backend import is idempotent (dedupes addresses, 200 on re-import).
@@ -197,7 +196,7 @@ public final class SelfCustody {
     /** Finds the key whose address matches (scans both chains; the change
      *  chain advances past the import window as changeIndex grows, so the
      *  scan must cover at least changeIndex+1 or change UTXOs at indices
-     *  >= ADDR_COUNT become unspendable — judge blocker). */
+     *  >= ADDR_COUNT become unspendable - judge blocker). */
     private Bip32.Node keyForAddress(String address) {
         int maxIdx = Math.max(ADDR_COUNT, changeIndex + 1);
         for (int chain = 0; chain <= 1; chain++) {
@@ -226,13 +225,13 @@ public final class SelfCustody {
     }
 
     private void renderNoSeed() {
-        TextView title = label("My Wallet", 22, TEXT, Typeface.BOLD);
+        TextView title = label("My Wallet", 22, pal.textPrimary(), Typeface.BOLD);
         root.addView(title);
         root.addView(label("Self-custody \u00B7 keys never leave this device",
-                13, MUTED, Typeface.NORMAL), mp(0, dp(4), 0, 0));
+                13, pal.textSecondary(), Typeface.NORMAL), mp(0, dp(4), 0, 0));
 
         if (wordlist == null) {
-            root.addView(label("Wordlist unavailable.", 13, RED, Typeface.NORMAL),
+            root.addView(label("Wordlist unavailable.", 13, pal.danger(), Typeface.NORMAL),
                     mp(0, dp(16), 0, 0));
             return;
         }
@@ -265,22 +264,22 @@ public final class SelfCustody {
     }
 
     private void renderCreate(String[] words) {
-        TextView title = label("Write down your seed phrase", 20, TEXT, Typeface.BOLD);
+        TextView title = label("Write down your seed phrase", 20, pal.textPrimary(), Typeface.BOLD);
         root.addView(title);
 
         root.addView(label(
                 "Anyone with these words can spend this wallet. Write them down."
                         + " This screen will not show them again.",
-                13, RED, Typeface.BOLD), mp(0, dp(8), 0, 0));
+                13, pal.danger(), Typeface.BOLD), mp(0, dp(8), 0, 0));
 
         LinearLayout list = card();
         root.addView(list, mp(0, dp(12), 0, 0));
         for (int i = 0; i < words.length; i++) {
             LinearLayout row = row();
-            row.addView(label(String.format(Locale.US, "%2d.", i + 1), 15, MUTED,
+            row.addView(label(String.format(Locale.US, "%2d.", i + 1), 15, pal.textSecondary(),
                     Typeface.NORMAL), new LinearLayout.LayoutParams(dp(40),
                     ViewGroup.LayoutParams.WRAP_CONTENT));
-            row.addView(label(words[i], 16, TEXT, Typeface.NORMAL),
+            row.addView(label(words[i], 16, pal.textPrimary(), Typeface.NORMAL),
                     new LinearLayout.LayoutParams(0,
                             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             list.addView(row, mp(0, i == 0 ? 0 : dp(6), 0, 0));
@@ -288,7 +287,7 @@ public final class SelfCustody {
 
         CheckBox confirmed = new CheckBox(act);
         confirmed.setText("I have written them down");
-        confirmed.setTextColor(TEXT);
+        confirmed.setTextColor(pal.textPrimary());
         root.addView(confirmed, mp(0, dp(12), 0, 0));
 
         Button done = new Button(act);
@@ -307,14 +306,14 @@ public final class SelfCustody {
     }
 
     private void renderImport() {
-        TextView title = label("Import seed phrase", 20, TEXT, Typeface.BOLD);
+        TextView title = label("Import seed phrase", 20, pal.textPrimary(), Typeface.BOLD);
         root.addView(title);
-        root.addView(label("12 words, separated by spaces.", 13, MUTED, Typeface.NORMAL),
+        root.addView(label("12 words, separated by spaces.", 13, pal.textSecondary(), Typeface.NORMAL),
                 mp(0, dp(4), 0, 0));
 
         EditText field = new EditText(act);
-        field.setTextColor(TEXT);
-        field.setHintTextColor(MUTED);
+        field.setTextColor(pal.textPrimary());
+        field.setHintTextColor(pal.textSecondary());
         field.setHint("abandon abandon ... about");
         field.setMinLines(2);
         field.setGravity(Gravity.TOP);
@@ -322,7 +321,7 @@ public final class SelfCustody {
                 | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         root.addView(field, mp(0, dp(12), 0, 0));
 
-        TextView error = label("", 13, RED, Typeface.NORMAL);
+        TextView error = label("", 13, pal.danger(), Typeface.NORMAL);
         root.addView(error, mp(0, dp(4), 0, 0));
 
         Button go = new Button(act);
@@ -368,7 +367,7 @@ public final class SelfCustody {
         try {
             writeSeed(mnemonic);
         } catch (IOException e) {
-            note("Could not store seed: " + e.getMessage(), RED);
+            note("Could not store seed: " + e.getMessage(), pal.danger());
             return;
         }
         account = null;
@@ -376,30 +375,30 @@ public final class SelfCustody {
         state = ST_WALLET;
         // Import all 40 addresses (receive 0..19 + change 0..19) up front so
         // the backend watches every address this wallet will ever use, with
-        // retries — a silent failure leaves a blind wallet.
+        // retries - a silent failure leaves a blind wallet.
         ensureWatchImported();
         rerender();
         refresh();
     }
 
     private void renderWallet() {
-        TextView title = label("My Wallet", 22, TEXT, Typeface.BOLD);
+        TextView title = label("My Wallet", 22, pal.textPrimary(), Typeface.BOLD);
         root.addView(title);
         root.addView(label("Self-custody \u00B7 keys never leave this device",
-                13, MUTED, Typeface.NORMAL), mp(0, dp(4), 0, 0));
+                13, pal.textSecondary(), Typeface.NORMAL), mp(0, dp(4), 0, 0));
 
         LinearLayout balCard = card();
         root.addView(balCard, mp(0, dp(12), 0, 0));
-        balCard.addView(label("BALANCE", 12, ACCENT, Typeface.BOLD));
-        balanceTv = label("...", 28, TEXT, Typeface.BOLD);
+        balCard.addView(label("BALANCE", 12, pal.accent(), Typeface.BOLD));
+        balanceTv = label("...", 28, pal.textPrimary(), Typeface.BOLD);
         balCard.addView(balanceTv, mp(0, dp(2), 0, 0));
 
         LinearLayout addrCard = card();
         root.addView(addrCard, mp(0, dp(12), 0, 0));
-        addrCard.addView(label("RECEIVE ADDRESS", 12, ACCENT, Typeface.BOLD));
-        addrIndexTv = label("", 12, MUTED, Typeface.NORMAL);
+        addrCard.addView(label("RECEIVE ADDRESS", 12, pal.accent(), Typeface.BOLD));
+        addrIndexTv = label("", 12, pal.textSecondary(), Typeface.NORMAL);
         addrCard.addView(addrIndexTv, mp(0, dp(2), 0, 0));
-        addrTv = mono(currentAddress(), 14, TEXT);
+        addrTv = mono(currentAddress(), 14, pal.textPrimary());
         addrCard.addView(addrTv, mp(0, dp(2), 0, 0));
         Button next = new Button(act);
         next.setText("NEXT");
@@ -410,7 +409,7 @@ public final class SelfCustody {
         });
         addrCard.addView(next, mp(0, dp(6), 0, 0));
 
-        qrStatusTv = label("", 12, MUTED, Typeface.NORMAL);
+        qrStatusTv = label("", 12, pal.textSecondary(), Typeface.NORMAL);
         qrStatusTv.setGravity(Gravity.CENTER_HORIZONTAL);
         root.addView(qrStatusTv, mp(0, dp(8), 0, 0));
         qrIv = new ImageView(act);
@@ -420,9 +419,9 @@ public final class SelfCustody {
 
         LinearLayout sendCard = card();
         root.addView(sendCard, mp(0, dp(12), 0, 0));
-        sendCard.addView(label("SEND \u00B7 SELF-CUSTODY", 12, ACCENT, Typeface.BOLD));
+        sendCard.addView(label("SEND \u00B7 SELF-CUSTODY", 12, pal.accent(), Typeface.BOLD));
         sendCard.addView(label("Signed on this device from your own seed balance.",
-                12, MUTED, Typeface.NORMAL), mp(0, dp(2), 0, 0));
+                12, pal.textSecondary(), Typeface.NORMAL), mp(0, dp(2), 0, 0));
 
         toEt = input("", "To (M...)");
         toEt.setTypeface(Typeface.MONOSPACE);
@@ -432,20 +431,20 @@ public final class SelfCustody {
                 | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         sendCard.addView(amountEt, mp(0, dp(6), 0, 0));
         sendCard.addView(label("fee " + fmt(FEE_SATS / (double) COIN) + " MAZA",
-                12, MUTED, Typeface.NORMAL), mp(0, dp(2), 0, 0));
+                12, pal.textSecondary(), Typeface.NORMAL), mp(0, dp(2), 0, 0));
         sendBtn = new Button(act);
         sendBtn.setText("Send");
         sendBtn.setOnClickListener(v -> doSend());
         sendCard.addView(sendBtn, mp(0, dp(6), 0, 0));
-        sendResultTv = mono("", 12, MUTED);
+        sendResultTv = mono("", 12, pal.textSecondary());
         sendResultTv.setTextIsSelectable(true);
         sendCard.addView(sendResultTv, mp(0, dp(4), 0, 0));
 
-        root.addView(label("HISTORY", 12, ACCENT, Typeface.BOLD), mp(0, dp(16), 0, 0));
+        root.addView(label("HISTORY", 12, pal.accent(), Typeface.BOLD), mp(0, dp(16), 0, 0));
         historyList = column();
         root.addView(historyList, mp(0, dp(4), 0, 0));
 
-        walletNoteTv = label("", 12, MUTED, Typeface.NORMAL);
+        walletNoteTv = label("", 12, pal.textSecondary(), Typeface.NORMAL);
         root.addView(walletNoteTv, mp(0, dp(8), 0, 0));
 
         updateAddress();
@@ -475,7 +474,7 @@ public final class SelfCustody {
                     return;
                 }
                 if (r.code != 200) {
-                    note("Update failed: " + r.errorText(), RED);
+                    note("Update failed: " + r.errorText(), pal.danger());
                     return;
                 }
                 final double balance;
@@ -492,7 +491,7 @@ public final class SelfCustody {
                     }
                     balance = sum;
                 } catch (JSONException e) {
-                    note("Bad response from server.", RED);
+                    note("Bad response from server.", pal.danger());
                     return;
                 }
 
@@ -507,9 +506,9 @@ public final class SelfCustody {
 
                 ui.post(() -> applyRefresh(balance, utxos, txs));
             } catch (IOException e) {
-                ui.post(() -> note("Update failed: " + e.getMessage(), RED));
+                ui.post(() -> note("Update failed: " + e.getMessage(), pal.danger()));
             } catch (JSONException e) {
-                ui.post(() -> note("Bad response from server.", RED));
+                ui.post(() -> note("Bad response from server.", pal.danger()));
             }
         }, "selfcustody-refresh").start();
     }
@@ -519,7 +518,7 @@ public final class SelfCustody {
         balanceTv.setText(fmt(balance) + " MAZA");
         historyList.removeAllViews();
         if (txs == null || txs.length() == 0) {
-            historyList.addView(label("No transactions yet", 13, MUTED, Typeface.NORMAL));
+            historyList.addView(label("No transactions yet", 13, pal.textSecondary(), Typeface.NORMAL));
         } else {
             for (int i = txs.length() - 1; i >= 0; i--) {
                 JSONObject t = txs.optJSONObject(i);
@@ -528,7 +527,7 @@ public final class SelfCustody {
         }
         note("Last sync " + java.text.DateFormat.getDateTimeInstance(
                 java.text.DateFormat.SHORT, java.text.DateFormat.MEDIUM)
-                .format(new java.util.Date()), MUTED);
+                .format(new java.util.Date()), pal.textSecondary());
     }
 
     private View historyRow(JSONObject t) {
@@ -547,21 +546,21 @@ public final class SelfCustody {
         String arrow = received ? "\u2190" : "\u2192";
         row1.addView(label(arrow + " " + (received ? "+" : "-")
                         + fmt(Math.abs(amount)) + " MAZA",
-                14, received ? GREEN : RED, Typeface.BOLD),
+                14, received ? pal.success() : pal.danger(), Typeface.BOLD),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        row1.addView(label(shortTxid(txid), 12, TEXT, Typeface.NORMAL));
+        row1.addView(label(shortTxid(txid), 12, pal.textPrimary(), Typeface.NORMAL));
         box.addView(row1);
 
         LinearLayout row2 = row();
-        row2.addView(label(t.optString("address", ""), 11, MUTED, Typeface.NORMAL),
+        row2.addView(label(t.optString("address", ""), 11, pal.textSecondary(), Typeface.NORMAL),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         String conf = confs > 0 ? confs + " confs" : "unconfirmed";
-        row2.addView(label(conf, 12, confs > 0 ? MUTED : ACCENT, Typeface.NORMAL));
+        row2.addView(label(conf, 12, confs > 0 ? pal.textSecondary() : pal.accent(), Typeface.NORMAL));
         box.addView(row2);
         if (time > 0) {
             box.addView(label(java.text.DateFormat.getDateTimeInstance(
                     java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
-                    .format(new java.util.Date(time)), 11, MUTED, Typeface.NORMAL));
+                    .format(new java.util.Date(time)), 11, pal.textSecondary(), Typeface.NORMAL));
         }
         return box;
     }
@@ -569,7 +568,7 @@ public final class SelfCustody {
     private void loadQr() {
         if (qrStatusTv == null || host.token() == null) return;
         qrStatusTv.setText("Loading QR...");
-        qrStatusTv.setTextColor(MUTED);
+        qrStatusTv.setTextColor(pal.textSecondary());
         final String addr = currentAddress();
         new Thread(() -> {
             try {
@@ -603,7 +602,7 @@ public final class SelfCustody {
     // ------------------------------------------------------------------ send
 
     private void doSend() {
-        // S-2a: spend gate — an in-flight tap that raced an expiry must not
+        // S-2a: spend gate - an in-flight tap that raced an expiry must not
         // act before the 10s cover tick arrives (judge r2).
         if (!host.gateOpen()) return;
         final String to = toEt.getText().toString().trim();
@@ -639,7 +638,7 @@ public final class SelfCustody {
         }
 
         sendBtn.setEnabled(false);
-        sendResult("Building and signing transaction...", MUTED);
+        sendResult("Building and signing transaction...", pal.textSecondary());
         new Thread(() -> {
             try {
                 sendFlow(toHash, Math.round(amt * COIN));
@@ -723,7 +722,7 @@ public final class SelfCustody {
 
         // Make sure the backend watches the change address before broadcast.
         // A failed import here would strand the change UTXO unwatched (blind
-        // wallet) — refuse to broadcast instead (judge blocker).
+        // wallet) - refuse to broadcast instead (judge blocker).
         if (changeAddress != null) {
             List<String> one = new ArrayList<>();
             one.add(changeAddress);
@@ -747,7 +746,7 @@ public final class SelfCustody {
                 ? txid.substring(0, 6) + ".." + txid.substring(txid.length() - 4)
                 : txid;
         ui.post(() -> {
-            sendResult("Sent: " + shortId, GREEN);
+            sendResult("Sent: " + shortId, pal.success());
             refresh();
         });
     }
@@ -772,7 +771,7 @@ public final class SelfCustody {
     }
 
     /** Re-imports the full address window and retries: a swallowed failure
-     *  here leaves the wallet blind (balance/history silently empty) — the
+     *  here leaves the wallet blind (balance/history silently empty) - the
      *  judge blocker that also bit the live M2 proof. Runs at startup and
      *  after wallet creation. */
     private void ensureWatchImported() {
@@ -797,7 +796,7 @@ public final class SelfCustody {
                 }
             }
             ui.post(() -> note("Watch import failed; balance may be stale.",
-                    RED));
+                    pal.danger()));
         }, "selfcustody-ensure-import").start();
     }
 
@@ -822,7 +821,7 @@ public final class SelfCustody {
     }
 
     private void sendErr(String msg) {
-        sendResult(msg, RED);
+        sendResult(msg, pal.danger());
     }
 
     private void sendResult(String msg, int color) {
@@ -844,7 +843,7 @@ public final class SelfCustody {
     private void qrErr(String msg) {
         if (qrStatusTv != null) {
             qrStatusTv.setText(msg);
-            qrStatusTv.setTextColor(RED);
+            qrStatusTv.setTextColor(pal.danger());
         }
     }
 
@@ -895,7 +894,7 @@ public final class SelfCustody {
 
     private LinearLayout card() {
         LinearLayout c = column();
-        c.setBackground(rounded(CARD));
+        c.setBackground(rounded(pal.surface()));
         int p = dp(14);
         c.setPadding(p, p, p, p);
         return c;
@@ -926,8 +925,8 @@ public final class SelfCustody {
     private EditText input(String text, String hint) {
         EditText e = new EditText(act);
         e.setText(text);
-        e.setTextColor(TEXT);
-        e.setHintTextColor(MUTED);
+        e.setTextColor(pal.textPrimary());
+        e.setHintTextColor(pal.textSecondary());
         e.setHint(hint);
         e.setSingleLine(true);
         e.setInputType(InputType.TYPE_CLASS_TEXT);

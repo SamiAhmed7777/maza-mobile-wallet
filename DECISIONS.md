@@ -203,6 +203,37 @@ chain code on three fields (noted per item).
   (`String.length()` NPE, class named in `origin:`); lambdas + named
   classes dex fine. Codebase shape stays lambda-based; avoid `new X(){}`.
 
+- Auto-lock settings contract (2026-11-17, S-4 follow-up): TWO keys, one
+  owner each. `pref_autolock_minutes` (int minutes) is the settings
+  AUTHORITY - the value the selector reads back and clamps to its 5/10/30
+  menu. `pin.autolock_ms` is PinGuard's STORAGE HOOK: the window its
+  LockPolicy is constructed with at session start. SettingsActivity writes
+  both in ONE commit (authority first), then retunes the RUNNING session
+  through `PinGuard.retuneAutolockMs(long)`, so a delay change applies
+  immediately instead of at the next app start: 30 -> 5 min is enforced at
+  the next gate check (a session already idle past 5 min locks then,
+  otherwise at its next expiry), and 5 -> 30 min stops a live session from
+  expiring on the old deadline. The retune itself never locks or unlocks;
+  note the ordering - the selector tap is itself a touch, so
+  `onUserInteraction` resolves an ALREADY expired window before the retune
+  can run, and a retune can never rescue a lapsed session.
+  `MainActivity.applySavedAutolock()` reconciles the two
+  keys at every launch (authority wins; an S-2a-era ms-only install is
+  adopted), so the store cannot hold a hook value the settings screen
+  disagrees with. The retune is a WINDOW change only by LockPolicy's
+  contract: it never locks, never unlocks, never clears the wrong-PIN
+  streak and never moves an in-flight backoff deadline. Values outside
+  [1 min, 60 min] are refused (IllegalArgumentException) by
+  LockPolicy.setAutolockMs itself; the selector's choices are all inside
+  the range, and the launch reconcile clamps to the menu before anything
+  is written, so a live retune cannot be handed an unenforceable window.
+  Accepted residual: the window is a plain field with no cross-thread
+  synchronization - a verify already in flight when the selector commits
+  sees the previous window for that single comparison (fails toward the
+  older window, never toward an unlock), and the next gate check sees the
+  new one. Selector copy now states the change applies immediately
+  (`settings_autolock_note`).
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

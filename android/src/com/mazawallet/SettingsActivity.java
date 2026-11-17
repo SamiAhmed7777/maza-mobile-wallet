@@ -50,10 +50,13 @@ import java.util.Arrays;
  * and PinGuard):
  * <ul>
  *   <li>{@code url} - endpoint, owned by MainActivity's Connect card too;</li>
- *   <li>{@code pref_autolock_minutes} - int minutes, default 5. PinGuard
- *       reads {@code pin.autolock_ms} when it constructs the LockPolicy, so
- *       the selector writes BOTH keys in one commit; MainActivity reconciles
- *       them at every launch (SettingsStore-style sync, no policy change);</li>
+ *   <li>{@code pref_autolock_minutes} - int minutes, default 5, the settings
+ *       AUTHORITY. {@code pin.autolock_ms} is PinGuard's storage hook (the
+ *       window it builds the LockPolicy with), so the selector writes BOTH
+ *       keys in one commit and then retunes the RUNNING session through
+ *       {@link PinGuard#retuneAutolockMs(long)} - no restart needed.
+ *       MainActivity reconciles the two keys at every launch (authority
+ *       wins, no policy change);</li>
  *   <li>{@code pref_theme_mode} - "system" | "light" | "dark".</li>
  * </ul>
  *
@@ -254,13 +257,32 @@ public final class SettingsActivity extends Activity {
 
     private void selectAutolock(int minutes) {
         long ms = minutes * 60_000L;
-        // Two keys, one commit: pref_autolock_minutes is the documented
-        // settings value (int minutes); pin.autolock_ms is what PinGuard reads
-        // when it builds the LockPolicy at session start.
-        prefs.edit()
+        // Two keys, one SYNCHRONOUS commit: pref_autolock_minutes is the
+        // documented settings value (int minutes) and the authority;
+        // pin.autolock_ms is what PinGuard reads when it builds the
+        // LockPolicy at session start. commit() (not apply()) so the store
+        // and the live policy can never disagree: the durable write lands
+        // BEFORE the retune, and a failed commit aborts the retune instead
+        // of retuning a session whose persisted value never happened.
+        boolean persisted = prefs.edit()
                 .putInt(KEY_AUTOLOCK_MINUTES, minutes)
                 .putLong(PinGuard.KEY_AUTOLOCK_MS, ms)
-                .apply();
+                .commit();
+        if (!persisted) {
+            toast(getString(R.string.autolock_save_failed));
+            return;
+        }
+        // S-4 follow-up: the new delay applies to the RUNNING session, not
+        // only at the next launch. MainActivity.sActiveGuard is the live
+        // session policy (the same guard the resume gate consults); the
+        // retune changes the window only - never the lock state, never the
+        // wrong-PIN streak.
+        // With no live session (restoration window) the persisted value is
+        // picked up by the next PinGuard construction at launch.
+        PinGuard session = MainActivity.sActiveGuard;
+        if (session != null) {
+            session.retuneAutolockMs(ms);
+        }
         renderAutolock();
     }
 
@@ -729,21 +751,16 @@ public final class SettingsActivity extends Activity {
     }
 
     private void applyPalette(boolean dark) {
-        if (dark) {
-            bg = 0xFF141414;
-            cardBg = 0xFF1E1E1E;
-            text = 0xFFFFFFFF;
-            muted = 0xFFB3B3B3;
-            accent = 0xFFF0A000;
-            danger = 0xFFFF6B6B;
-        } else {
-            bg = 0xFFFFFFFF;
-            cardBg = 0xFFF0F0F0;
-            text = 0xFF101010;
-            muted = 0xFF585858;
-            accent = 0xFF8A5200;
-            danger = 0xFFB3261E;
-        }
+        // Single source of truth: the same UiTheme palette the wallet screens
+        // resolve from colors.xml via the live theme (wave-2 alignment — the
+        // duplicated literals are gone, so settings and wallet cannot drift).
+        UiTheme.Palette pal = UiTheme.paletteOf(this, !dark);
+        bg = pal.background();
+        cardBg = pal.surface();
+        text = pal.textPrimary();
+        muted = pal.textSecondary();
+        accent = pal.accent();
+        danger = pal.danger();
     }
 
     private boolean hasSeed() {

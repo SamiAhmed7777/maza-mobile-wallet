@@ -21,7 +21,9 @@ import java.security.SecureRandom;
  *                  the stored count is used at verify time)
  *   pin.hash       32 derived bytes, hex (PBKDF2-HMAC-SHA512)
  *   pin.autolock_ms inactivity window (default 5 min; the S-4 settings
- *                  screen owns the editor — this key IS the hook)
+ *                  screen owns the editor - this key IS the hook, and
+ *                  retuneAutolockMs() applies a change to the RUNNING
+ *                  session's LockPolicy without a restart)
  * The PIN itself is never stored, never logged, never leaves this class
  * except as a cleared char[]; verification compares derived keys with
  * MessageDigest.isEqual (constant time). Change/Remove REQUIRE the current
@@ -152,6 +154,26 @@ public final class PinGuard {
     }
 
     // -------------------------------------------------------------- policy
+
+    /** S-4 follow-up: adopt a NEW inactivity window for the RUNNING session.
+     *  Validation is LockPolicy's own window check - a value outside
+     *  [MIN_AUTOLOCK_MS, MAX_AUTOLOCK_MS] throws IllegalArgumentException and
+     *  the live window stays untouched (the settings selector's 5/10/30 min
+     *  choices are all inside the range, so a live retune cannot fail).
+     *
+     *  WINDOW change only, by LockPolicy's contract: this never locks, never
+     *  unlocks (a LONGER window cannot open a locked session), never clears
+     *  the wrong-PIN streak and never moves an in-flight backoff deadline. A
+     *  SHORTER window takes effect at the next isLocked/onActivity check, so
+     *  the lazy gate stays authoritative.
+     *
+     *  Storage stays with the caller: SettingsActivity writes
+     *  pref_autolock_minutes + pin.autolock_ms in ONE commit BEFORE calling
+     *  this, so autolockMs() (store-backed) and the live policy agree. This
+     *  method never touches prefs - one writer per key. */
+    public void retuneAutolockMs(long ms) {
+        policy.setAutolockMs(ms);
+    }
 
     /** Derives the stored verifier for the attempted PIN (constant-time
      *  compare). Zeroes the attempt char[] on every path. A CORRUPT store

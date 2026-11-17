@@ -28,15 +28,22 @@ FAIL POLICY (no contradictions allowed)
 
 WHY THE HARDCODED ROWS MATTER
 -----------------------------
-Both source files pin their own ink constants, so today every text/background
-pair they draw travels together and survives a palette change by ignoring it.
-The rows below measure the cross-lane contradiction that appears the moment
-those surfaces come from this palette (which is exactly what adopting light
-mode means): the app's surfaces turn light while its ink stays dark-theme
-white. The PIN dialogs are the one place where this contradiction already
-renders today, because an AlertDialog surface follows the activity theme
-(our palette) while its body text is built by MainActivity's hardcoded
-labels.
+Both source files used to pin their own ink constants, so every text/background
+pair they drew travelled together and survived a palette change by ignoring it.
+The rows measured the cross-lane contradiction that appeared the moment those
+surfaces came from this palette (which is exactly what adopting light mode
+means): the app's surfaces turned light while its ink stayed dark-theme white.
+The PIN dialogs were the one place where that contradiction already rendered,
+because an AlertDialog surface follows the activity theme (our palette) while
+its body text was built by MainActivity's hardcoded labels.
+
+WAVE-2 RESKIN (landed): both files now resolve every surface and ink from the
+theme through UiTheme, so the out-of-territory table is EMPTY and the ledger is
+EMPTY - that is the acceptance state. The table and the ledger stay in place as
+the regression gate: reintroducing a hardcoded ink in either file repopulates a
+row and fails the ledger test immediately. The dark-render baseline below is
+frozen to the hexes those constants shipped with, so dark mode provably still
+renders the same colors.
 
 Run:  python3 -m unittest discover -s tests -v
       python3 tests/test_theme_contrast.py --table     (print the table only)
@@ -60,6 +67,7 @@ SRC = os.path.join(ANDROID, "src", "com", "mazawallet")
 MAIN_ACTIVITY = os.path.join(SRC, "MainActivity.java")
 SELF_CUSTODY = os.path.join(SRC, "SelfCustody.java")
 THEME_CONTROLLER = os.path.join(SRC, "ThemeController.java")
+UI_THEME = os.path.join(SRC, "UiTheme.java")
 
 ANDROID_SDK = os.environ.get("ANDROID_SDK", "/opt/android-sdk")
 ANDROID_JAR = os.path.join(ANDROID_SDK, "platforms", "android-34", "android.jar")
@@ -74,6 +82,24 @@ PALETTE_KEYS = (
     "background", "surface", "bar", "divider",
     "text_primary", "text_secondary", "accent", "danger", "success",
 )
+
+# Dark-render baseline: the exact hexes the nine hardcoded ints in
+# MainActivity.java shipped with (BG / CARD / BAR / DIVIDER / TEXT / MUTED /
+# ACCENT / RED / GREEN) before the wave-2 reskin replaced them with palette
+# lookups. Frozen here so "dark mode looks identical to today" is a machine
+# check, not a promise: if someone edits a maza_dark_* value, dark mode has
+# visibly changed and this fails.
+DARK_RENDER_BASELINE = {
+    "background": "#FF141414",
+    "surface": "#FF1E1E1E",
+    "bar": "#FF1A1A1A",
+    "divider": "#FF2E2E2E",
+    "text_primary": "#FFFFFFFF",
+    "text_secondary": "#FFB3B3B3",
+    "accent": "#FFF0A000",
+    "danger": "#FFFF6B6B",
+    "success": "#FF6FD66F",
+}
 
 
 # --------------------------------------------------------------- colour math
@@ -137,6 +163,18 @@ def parse_color_resources(path):
             raise ValueError("%s has a <color> without a name" % path)
         colors[name] = value
     return colors
+
+
+def parse_styles(path=STYLES_XML):
+    """{style name: {'parent': ..., 'items': {item name: value}}}."""
+    root = ElementTree.parse(path).getroot()
+    styles = {}
+    for style in root.findall("style"):
+        items = {}
+        for item in style.findall("item"):
+            items[item.get("name")] = (item.text or "").strip()
+        styles[style.get("name")] = {"parent": style.get("parent"), "items": items}
+    return styles
 
 
 def load_palettes(colors_path=COLORS_XML):
@@ -292,40 +330,17 @@ def below_threshold_out_of_territory():
 
 
 # Expected-failure ledger: the exact (pairing, palette) tuples allowed to sit
-# below WCAG threshold while the wave-2 palette reskin of these two files is
-# outstanding. This is a MACHINE-CHECKED gate, not prose: the gate test below
-# fails the suite when reality drifts from this ledger in EITHER direction -
-# a NEW below-threshold pairing appears (regression), or a ledgered row is
-# fixed (in which case the row must be removed from this ledger in the same
-# change so the ledger always matches reality). Wave-2 acceptance is an
-# EMPTY ledger.
-EXPECTED_BELOW_THRESHOLD = frozenset([
-    ('hardcoded ACCENT (MainActivity.java) on palette background', 'light'),
-    ('hardcoded ACCENT (MainActivity.java) on palette bar', 'light'),
-    ('hardcoded ACCENT (MainActivity.java) on palette surface', 'light'),
-    ('hardcoded ACCENT (SelfCustody.java) on palette background', 'light'),
-    ('hardcoded ACCENT (SelfCustody.java) on palette surface', 'light'),
-    ('hardcoded GREEN (MainActivity.java) on palette background', 'light'),
-    ('hardcoded GREEN (MainActivity.java) on palette bar', 'light'),
-    ('hardcoded GREEN (MainActivity.java) on palette surface', 'light'),
-    ('hardcoded GREEN (SelfCustody.java) on palette background', 'light'),
-    ('hardcoded GREEN (SelfCustody.java) on palette surface', 'light'),
-    ('hardcoded MUTED (MainActivity.java) on palette background', 'light'),
-    ('hardcoded MUTED (MainActivity.java) on palette bar', 'light'),
-    ('hardcoded MUTED (MainActivity.java) on palette surface', 'light'),
-    ('hardcoded MUTED (SelfCustody.java) on palette background', 'light'),
-    ('hardcoded MUTED (SelfCustody.java) on palette surface', 'light'),
-    ('hardcoded RED (MainActivity.java) on palette background', 'light'),
-    ('hardcoded RED (MainActivity.java) on palette bar', 'light'),
-    ('hardcoded RED (MainActivity.java) on palette surface', 'light'),
-    ('hardcoded RED (SelfCustody.java) on palette background', 'light'),
-    ('hardcoded RED (SelfCustody.java) on palette surface', 'light'),
-    ('hardcoded TEXT (MainActivity.java) on palette background', 'light'),
-    ('hardcoded TEXT (MainActivity.java) on palette bar', 'light'),
-    ('hardcoded TEXT (MainActivity.java) on palette surface', 'light'),
-    ('hardcoded TEXT (SelfCustody.java) on palette background', 'light'),
-    ('hardcoded TEXT (SelfCustody.java) on palette surface', 'light'),
-])
+# below WCAG threshold. This is a MACHINE-CHECKED gate, not prose: the gate
+# test below fails the suite when reality drifts from this ledger in EITHER
+# direction - a NEW below-threshold pairing appears (regression), or a ledgered
+# row is fixed (in which case the row must be removed from this ledger in the
+# same change so the ledger always matches reality).
+#
+# Wave-2 acceptance: EMPTY, and it is empty. The reskin converted both files to
+# palette lookups, so no out-of-territory pairing is recorded at all; keeping
+# the gate means a hardcoded ink creeping back in fails the suite on the spot
+# instead of quietly rendering white-on-white in light mode.
+EXPECTED_BELOW_THRESHOLD = frozenset()
 
 
 # ------------------------------------------------------------------- printing
@@ -424,26 +439,87 @@ class PaletteResourceTest(unittest.TestCase):
                     self.assertEqual(value[1:3].upper(), "FF",
                                      "%s/%s must be opaque (AA=FF)" % (mode, key))
 
-    def test_dark_palette_mirrors_the_shipping_constants(self):
-        """Dark mode must look identical to today: same hexes as the
-        constants MainActivity hardcodes. Skipped if those constants have
-        been converted to resource lookups (the comparison then has no
-        meaning)."""
-        constants = hardcoded_int_constants(MAIN_ACTIVITY)
-        expected = {
-            "BG": "background", "CARD": "surface", "BAR": "bar", "DIVIDER": "divider",
-            "TEXT": "text_primary", "MUTED": "text_secondary", "ACCENT": "accent",
-            "RED": "danger", "GREEN": "success",
-        }
-        missing = [name for name in expected if name not in constants]
-        if missing:
-            self.skipTest("MainActivity no longer hardcodes %s - palette adoption "
-                          "already happened, comparison retired" % ", ".join(sorted(missing)))
-        for constant, slot in expected.items():
-            with self.subTest(constant=constant, slot=slot):
-                self.assertEqual(constants[constant], PALETTES["dark"][slot],
-                                 "dark palette must reproduce MainActivity.%s exactly"
-                                 % constant)
+    def test_dark_render_matches_the_frozen_baseline(self):
+        """Dark mode must look IDENTICAL to the pre-reskin app.
+
+        Before the wave-2 reskin MainActivity pinned nine ARGB ints. The dark
+        palette is required to reproduce those nine hexes exactly, frozen in
+        DARK_RENDER_BASELINE - so "nothing changes in dark mode" is asserted,
+        not assumed, and any later edit to a maza_dark_* value fails here.
+        """
+        for slot, expected in DARK_RENDER_BASELINE.items():
+            with self.subTest(slot=slot):
+                self.assertEqual(
+                    PALETTES["dark"][slot], expected,
+                    "maza_dark_%s = %s but the shipping dark render used %s"
+                    % (slot, PALETTES["dark"][slot], expected))
+
+    def test_sources_resolve_every_colour_from_the_palette(self):
+        """The reskin's substance: neither source may hardcode an ARGB literal
+        and both must read their colours from UiTheme's live palette."""
+        allowed_literals = {"0x00000000"}   # transparent tab fills, not a colour
+        for path in (MAIN_ACTIVITY, SELF_CUSTODY):
+            name = os.path.basename(path)
+            code = _strip_comments(read_text(path))
+            literals = set(re.findall(r"0x[0-9A-Fa-f]{8}", code))
+            with self.subTest(source=name):
+                self.assertEqual(literals - allowed_literals, set(),
+                                 "%s still hardcodes ARGB literals: %s"
+                                 % (name, sorted(literals - allowed_literals)))
+                self.assertIn("UiTheme.Palette", code,
+                              "%s must take its colours from UiTheme" % name)
+                self.assertTrue(re.search(r"\bpal\.[a-zA-Z]+\(\)", code),
+                                "%s must read slots from its resolved palette" % name)
+
+    def test_host_passes_the_live_palette_to_self_custody(self):
+        """SelfCustody has no theme of its own: its host resolves the palette
+        once (after applyTheme) and hands it over, so the WALLET section and
+        MainActivity's own surfaces can never show different palettes."""
+        main = _strip_comments(read_text(MAIN_ACTIVITY))
+        custody = _strip_comments(read_text(SELF_CUSTODY))
+        self.assertIn("pal = UiTheme.palette(this);", main,
+                      "MainActivity must resolve the palette in onCreate")
+        self.assertIn("new SelfCustody(this, this, pal)", main)
+        self.assertRegex(custody,
+                         r"SelfCustody\(Activity activity, Host host,\s*"
+                         r"UiTheme\.Palette palette\)")
+        self.assertNotIn("UiTheme.palette(", custody,
+                         "SelfCustody must not resolve a palette of its own")
+
+    def test_pin_dialogs_are_palette_inked(self):
+        """The PIN prompts render on a theme-owned dialog surface, so their
+        body/hint/error ink must come from the palette too - this is the pair
+        that used to render white-on-white in light mode."""
+        code = _strip_comments(read_text(MAIN_ACTIVITY))
+        for builder in ("showPinSetPrompt", "promptCurrentPin"):
+            with self.subTest(dialog=builder):
+                start = code.find("private void " + builder)
+                self.assertGreater(start, -1, "%s not found" % builder)
+                body = code[start:code.find("\n    }", start)]
+                self.assertIn("pinInput(", body,
+                              "%s must build its fields via pinInput()" % builder)
+                self.assertNotIn("0x", body,
+                                 "%s must not pin an ink literal" % builder)
+        # The dialog field ink itself (text + hint) comes from the palette.
+        start = code.find("private EditText input(")
+        self.assertGreater(start, -1)
+        field = code[start:code.find("\n    }", start)]
+        self.assertIn("pal.textPrimary()", field,
+                      "dialog/field body ink must come from the palette")
+        self.assertIn("pal.textSecondary()", field,
+                      "dialog/field hint ink must come from the palette")
+        # And the dialog themes must each point at their own palette.
+        styles = parse_styles()
+        for theme, prefix in (("Theme.MazaWallet.Dialog", "maza_dark_"),
+                              ("Theme.MazaWallet.Light.Dialog", "maza_light_")):
+            with self.subTest(dialog_theme=theme):
+                items = styles[theme]["items"]
+                colours = [v for v in items.values() if v.startswith("@color/")]
+                self.assertTrue(colours, "%s must set palette colours" % theme)
+                for value in colours:
+                    self.assertTrue(value.startswith("@color/" + prefix),
+                                    "%s must use %s* colours, got %s"
+                                    % (theme, prefix, value))
 
     def test_light_palette_is_distinct_from_dark(self):
         dark, light = PALETTES["dark"], PALETTES["light"]
@@ -491,9 +567,18 @@ class ContrastTableTest(unittest.TestCase):
         self.assertTrue(max(sizes) >= 28)
 
     def test_out_of_territory_pairings_are_recorded(self):
+        """Every hardcoded ink that still exists must be recorded with a ratio
+        for both palettes. An EMPTY table is the wave-2 acceptance state: both
+        sources resolve their inks from the palette, so nothing is left out of
+        territory to record (the two tests above prove the conversion)."""
         self.assertTrue(PALETTES, "palette resources did not load")
-        self.assertTrue(OUT_OF_TERRITORY_PAIRINGS,
-                        "expected hardcoded MainActivity/SelfCustody inks to be recorded")
+        if not OUT_OF_TERRITORY_PAIRINGS:
+            for path in (MAIN_ACTIVITY, SELF_CUSTODY):
+                with self.subTest(source=os.path.basename(path)):
+                    self.assertEqual(hardcoded_int_constants(path), {},
+                                     "%s still declares a hardcoded colour"
+                                     % os.path.basename(path))
+            return
         for row in OUT_OF_TERRITORY_PAIRINGS:
             with self.subTest(pairing=row["pairing"]):
                 self.assertEqual(set(row["ratios"]), {"dark", "light"},
@@ -752,11 +837,180 @@ public final class R {
         self.assertNotIn("FAIL ", output)
 
 
+class UiThemeResourceTest(unittest.TestCase):
+    """UiTheme must resolve both palettes from resources, not from literals."""
+
+    def setUp(self):
+        self.source = read_text(UI_THEME)
+        self.code = _strip_comments(self.source)
+
+    def test_palette_of_references_every_slot_of_both_palettes(self):
+        expected = {"maza_%s_%s" % (mode, key)
+                    for mode in ("dark", "light") for key in PALETTE_KEYS}
+        found = re.findall(r"\bmaza_(?:dark|light)_[a-z_]+\b", self.code)
+        with self.subTest(check="coverage"):
+            self.assertEqual(set(found), expected,
+                             "UiTheme must resolve exactly the nine slots of each "
+                             "palette; missing=%s extra=%s"
+                             % (sorted(expected - set(found)),
+                                sorted(set(found) - expected)))
+        with self.subTest(check="each slot used once"):
+            self.assertEqual(len(found), len(expected),
+                             "a slot is referenced twice: %s"
+                             % sorted({n for n in found if found.count(n) > 1}))
+
+    def test_no_appcompat_or_third_party_imports(self):
+        imports = [line.strip() for line in self.source.splitlines()
+                   if line.strip().startswith("import ")]
+        for name in imports:
+            with self.subTest(import_=name):
+                self.assertTrue(name.startswith("import android.")
+                                or name.startswith("import java."),
+                                "unexpected import: %s" % name)
+
+    def test_palette_is_immutable_and_exposes_the_nine_slots(self):
+        for accessor in ("background", "surface", "bar", "divider",
+                         "textPrimary", "textSecondary", "accent", "danger", "success"):
+            with self.subTest(accessor=accessor):
+                self.assertIn("public int %s()" % accessor, self.source)
+        self.assertNotIn("public void set", self.source,
+                         "Palette must stay immutable: it is read from worker threads")
+        # Per-activity resolution + re-resolution on recreate.
+        self.assertIn("public static Palette palette(Context context)", self.source)
+
+
+class UiThemeLogicTest(unittest.TestCase):
+    """Runs UiTheme's pure colour math on the desktop JVM (no Android device).
+
+    Only static, Android-free helpers are exercised (isLightCanvas /
+    relativeLuminance); context-bound resolution is compile-checked against a
+    generated R stub, and the attribute it reads is asserted in source.
+    """
+
+    PROBE = r"""
+package com.mazawallet;
+
+public final class UiThemeProbe {
+    private static int failed = 0;
+
+    private static void check(String what, boolean ok) {
+        System.out.println((ok ? "PASS " : "FAIL ") + what);
+        if (!ok) failed++;
+    }
+
+    private static void near(String what, double actual, double expected) {
+        check(what + " (" + actual + ")", Math.abs(actual - expected) < 1e-9);
+    }
+
+    public static void main(String[] args) {
+        near("relativeLuminance(#FFFFFFFF) == 1.0",
+             UiTheme.relativeLuminance(0xFFFFFFFF), 1.0);
+        near("relativeLuminance(#FF000000) == 0.0",
+             UiTheme.relativeLuminance(0xFF000000), 0.0);
+        check("light page background reads as a light canvas",
+              UiTheme.isLightCanvas(LIGHT_BACKGROUND));
+        check("dark page background reads as a dark canvas",
+              !UiTheme.isLightCanvas(DARK_BACKGROUND));
+        check("light card surface reads as a light canvas",
+              UiTheme.isLightCanvas(LIGHT_SURFACE));
+        check("dark card surface reads as a dark canvas",
+              !UiTheme.isLightCanvas(DARK_SURFACE));
+        check("light tab bar reads as a light canvas",
+              UiTheme.isLightCanvas(LIGHT_BAR));
+        check("dark tab bar reads as a dark canvas",
+              !UiTheme.isLightCanvas(DARK_BAR));
+        check("alpha channel is ignored (transparent white reads light)",
+              UiTheme.isLightCanvas(0x00FFFFFF));
+        check("unresolved canvas (0) falls back to the dark palette",
+              !UiTheme.isLightCanvas(0));
+        check("mid grey (0x6F) is below the split", !UiTheme.isLightCanvas(0xFF6F6F6F));
+        check("light grey (0xBF) is above the split", UiTheme.isLightCanvas(0xFFBFBFBF));
+        if (failed > 0) {
+            System.out.println(failed + " probe check(s) FAILED");
+            System.exit(1);
+        }
+        System.out.println("ALL UI THEME PROBES PASSED");
+    }
+}
+"""
+
+    def _r_stub(self):
+        lines = ["package com.mazawallet;", "",
+                 "public final class R {", "    public static final class color {"]
+        value = 0x7F0C0000
+        for mode in ("dark", "light"):
+            for key in PALETTE_KEYS:
+                lines.append("        public static final int maza_%s_%s = 0x%08X;"
+                             % (mode, key, value))
+                value += 1
+        lines.extend(["    }", "}", ""])
+        return "\n".join(lines)
+
+    def _probe_source(self):
+        values = {
+            "LIGHT_BACKGROUND": PALETTES["light"]["background"],
+            "LIGHT_SURFACE": PALETTES["light"]["surface"],
+            "LIGHT_BAR": PALETTES["light"]["bar"],
+            "DARK_BACKGROUND": PALETTES["dark"]["background"],
+            "DARK_SURFACE": PALETTES["dark"]["surface"],
+            "DARK_BAR": PALETTES["dark"]["bar"],
+        }
+        body = self.PROBE
+        for name, hex_value in values.items():
+            body = body.replace(name, "0x" + hex_value.lstrip("#"))
+        return body
+
+    def test_the_two_canvases_sit_far_from_the_luminance_split(self):
+        """The fallback split only has to disambiguate OUR two palettes, so
+        assert the gap is wide in Python's own WCAG math as well."""
+        for mode in ("dark", "light"):
+            lum = relative_luminance(hex_to_rgb(PALETTES[mode]["background"]))
+            with self.subTest(palette=mode):
+                if mode == "dark":
+                    self.assertLess(lum, 0.1)
+                else:
+                    self.assertGreater(lum, 0.8)
+
+    def test_java_logic_on_desktop_jvm(self):
+        if not JAVAC or not JAVA:
+            self.skipTest("javac/java unavailable - JVM probe not run")
+        if not os.path.exists(ANDROID_JAR):
+            self.skipTest("android.jar not found at %s - JVM probe not run" % ANDROID_JAR)
+        if not PALETTES:
+            self.skipTest("palette resources did not load")
+        workdir = tempfile.mkdtemp(prefix="maza-uitheme-probe-")
+        classes = os.path.join(workdir, "classes")
+        os.makedirs(classes)
+        sources = {
+            "UiTheme.java": read_text(UI_THEME),
+            "R.java": self._r_stub(),
+            "UiThemeProbe.java": self._probe_source(),
+        }
+        for name, body in sources.items():
+            with open(os.path.join(workdir, name), "w", encoding="ascii") as handle:
+                handle.write(body)
+        compiled = subprocess.run(
+            [JAVAC, "-nowarn", "-classpath", ANDROID_JAR, "-d", classes]
+            + [os.path.join(workdir, name) for name in sources],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
+        self.assertEqual(compiled.returncode, 0,
+                         "javac failed:\n%s" % compiled.stdout.decode("utf-8", "replace"))
+        run = subprocess.run(
+            [JAVA, "-classpath", classes + os.pathsep + ANDROID_JAR,
+             "com.mazawallet.UiThemeProbe"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+        output = run.stdout.decode("utf-8", "replace")
+        self.assertEqual(run.returncode, 0, "UiTheme probe failed:\n%s" % output)
+        self.assertIn("ALL UI THEME PROBES PASSED", output)
+        self.assertNotIn("FAIL ", output)
+
+
 class SourceHygieneTest(unittest.TestCase):
     """Repo rule: everything this lane writes is pure ASCII."""
 
     def test_lane_files_are_ascii(self):
-        for path in (COLORS_XML, STYLES_XML, THEME_CONTROLLER, os.path.abspath(__file__)):
+        for path in (COLORS_XML, STYLES_XML, THEME_CONTROLLER, UI_THEME,
+                     MAIN_ACTIVITY, SELF_CUSTODY, os.path.abspath(__file__)):
             with self.subTest(path=os.path.basename(path)):
                 with open(path, "rb") as handle:
                     raw = handle.read()

@@ -153,6 +153,9 @@ public final class SelfTest {
         autolockChecks();
         settingsResumeGateChecks();
 
+        section("PinGuard in-session retune (S-4 follow-up)");
+        pinRetuneChecks();
+
         section("Settings screens WCAG contrast (S-4)");
         settingsContrastChecks();
 
@@ -382,6 +385,118 @@ public final class SelfTest {
         check("autolock: out-of-range windows refused", refused);
     }
 
+    /** S-4 follow-up: the in-session retune path. PinGuard.retuneAutolockMs(ms)
+     *  is a single delegation to LockPolicy.setAutolockMs - PinGuard itself
+     *  needs an Android Context, so the desktop JVM drives the EXACT call the
+     *  wrapper makes. Pinned here: the window boundaries (MIN/MAX accepted,
+     *  one ms outside refused), rejection atomicity, and the invariants a
+     *  retune must never break - lock state, the wrong-PIN streak, an
+     *  in-flight backoff deadline, and the background/resume bracket.
+     *  Fake clock, ms. */
+    private static void pinRetuneChecks() {
+        long T = 300_000L; // 5 min
+
+        // --- window boundaries: the edges themselves are supported ---
+        boolean edgesAccepted = true;
+        long[] edges = {LockPolicy.MIN_AUTOLOCK_MS, LockPolicy.MAX_AUTOLOCK_MS};
+        for (long edge : edges) {
+            try {
+                LockPolicy p = new LockPolicy(T, 0);
+                p.setAutolockMs(edge);
+                edgesAccepted &= p.autolockMs() == edge;
+            } catch (IllegalArgumentException e) {
+                edgesAccepted = false;
+            }
+        }
+        check("pin-retune: MIN and MAX window edges accepted", edgesAccepted);
+
+        boolean outsideRefused = true;
+        long[] outside = {LockPolicy.MIN_AUTOLOCK_MS - 1, LockPolicy.MAX_AUTOLOCK_MS + 1};
+        for (long bad : outside) {
+            try {
+                new LockPolicy(T, 0).setAutolockMs(bad);
+                outsideRefused = false;
+            } catch (IllegalArgumentException e) {
+                // expected: one ms outside the enforceable window
+            }
+        }
+        check("pin-retune: windows one ms outside the range refused", outsideRefused);
+
+        // --- a refused retune is atomic: the live window is unchanged ---
+        LockPolicy kept = new LockPolicy(T, 0);
+        try {
+            kept.setAutolockMs(LockPolicy.MAX_AUTOLOCK_MS + 1);
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
+        check("pin-retune: rejected window leaves the live window untouched",
+                kept.autolockMs() == T);
+
+        // --- state preservation: an OPEN session stays open, new window wins ---
+        LockPolicy open = LockPolicy.forSession(true, T, 0);
+        open.verifyAttempt(1, true);
+        open.setAutolockMs(10 * 60_000L);
+        check("pin-retune: an open session stays open across the retune",
+                !open.isLocked(2));
+        check("pin-retune: the retuned window is what the gate enforces",
+                !open.isLocked(T + 1) && open.isLocked(10 * 60_000L + 1));
+
+        // --- a LOCKED session is never reopened by a longer window ---
+        LockPolicy shut = LockPolicy.forSession(true, T, 0);
+        shut.setAutolockMs(LockPolicy.MAX_AUTOLOCK_MS);
+        check("pin-retune: a longer window never unlocks a locked session",
+                shut.isLocked(1));
+
+        // --- a shorter window applies at the next gate check (lazy) ---
+        LockPolicy lazy = LockPolicy.forSession(true, 30 * 60_000L, 0);
+        lazy.verifyAttempt(1, true);
+        lazy.setAutolockMs(T);
+        check("pin-retune: a shorter window locks at the next gate check",
+                lazy.isLocked(T + 1));
+
+        // --- the wrong-PIN streak survives a mid-streak retune ---
+        LockPolicy streak = LockPolicy.forSession(true, T, 0);
+        streak.verifyAttempt(2, true);   // unlocked
+        streak.verifyAttempt(10, false); // failure 1
+        streak.verifyAttempt(20, false); // failure 2
+        streak.verifyAttempt(30, false); // failure 3
+        streak.verifyAttempt(40, false); // failure 4
+        streak.setAutolockMs(10 * 60_000L); // retune with the streak at 4
+        int fifth = streak.verifyAttempt(50, false);
+        check("pin-retune: the streak survives (5th failure opens the backoff)",
+                fifth == LockPolicy.WRONG_PIN
+                        && streak.verifyAttempt(51, true) == LockPolicy.THROTTLED);
+        check("pin-retune: an in-flight backoff deadline is not moved",
+                streak.throttleUntilMs() == 50 + LockPolicy.BACKOFF_BASE_MS);
+
+        // --- the background bracket enforces the NEW window on resume ---
+        LockPolicy bg = LockPolicy.forSession(true, 30 * 60_000L, 0);
+        bg.verifyAttempt(1, true);
+        bg.setAutolockMs(T);
+        bg.onBackground(10_000L);
+        bg.onResume(10_000L + T);
+        check("pin-retune: background/resume applies the retuned window",
+                bg.isLocked(10_000L + T));
+
+        // --- retuning to the current window is a no-op, not a state change ---
+        LockPolicy same = LockPolicy.forSession(true, T, 0);
+        same.verifyAttempt(1, true);
+        same.setAutolockMs(T);
+        check("pin-retune: retuning to the current window keeps the session open",
+                !same.isLocked(2));
+
+        // --- ordering: the selector TOUCH is an activity event, so it
+        // resolves an already-expired window BEFORE the retune can run
+        // (onUserInteraction fires first). A retune can therefore never
+        // rescue a session whose old window has already lapsed. ---
+        LockPolicy expired = LockPolicy.forSession(true, T, 0);
+        expired.verifyAttempt(1, true);
+        expired.onActivity(T + 1);            // the tap that selects 30 min
+        expired.setAutolockMs(30 * 60_000L);  // ...then the retune applies
+        check("pin-retune: a selector touch cannot rescue an expired session",
+                expired.isLocked(T + 2));
+    }
+
     /** SettingsActivity.onResume regression proof (desktop-lifecycle
      *  equivalent, r2 judge blocker): the resume gate must consult the LIVE
      *  session policy — which starts locked when a verifier exists, is
@@ -484,8 +599,8 @@ public final class SelfTest {
     private static void settingsContrastChecks() {
         paletteContrast("dark", 0xFF141414, 0xFF1E1E1E,
                 0xFFFFFFFF, 0xFFB3B3B3, 0xFFF0A000, 0xFFFF6B6B);
-        paletteContrast("light", 0xFFFFFFFF, 0xFFF0F0F0,
-                0xFF101010, 0xFF585858, 0xFF8A5200, 0xFFB3261E);
+        paletteContrast("light", 0xFFFAFAFA, 0xFFFFFFFF,
+                0xFF1A1A1A, 0xFF4A4A4A, 0xFF8A5A00, 0xFFB3261E);
     }
 
     private static void paletteContrast(String mode, int bg, int card,

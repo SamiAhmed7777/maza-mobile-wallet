@@ -12,7 +12,8 @@
     <string name="settings_server_note">The Connect screen uses this address. Reconnect to apply a change.</string>
     <string name="settings_autolock">AUTO-LOCK</string>
     <string name="settings_autolock_current">Auto-lock after %1$d min</string>
-    <string name="settings_autolock_note">Locks the wallet after this much inactivity, and when it has been in the background this long. Applies from the next app start.</string>
+    <string name="settings_autolock_note">Locks the wallet after this much inactivity, and when it has been in the background this long. Applies immediately, including the session you are in.</string>
+    <string name="autolock_save_failed">Could not save the auto-lock delay. The change was not applied.</string>
     <string name="settings_theme">APPEARANCE</string>
     <string name="settings_theme_note">System follows your device day/night setting.</string>
     <string name="settings_wallet">WALLET MANAGEMENT</string>
