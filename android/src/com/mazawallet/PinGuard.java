@@ -233,6 +233,31 @@ public final class PinGuard {
         return ms <= 0 ? 0 : (ms + 999) / 1000;
     }
 
+    // ---------------------------------------------------------- biometric
+
+    /** S-2b-ii: true when the biometric path may unlock this gate. A
+     *  CORRUPT verifier store is PIN-pad-only fail-closed — biometric
+     *  success proves the device owner, but a corrupt store can no longer
+     *  arm/disarm coherently, so it cannot delegate the gate either
+     *  (recovery stays app-data reset, class javadoc). */
+    public boolean biometricUnlockAllowed() {
+        return verifierState() == STATE_VALID;
+    }
+
+    /** S-2b-ii: unlock the gate on a successful platform BiometricPrompt
+     *  authentication. Same accepted-authentication semantics as an
+     *  accepted PIN verify (LockPolicy.acceptUnlock: streak + backoff
+     *  cleared, deadline pushed). FAILS CLOSED on a CORRUPT verifier store
+     *  (returns false, gate untouched — the caller keeps the cover up and
+     *  the PIN pad remains the only path). */
+    public synchronized boolean unlockViaBiometric() {
+        if (verifierState() != STATE_VALID) {
+            return false;
+        }
+        policy.acceptUnlock(elapsedNow());
+        return true;
+    }
+
     // ---------------------------------------------------------- lifecycle
 
     public void onActivity()  { policy.onActivity(elapsedNow()); }

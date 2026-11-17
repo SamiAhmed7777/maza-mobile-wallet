@@ -88,4 +88,11 @@
     <string name="qr_bad_image">QR code unavailable: the server sent an unreadable image.</string>
     <string name="send_failed">Send failed: %1$s</string>
     <string name="send_unknown">Send not confirmed (%1$s). Check HISTORY before trying again - the transaction may have been submitted.</string>
+
+    <!-- S-2b-ii biometric unlock copy. The PIN pad is always the fallback:
+         the prompt's negative button returns to it. Additions only; pure ASCII. -->
+    <string name="biometric_title">Unlock wallet</string>
+    <string name="biometric_subtitle">Confirm your fingerprint to open the wallet.</string>
+    <string name="biometric_use_pin">Use PIN</string>
+    <string name="biometric_unlock_button">Unlock with biometrics</string>
 </resources>

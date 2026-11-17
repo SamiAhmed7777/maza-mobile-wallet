@@ -170,7 +170,7 @@ plaintext.
   envelope math only, never the Keystore path"). Treat S-1 as
   implemented-and-unit-proven, device-proof-pending.
 
-## 4. PIN lock and auto-lock (S-2a code, S-2b device proofs)
+## 4. PIN lock and auto-lock (S-2a code, S-2b-ii biometric code, S-2b device proofs)
 
 ### 4.1 Verifier storage
 
@@ -241,7 +241,28 @@ the self-custody send/create/import handlers via `Host.gateOpen()`
 surfaces (balance, receive address, QR, history) are not gated, by design -
 the spec gates spending and unlocking, not viewing.
 
-### 4.5 Device proof
+### 4.5 Biometric unlock (S-2b-ii code, 2026-11-17)
+
+Platform `BiometricPrompt` on the lock cover, wired through a pure-Java
+decision table (`crypto/BiometricPolicy`, selftest-pinned): the offer
+requires API >= 29 (the `BiometricManager` capability probe is an API-29
+class; API 28 devices, BlueStacks included, get the graceful PIN-only
+path), a fresh platform probe at every cover show (hardware present +
+enrolled + usable), and a VALID verifier store. Success routes through
+`PinGuard.unlockViaBiometric()` — synchronized, fail-closed on a corrupt
+store — and lands on the SAME unlock path as an accepted PIN
+(`MainActivity.completeUnlock`). Error policy (`DECISIONS.md` D12):
+biometric failures never advance the PIN wrong-attempt streak (the device
+throttles biometrics itself; the backoff defends PIN brute-force), user
+cancellations and sensor errors leave the cover untouched, and a lockout
+switches the offer off for the rest of the session. The manifest carries
+`android.permission.USE_BIOMETRIC` (normal level) because platform
+`BiometricPrompt.authenticate()` requires it. Device evidence outstanding:
+BlueStacks has no biometric hardware, so a device pass can only prove the
+graceful-absence path (cover renders PIN-only, exactly as before this
+change).
+
+### 4.6 Device proof
 
 `android/evidence/s2b-pin/PROOF.md` (48 files, `SHA256SUMS` manifest,
 `android/evidence/s2b-pin/transcript.md`): fresh-session locked start with zero
@@ -426,9 +447,11 @@ recipient: it can only misreport which UTXOs exist.
   and error copy is a catch-all. Uniform retry, timeout/401/offline copy, and
   no-silent-empty-state behavior are backlog item S-5, pending.
 - No inbound network surface on the device: the app opens no listening socket
-  and requests only `android.permission.INTERNET`
-  (`android/AndroidManifest.xml`), verified by the operator-side release
-  battery (section 8).
+  and requests only `android.permission.INTERNET` and the normal-level
+  `android.permission.USE_BIOMETRIC` (S-2b-ii: platform
+  `BiometricPrompt.authenticate()` requires it; auto-granted, no runtime
+  prompt) — both from `android/AndroidManifest.xml`, verified by the
+  operator-side release battery (section 8, exact two-permission set).
 
 ### 6.5 Accidental key exposure and logging
 
@@ -481,6 +504,8 @@ Consequences that must not be blurred:
 | Inactivity auto-lock | lazy `isLocked` + 10 s cover tick | Fake-clock self-test + device proof P4a |
 | Background-return lock | `onBackground`/`onResume` bracket | Fake-clock self-test + device proof P4b |
 | Wrong-PIN throttle | 5 fails -> 30 s doubling, cap 15 min, pre-hash refusal | Fake-clock self-test + device proof P3 (cap value desktop-pinned only) |
+| Biometric unlock offer | pure `BiometricPolicy` decision (API tier + fresh platform probe + VALID verifier) at every cover show | Self-test biometric decision-table rows + `tests/test_biometric_wiring.py`; device pass (graceful-absence) pending |
+| Biometric success seam | `PinGuard.unlockViaBiometric()` fail-closes on a corrupt store; same landing as an accepted PIN | Source-contract test + self-test `acceptUnlock` scenarios |
 | Token not in APK | no default token; rotated at public exposure | `MainActivity:137-141`; `deploy/PUBLIC-HOSTING.md` section 4 |
 | Token not in URLs | Bearer header only | `Api.java:59-61`; `tests/test_walletbench.py:156` |
 | Server auth | digest + `hmac.compare_digest`, all `/api/*` except unlock | `walletbench/api.py:289-310`, `:751-760`; suite |
@@ -515,11 +540,11 @@ because the keys differ (`android/evidence/m5-release-build/PROOF.md`).
 | A1 | Bench builds are signed with a committed debug keystore | The bench line exists to get an installable APK onto a test device; anyone with the repo can rebuild or re-sign it, so it is not a distribution artifact. Release builds use the separate off-repo `mazarelease` key | Bench-only; distribution stays release-signed |
 | A2 | Custodial bench account holds ~49 MAZA of play funds, spendable by any token holder | Test harness for operator-directed play testing; UTXO-scoped sends and a 50 MAZA per-send cap bound each transaction; funds are Sami-authorized play money | Ends when the ElectrumX backend replaces the bench |
 | A3 | BIP39 English wordlist license provenance is recorded but not legally cleared | The file is byte-identical to upstream bitcoin/bips and trezor/python-mnemonic (sha256 pinned in `docs/DEPENDENCY-LICENSES.md` section 1), but no per-file grant exists; a formal data-level grant determination is an owner decision | Recorded open in the dependency report; not decided here |
-| A4 | Biometric unlock is NOT implemented | Only the PIN exists. `BiometricPrompt` on the lock overlay with PIN fallback is S-2b part 2, open | Backlog item S-2b-ii |
+| A4 | Biometric unlock: CODE LANDED (S-2b-ii, 2026-11-17); device proof pending | `BiometricPrompt` on the lock overlay with graceful PIN-only fallback ships behind a pure decision table (API >= 29 offer, VALID-verifier fail-closed seam, D12 error policy); BlueStacks has no biometric hardware, so the device pass can only prove the absence path | Device-lane item S-2b-ii evidence |
 | A5 | Network/error hardening: CODE LANDED (wave 3 - Net retry table, spend never retried, error copy); testnet mode (S-6) pending | Retry is uniform across the whole surface now; the airplane-mode DEVICE test is outstanding; all device testing so far used mainnet under the capped harness | Backlog items: airplane-mode run, S-6 |
 | A6 | Single shared bearer token, no per-user accounts, no revocation list | Test-scale deployment with a handful of testers; the token is delivered privately and rotated atomically | Ends with per-user auth or the ElectrumX path (which uses no token) |
 | A7 | The watch book is a single server-side list shared by all clients | One operator, one tester group; the data is public chain data (addresses, UTXOs, history) | Multi-tenant deployment would need per-client scoping |
-| A8 | `usesCleartextTraffic="true"` in the manifest | The bench-era flow pointed at an `http://` endpoint; the shipped default is HTTPS but the field is user-editable | Should be tightened when S-5 lands; a cleartext URL exposes the bearer token |
+| A8 | `usesCleartextTraffic` was `true` through the bench era (FIXED 2026-11-17, commit 51ab252: now explicitly `false` and audited by the release battery) | The bench-era flow pointed at an `http://` endpoint; the shipped default is HTTPS and the field is user-editable to `http://`, which would expose the bearer token | Residual: the CONNECT field accepts any URL a user types; the battery now FAILs the build if the manifest flag regresses to `true` |
 | A9 | No certificate pinning | Pinning an ACME-rotated cert on a TEST endpoint would add fragility; TLS + hostname verification is the control | Revisit before any production endpoint |
 | A10 | No app-wide `FLAG_SECURE`: screenshots and recents thumbnails can capture wallet screens | Needed for the device-evidence workflow that produced the committed proofs; no seed is on screen except the one-time creation view and the PIN-gated re-show dialog (S-4, landed 2026-11-17, holds FLAG_SECURE for the dialog lifetime and scrubs on dismiss) | Revisit app-wide with the wave-2 UX pass |
 | A11 | PIN verifier is in app-private prefs, not Keystore-wrapped; failure streak and backoff counters are memory-only, so a process restart clears them | The verifier is not the root of secrecy (the seed has its own keystore envelope); a restart already re-locks the app and re-arms at 5 fails | Recorded in `DECISIONS.md` D11; persisted counters if the threat model demands |
@@ -534,8 +559,10 @@ expects (`docs/SPEC-AUDIT.md`, "Implementation order"):
 1. S-1 device proof: migrate a real plaintext seed through `AndroidKeyStore`
    and prove restart persistence on a device.
 2. S-2b part 2: biometric unlock where supported, with a graceful PIN-only
-   fallback where no sensor exists (BlueStacks has no fingerprint hardware, so
-   device evidence can only cover the absence path).
+   fallback where no sensor exists. CODE LANDED 2026-11-17 (S-2b-ii:
+   `crypto/BiometricPolicy` + PinGuard seam + overlay wiring, D12); the
+   device pass remains (BlueStacks has no fingerprint hardware, so device
+   evidence can only cover the absence path — cover renders PIN-only).
 3. S-4 settings/wallet management: LANDED 2026-11-17 (auth-gated seed
    re-show behind the PIN with FLAG_SECURE, wipe wallet with double
    confirmation + typed acknowledgement + current-PIN re-verification

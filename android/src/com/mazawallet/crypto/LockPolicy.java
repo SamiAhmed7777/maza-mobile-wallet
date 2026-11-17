@@ -158,6 +158,20 @@ public final class LockPolicy {
         return WRONG_PIN;
     }
 
+    /** S-2b-ii: unlock the gate on an accepted non-PIN authentication
+     *  (platform biometric). Same accepted-authentication semantics as an
+     *  accepted PIN verify: streak + backoff window cleared — the enrolled
+     *  owner proving identity is not a brute-force attempt — and the
+     *  inactivity deadline pushed. Precondition checks belong to the SHELL
+     *  (PinGuard.unlockViaBiometric fail-closes on a corrupt verifier
+     *  store); the policy itself has no storage to check. */
+    public void acceptUnlock(long now) {
+        wrongStreak = 0;
+        backoffUntil = 0;
+        unlocked = true;
+        lastActivity = Math.max(lastActivity, now);
+    }
+
     /** Absolute end of the current backoff window (clock-domain of `now`).
      *  Lets the shell refuse BEFORE hashing without re-deriving the rule. */
     public long throttleUntilMs() { return backoffUntil; }

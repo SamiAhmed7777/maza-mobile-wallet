@@ -156,6 +156,9 @@ public final class SelfTest {
         section("PinGuard in-session retune (S-4 follow-up)");
         pinRetuneChecks();
 
+        section("Biometric unlock policy (S-2b-ii decision table)");
+        biometricPolicyChecks();
+
         section("Settings screens WCAG contrast (S-4)");
         settingsContrastChecks();
 
@@ -495,6 +498,92 @@ public final class SelfTest {
         expired.setAutolockMs(30 * 60_000L);  // ...then the retune applies
         check("pin-retune: a selector touch cannot rescue an expired session",
                 expired.isLocked(T + 2));
+    }
+
+    /** S-2b-ii biometric unlock: the offer decision table, the platform
+     *  error-code mapping, and LockPolicy.acceptUnlock's accepted-auth
+     *  semantics, driven BEHAVIORALLY on the real policy with a fake
+     *  clock. The Android wiring (probe, prompt construction, button
+     *  visibility) is pinned by tests/test_biometric_wiring.py; the
+     *  on-device run is a device-lane item (BlueStacks Pie64 = API 28 =
+     *  graceful PIN-only by policy MIN_API=29). */
+    private static void biometricPolicyChecks() {
+        long T = 5 * 60_000L;
+        int backoffBaseMs = 30_000; // LockPolicy.BACKOFF_BASE_MS (5 fails -> 30s)
+
+        // --- offer decision: every input is required
+        check("biometric: below the API tier -> no offer",
+                !BiometricPolicy.offer(false, true, true));
+        check("biometric: not platform-ready (no HW / not enrolled) -> no offer",
+                !BiometricPolicy.offer(true, false, true));
+        check("biometric: corrupt verifier store -> no offer (PIN-pad-only fail-closed)",
+                !BiometricPolicy.offer(true, true, false));
+        check("biometric: all inputs healthy -> offer",
+                BiometricPolicy.offer(true, true, true));
+
+        // --- outcome mapping (codes are javap-verified mirrors of the
+        //     platform constants; see BiometricPolicy header)
+        check("biometric: user cancel holds the cover",
+                BiometricPolicy.outcome(BiometricPolicy.ERR_USER_CANCELED)
+                        == BiometricPolicy.HOLD);
+        check("biometric: negative button holds the cover",
+                BiometricPolicy.outcome(BiometricPolicy.ERR_NEGATIVE_BUTTON)
+                        == BiometricPolicy.HOLD);
+        check("biometric: framework cancel (e.g. app cancellation) holds the cover",
+                BiometricPolicy.outcome(BiometricPolicy.ERR_CANCELED)
+                        == BiometricPolicy.HOLD);
+        check("biometric: sensor unavailable holds the cover (no PIN-state change)",
+                BiometricPolicy.outcome(BiometricPolicy.ERR_HW_UNAVAILABLE)
+                        == BiometricPolicy.HOLD);
+        check("biometric: lockout stops the session offer",
+                BiometricPolicy.outcome(BiometricPolicy.ERR_LOCKOUT)
+                        == BiometricPolicy.LOCKED_OUT);
+        check("biometric: permanent lockout stops the session offer",
+                BiometricPolicy.outcome(BiometricPolicy.ERR_LOCKOUT_PERMANENT)
+                        == BiometricPolicy.LOCKED_OUT);
+
+        // --- acceptUnlock: accepted biometric auth == accepted PIN verify
+        // Scenario 1: an OPEN backoff window (5 consecutive wrong PINs) is
+        // cleared by an accepted biometric auth.
+        LockPolicy w = LockPolicy.forSession(true, T, 0);
+        for (int i = 1; i <= 5; i++) {
+            w.verifyAttempt(i, false);
+        }
+        check("biometric-s1: five wrong PINs open the backoff window",
+                w.verifyAttempt(6, false) == LockPolicy.THROTTLED);
+        w.acceptUnlock(7); // the enrolled owner authenticates biometrically
+        check("biometric-s1: accepted auth clears the backoff window"
+                        + " (verify evaluates again, streak restarts)",
+                w.verifyAttempt(8, false) == LockPolicy.WRONG_PIN);
+        for (int i = 9; i <= 12; i++) {
+            w.verifyAttempt(i, false);
+        }
+        check("biometric-s1: the rebuilt streak throttles again at the 5th wrong PIN",
+                w.verifyAttempt(13, false) == LockPolicy.THROTTLED);
+        check("biometric-s1: correct PIN after the window is accepted",
+                w.verifyAttempt(w.throttleUntilMs() + backoffBaseMs + 1, true)
+                        == LockPolicy.ACCEPTED); // past the 30s window, next 30s, and margin
+
+        // Scenario 2: acceptUnlock opens a LOCKED gate and pushes the
+        // inactivity deadline (the accepted auth counts as activity).
+        LockPolicy u = LockPolicy.forSession(true, T, 0);
+        check("biometric-s2: fresh session with verifier is locked",
+                u.isLocked(1));
+        u.acceptUnlock(2);
+        check("biometric-s2: accepted auth opens the locked gate",
+                !u.isLocked(3));
+        check("biometric-s2: deadline was pushed by the unlock (lastActivity=2: open at 300001)",
+                !u.isLocked(T + 1));
+        check("biometric-s2: gate still closes at lastActivity + window (300002)",
+                u.isLocked(T + 2));
+
+        // Scenario 3: acceptUnlock on an ALREADY-open gate stays open and
+        // never locks anything (the policy has no lock-on-success path).
+        LockPolicy o = LockPolicy.forSession(true, T, 0);
+        o.verifyAttempt(1, true);
+        o.acceptUnlock(2);
+        check("biometric-s3: accepted auth on an open gate stays open",
+                !o.isLocked(3));
     }
 
     /** SettingsActivity.onResume regression proof (desktop-lifecycle

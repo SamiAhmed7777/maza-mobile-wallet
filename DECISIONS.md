@@ -234,6 +234,48 @@ chain code on three fields (noted per item).
   new one. Selector copy now states the change applies immediately
   (`settings_autolock_note`).
 
+## D12 — Biometric unlock on the PIN cover (S-2b-ii, added 2026-11-17)
+- APP-SECURITY decision (spec Phase 5.5 "PIN or biometric where supported"),
+  NOT coin policy — no Payu routing. Platform `BiometricPrompt` on the lock
+  cover with the PIN pad as the ALWAYS-present fallback (`Use PIN` negative
+  button), behind a pure decision table `crypto/BiometricPolicy`
+  (selftest-pinned; wiring contract `tests/test_biometric_wiring.py`).
+- Offer = API >= 29 AND a fresh platform probe (BiometricManager
+  .canAuthenticate() == BIOMETRIC_SUCCESS: hardware + enrolled + usable)
+  AND a VALID verifier store — evaluated at EVERY cover show. API 28 gets
+  PIN-only (BiometricManager is an API-29 class; probing tier 28 via
+  FingerprintManager would cost a second manifest permission for one
+  tier). A CORRUPT verifier store is PIN-pad-only fail-closed:
+  `PinGuard.unlockViaBiometric()` refuses it and the cover stays.
+- Success = accepted authentication, SAME semantics as an accepted PIN
+  verify (`LockPolicy.acceptUnlock`): streak + backoff window cleared,
+  inactivity deadline pushed, gate opened, gated tab resumed
+  (`MainActivity.completeUnlock`, shared with the accepted-PIN branch).
+  An accepted authentication during a live PIN throttle clears the
+  throttle: the enrolled owner proving identity is not a brute-force
+  attempt, and the owner is exactly who the fallback window inconveniences.
+- Errors (D12 policy): biometric failures NEVER advance the PIN
+  wrong-attempt streak (the device throttles biometric attempts itself;
+  the PIN backoff defends PIN brute-force). User cancellations
+  (ERROR_USER_CANCELED / ERROR_NEGATIVE_BUTTON / ERROR_CANCELED) and
+  sensor/process errors leave the cover untouched. ERROR_LOCKOUT /
+  ERROR_LOCKOUT_PERMANENT switch the offer off for the session
+  (`biometricSessionOff`). Platform error-code values in BiometricPolicy
+  are javap-verified against the android-34 android.jar — never retyped
+  from memory (standing rule).
+- Manifest: `android.permission.USE_BIOMETRIC` added (normal level,
+  auto-granted) — platform `BiometricPrompt.authenticate()` requires it
+  (developer.android.com BiometricPrompt reference). Release battery
+  allowlist updated in the same change: exactly INTERNET + USE_BIOMETRIC.
+- Scope boundary: the biometric path covers the LOCK COVER only. The
+  in-session send/seed gates (`Host.gateOpen`) remain PIN-only this pass
+  (synchronous gate checks; the prompt is an async activity surface) —
+  documented residual, revisit with the send-flow UX pass.
+- Device evidence: BlueStacks Pie64 is API 28 (no biometric HW), so the
+  bench device pass can only prove graceful absence (cover renders
+  PIN-only, unchanged from pre-S-2b-ii builds). A sensor-equipped device
+  is required for the success/cancel/lockout UI proofs.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation
