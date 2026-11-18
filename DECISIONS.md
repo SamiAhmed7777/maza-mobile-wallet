@@ -376,6 +376,21 @@ receive-side Request-amount screen (M9-ii) consumes `MazaUri.format`
 and is a separate tick. Desktop-driven by `SelfTest.mazaUriChecks`
 (41 checks); wiring pinned by `tests/test_maza_uri_contract.py`.
 
+Backend QR-layer mirror (M9-ii, added 2026-11-17): walletbench's
+`/api/qr.png?uri=` and `/api/qr.svg?uri=` re-validate a payment-request
+payload against the SAME contract (Python mirror of the rules above,
+behaviourally tested in `tests/test_walletbench.py`) before encoding:
+the address part must be a watch-book address, '+' stays literal
+(urllib's query parser would decode it as a space, so the parameter is
+extracted raw), percent-decoding fails closed, amounts are
+digits-only ≤ 8 dp, `req-<unknown>` rejects. ONE deliberately
+stricter divergence on the backend side only: an invalid UTF-8 byte
+sequence after decoding is REJECTED (Java's String constructor would
+substitute U+FFFD) — valid payment requests never carry invalid UTF-8.
+The encoded QR payload is the EXACT composed string (byte-exact round
+trip), and the endpoint is a payment-request renderer for THIS
+wallet's addresses only — never a generic QR-content service.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

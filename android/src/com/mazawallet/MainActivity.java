@@ -156,6 +156,8 @@ public class MainActivity extends Activity
     private TextView addressTv;
     private ImageView qrIv;
     private TextView qrStatusTv;
+    /** M9-ii: optional amount for the payment-request QR on RECEIVE. */
+    private EditText reqAmountEt;
     private EditText toEt;
     private EditText amountEt;
     private TextView feeHintTv;
@@ -629,6 +631,20 @@ public class MainActivity extends Activity
         copyBtn.setText("Copy");
         copyBtn.setOnClickListener(v -> copyAddress());
         col.addView(copyBtn, mp(0, dp(8), 0, 0));
+
+        // M9-ii: payment-request QR. An optional typed amount composes
+        // maza:<addr>?amount=<8dp> via the tested MazaUri contract; the
+        // server re-validates the payload against the same contract before
+        // encoding. Empty amount = the plain address QR (default receive).
+        reqAmountEt = input("", InputType.TYPE_CLASS_NUMBER
+                | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        reqAmountEt.setHint(getString(R.string.req_amount_hint));
+        col.addView(reqAmountEt, mp(0, dp(4), 0, 0));
+
+        Button reqBtn = new Button(this);
+        reqBtn.setText(getString(R.string.req_qr_button));
+        reqBtn.setOnClickListener(v -> onRequestQrTapped());
+        col.addView(reqBtn, mp(0, dp(4), 0, 0));
 
         qrStatusTv = label("", 12, pal.textSecondary(), Typeface.NORMAL);
         col.addView(qrStatusTv, mp(0, dp(4), 0, 0));
@@ -1176,14 +1192,59 @@ public class MainActivity extends Activity
     }
 
     private void loadQr() {
+        loadQrPath("/api/qr.png", null);
+    }
+
+    /**
+     * M9-ii: fetch the QR for a composed payment-request payload. The
+     * payload is query-encoded with android.net.Uri.encode, which escapes
+     * every reserved character including '%' -> '%25', so the payload
+     * arrives at the server byte-exactly (its strict decoder mirrors
+     * MazaUri's contract, re-validates address-in-book + parameter
+     * shapes, and encodes the EXACT composed string into the code).
+     * The composed URI is shown as the status line on success, so the
+     * user can read the request they are about to hand out. Nothing is
+     * ever sent from this screen: it only DISPLAYS a payment request.
+     */
+    private void loadQrUri(final String payload) {
+        loadQrPath("/api/qr.png?uri=" + android.net.Uri.encode(payload),
+                payload);
+    }
+
+    /** M9-ii button: compose + render. Empty input falls back to the
+     *  plain address QR; a typed amount goes through the SAME
+     *  BitcoinUnits::parse rules as the scan-fill path (MazaUri), with
+     *  sats <= 0 treated as an invalid request (never a zero-value
+     *  payment request). Server-side 400s render as QR error copy. */
+    private void onRequestQrTapped() {
+        if (qrIv == null || reqAmountEt == null) return;
+        final String text = reqAmountEt.getText().toString().trim();
+        if (text.length() == 0) {
+            loadQr();
+            return;
+        }
+        final Long sats = MazaUri.parseAmountText(text);
+        if (sats == null || sats <= 0L) {
+            qrErr(getString(R.string.req_amount_invalid));
+            return;
+        }
+        final String addr = addressTv.getText().toString().trim();
+        loadQrUri(MazaUri.format(addr, sats, null, null));
+    }
+
+    /** Shared QR fetcher (default address, ?addr= form, or M9-ii ?uri=
+     *  form). {@code successStatus} (nullable) replaces the loading line
+     *  on a 200. Reads are idempotent, so Net's table retries GET
+     *  /api/qr.png (the query string is stripped for the route lookup). */
+    private void loadQrPath(final String path, final String successStatus) {
         if (token == null) return;
         qrStatusTv.setText(getString(R.string.qr_loading));
         qrStatusTv.setTextColor(pal.textSecondary());
         new Thread(() -> {
             try {
                 // S-5: read - retried by Net (an image request is idempotent).
-                Api.Resp r = Net.withRetry("GET", "/api/qr.png",
-                        () -> Api.http(baseUrl, token, "GET", "/api/qr.png", null));
+                Api.Resp r = Net.withRetry("GET", path,
+                        () -> Api.http(baseUrl, token, "GET", path, null));
                 if (r.code == 401) {
                     ui.post(this::lockOut);
                     return;
@@ -1199,7 +1260,8 @@ public class MainActivity extends Activity
                 }
                 ui.post(() -> {
                     qrIv.setImageBitmap(bmp);
-                    qrStatusTv.setText("");
+                    qrStatusTv.setText(successStatus == null ? "" : successStatus);
+                    qrStatusTv.setTextColor(pal.textSecondary());
                 });
             } catch (IOException e) {
                 final String why = netCopy(e);

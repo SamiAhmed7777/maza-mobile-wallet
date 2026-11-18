@@ -174,6 +174,22 @@ public final class MazaUri {
     }
 
     /**
+     * M9-ii typed-amount entry point for the receive request screen: the
+     * SAME BitcoinUnits::parse(BTC) rules as scanned amounts, exposed for
+     * user-typed text. Returns null on any invalid shape; never throws.
+     * NOTE the empty-input semantics (inherited from parse()): "" and
+     * whitespace-only text yield 0L, not null - the caller decides what
+     * "no amount typed" means (the receive screen falls back to the plain
+     * address QR, and treats sats <= 0 as an invalid request).
+     */
+    public static Long parseAmountText(String text) {
+        if (text == null) {
+            return null;
+        }
+        return parseAmount(text);
+    }
+
+    /**
      * BitcoinUnits::parse(BitcoinUnits::BTC, value) ported for scanned
      * amounts (bitcoinunits.cpp:144-181). Returns null on any invalid
      * shape; empty input is handled by the caller (absent amount).
@@ -288,7 +304,11 @@ public final class MazaUri {
      * formatBitcoinURI (guiutil.cpp:221-243): maza:<addr>, then amount
      * (when non-zero), then label, then message, '?' before the first
      * parameter and '&' between the rest. Pure string assembly - the
-     * caller validates the address before calling.
+     * CALLER owns address validity: the receive screen passes the
+     * address the server itself issued and the walletbench ?uri= layer
+     * re-validates it (watch-book membership) before encoding; the scan
+     * side never routes a formatted URI's address anywhere without its
+     * own base58check validation (ScanOrigin contract).
      */
     public static String format(String address, long amountSats,
                                 String label, String message) {

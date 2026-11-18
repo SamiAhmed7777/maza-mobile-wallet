@@ -1315,5 +1315,235 @@ class TestReconcileAccessLog(BenchTestCase):
         self.assertNotIn("zz", lines[0])
 
 
+class TestQrPaymentRequestUri(BenchTestCase):
+    """M9-ii: /api/qr.png?uri= and /api/qr.svg?uri= — the payment-request QR.
+
+    The payload is a maza: URI composed by the app (MazaUri.format). The
+    server re-validates it against the SAME contract (a Python mirror of
+    MazaUri.parse, scoped to what the QR layer must enforce) BEFORE
+    encoding: the address part must be in the watch book (the same
+    no-arbitrary-address invariant as ?addr=), percent-decoding is strict
+    and fails closed, '+' stays LITERAL (QUrlQuery semantics - this is
+    why the parameter is extracted raw, never via urllib.parse.parse_qs),
+    amounts are digits-only <=8dp, and req-<unknown> rejects. It is a
+    payment-request renderer for THIS wallet's addresses only.
+    """
+
+    def _watch(self, cookie, *addrs):
+        status, _, _ = self.request(
+            "POST", "/api/watch/import", {"addresses": list(addrs)},
+            cookie=cookie)
+        self.assertEqual(status, 200)
+
+    @staticmethod
+    def _req(payload):
+        # Exactly what the app does: android.net.Uri.encode(payload) with
+        # no extra allow-list chars - quote(..., safe="") is the Python twin.
+        return "/api/qr.png?uri=" + urllib.parse.quote(payload, safe="")
+
+    def test_payment_request_renders(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, headers, body = self.request(
+            "GET", self._req(f"maza:{WATCH_A}?amount=1.5"), cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Content-Type"), "image/png")
+        self.assertTrue(body.startswith(b"\x89PNG"))
+
+    def test_svg_accepts_uri_too(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, headers, body = self.request(
+            "GET", "/api/qr.svg?uri=" + urllib.parse.quote(
+                f"maza:{WATCH_A}?amount=0.5", safe=""), cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Content-Type"), "image/svg+xml; charset=utf-8")
+        self.assertIn(b"<svg", body)
+
+    def test_plain_address_uri_without_params(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, _ = self.request(
+            "GET", self._req(f"maza:{WATCH_A}"), cookie=cookie)
+        self.assertEqual(status, 200)
+
+    def test_scheme_case_insensitive_address_kept(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, _ = self.request(
+            "GET", self._req(f"MAZA:{WATCH_A}?amount=1"), cookie=cookie)
+        self.assertEqual(status, 200)
+
+    def test_maza_double_slash_normalized_full_address(self):
+        # D14: strip exactly 7 - "maza://ADDR/" keeps the FULL address.
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, _ = self.request(
+            "GET", self._req(f"maza://{WATCH_A}/?amount=1"), cookie=cookie)
+        self.assertEqual(status, 200)
+
+    def test_address_must_be_watched(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, body = self.request(
+            "GET", self._req(f"maza:{FOREIGN_WATCH}?amount=1"), cookie=cookie)
+        self.assertEqual(status, 400)
+        self.assertIn("payment request for this wallet", body.decode())
+
+    def test_non_maza_schemes_rejected(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        for payload in (f"bitcoin:{WATCH_A}?amount=1",
+                        "https://example.com/pay",
+                        f"notmaza:{WATCH_A}",
+                        f"xmaza:{WATCH_A}"):
+            status, _, _ = self.request(
+                "GET", self._req(payload), cookie=cookie)
+            self.assertEqual(status, 400, payload)
+
+    def test_amount_rules_accepted_shapes(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        for amount in ("0.5", ".5", "5.", "1.23456789",  # 8dp boundary
+                       "12345678.12345678",              # 16 digits
+                       "1 500"):                          # spaces ignored
+            status, _, _ = self.request(
+                "GET", self._req(f"maza:{WATCH_A}?amount={urllib.parse.quote(amount, safe='')}"),
+                cookie=cookie)
+            self.assertEqual(status, 200, amount)
+
+    def test_amount_rules_rejected_shapes(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        for amount in ("1.234567890",   # 9dp
+                       "-1",            # signed (D14)
+                       "+1",            # signed (D14)
+                       "1..2",          # two dots
+                       "1+2",           # raw '+' inside amount: literal
+                       "12a",           # foreign char
+                       "999999999999999999.9"):  # 19 digits > 63-bit guard
+            status, _, _ = self.request(
+                "GET", self._req(f"maza:{WATCH_A}?amount={urllib.parse.quote(amount, safe='')}"),
+                cookie=cookie)
+            self.assertEqual(status, 400, amount)
+
+    def test_empty_amount_value_is_absent(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, _ = self.request(
+            "GET", self._req(f"maza:{WATCH_A}?amount="), cookie=cookie)
+        self.assertEqual(status, 200)
+
+    def test_req_unknown_rejected_known_req_accepted(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, _ = self.request(
+            "GET", self._req(f"maza:{WATCH_A}?req-lightning=1"), cookie=cookie)
+        self.assertEqual(status, 400)
+        status, _, _ = self.request(
+            "GET", self._req(f"maza:{WATCH_A}?req-label=L&amount=1"),
+            cookie=cookie)
+        self.assertEqual(status, 200)
+
+    def test_unknown_plain_param_ignored(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, _ = self.request(
+            "GET", self._req(f"maza:{WATCH_A}?lightning=lntb123&amount=1"),
+            cookie=cookie)
+        self.assertEqual(status, 200)
+
+    def test_plus_stays_literal(self):
+        # '+' is NOT form-encoding: label "a+b" survives as "a+b" and an
+        # amount "1+5" is therefore rejected (literal '+' is not a digit).
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, _ = self.request(
+            "GET", self._req(f"maza:{WATCH_A}?label=a+b&amount=1"),
+            cookie=cookie)
+        self.assertEqual(status, 200)
+        status, _, _ = self.request(
+            "GET", self._req(f"maza:{WATCH_A}?amount=1+5"), cookie=cookie)
+        self.assertEqual(status, 400)
+
+    def test_percent_encoded_utf8_label(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, _ = self.request(
+            "GET", self._req(f"maza:{WATCH_A}?label=Caf%C3%A9&amount=1"),
+            cookie=cookie)
+        self.assertEqual(status, 200)
+
+    def test_malformed_percent_escapes_rejected(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        for query_tail in ("label=%2",     # truncated escape
+                           "label=%GG",    # bad hex
+                           "label=%C3"):   # invalid UTF-8 sequence (strict
+                                           # divergence, DECISIONS D14)
+            status, _, _ = self.request(
+                "GET", self._req(f"maza:{WATCH_A}?{query_tail}"),
+                cookie=cookie)
+            self.assertEqual(status, 400, query_tail)
+
+    def test_double_encoded_escapes_round_trip(self):
+        # The app query-encodes the WHOLE composed payload ('%' -> '%25'),
+        # so a payload whose label value itself carries a percent-escape
+        # survives byte-exactly: the server decodes the QUERY once and
+        # encodes the PAYLOAD as-is.
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        payload = f"maza:{WATCH_A}?label=50%25&amount=1"  # label -> "50%"
+        status, _, _ = self.request("GET", self._req(payload), cookie=cookie)
+        self.assertEqual(status, 200)
+
+    def test_both_params_rejected(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, body = self.request(
+            "GET", f"/api/qr.png?addr={WATCH_A}&uri="
+                   + urllib.parse.quote(f"maza:{WATCH_A}", safe=""),
+            cookie=cookie)
+        self.assertEqual(status, 400)
+        self.assertIn("not both", body.decode())
+
+    def test_empty_uri_value_rejected(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        status, _, _ = self.request("GET", "/api/qr.png?uri=", cookie=cookie)
+        self.assertEqual(status, 400)
+
+    def test_overlong_uri_rejected(self):
+        cookie = self.unlock()
+        self._watch(cookie, WATCH_A)
+        payload = f"maza:{WATCH_A}?label=" + "x" * 600
+        status, _, _ = self.request("GET", self._req(payload), cookie=cookie)
+        self.assertEqual(status, 400)
+
+    def test_uri_requires_auth(self):
+        status, _, _ = self.request(
+            "GET", self._req(f"maza:{WATCH_A}?amount=1"))
+        self.assertEqual(status, 401)
+
+    def test_mirror_matches_java_contract_shapes(self):
+        # Direct unit-level mirror check: the exact validator the endpoint
+        # uses, driven on the shapes SelfTest.mazaUriChecks pins - one
+        # table, so the Python mirror cannot drift from the Java contract.
+        validate = api.WalletBenchHandler._valid_maza_uri_payload
+        self.assertTrue(validate(f"maza:{WATCH_A}?amount=1.5", {WATCH_A}))
+        self.assertFalse(validate(f"maza:{WATCH_A}?amount=1.234567890",
+                                  {WATCH_A}))
+        self.assertFalse(validate(f"maza:{WATCH_A}?req-lightning=1",
+                                  {WATCH_A}))
+        self.assertFalse(validate(f"bitcoin:{WATCH_A}", {WATCH_A}))
+        self.assertFalse(validate(f"maza:{FOREIGN_WATCH}", {WATCH_A}))
+        self.assertTrue(validate(f"MAZA://{WATCH_A}/", {WATCH_A}))
+        # '+' literal: decode("a+b") must be "a+b", not "a b"
+        self.assertEqual(
+            api.WalletBenchHandler._strict_pct_decode("a+b"), "a+b")
+        self.assertIsNone(api.WalletBenchHandler._strict_pct_decode("%2"))
+        self.assertIsNone(api.WalletBenchHandler._strict_pct_decode("%GG"))
+
+
 if __name__ == "__main__":
     unittest.main()

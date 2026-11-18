@@ -7,7 +7,9 @@ Routes:
     GET  /api/state       -> {"balance","address","account","txs":[...]}
     POST /api/send        -> {"to","amount"} -> {"txid"} (UTXO-scoped, capped)
     GET  /api/qr.svg      -> SVG QR of the current receive address
-    GET  /api/qr.png[?addr=M...] -> PNG QR (addr must be in the watch book)
+    GET  /api/qr.png[?addr=M...|?uri=<maza: payment request>]
+                            -> PNG QR (payload must be this wallet's own
+                            address, or a payment request for one)
     POST /api/watch/import -> {"addresses":[...]} watch-only import (no keys)
     GET  /api/watch/utxos  -> UTXOs of the watch set (self-custody balance)
     GET  /api/watch/history-> history filtered to the watch set
@@ -858,32 +860,183 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             return
         self._json(HTTPStatus.OK, {"txid": txid})
 
-    def _requested_qr_address(self, primary: str) -> Any:
-        """Optional ?addr= override: must be well-formed AND already in the
-        watch book (no arbitrary-address QR proxying)."""
+    # M9-ii: a payment-request QR encodes a maza: URI payload. The cap
+    # keeps the code dense enough to scan from a phone screen (a ~512-char
+    # payload is still a scannable code at M ECC); anything longer is an
+    # abuse vector, not a payment request.
+    QR_URI_MAX_CHARS = 512
+
+    @staticmethod
+    def _query_param_raw(query: str, name: str) -> Optional[str]:
+        """Raw (still percent-encoded) value of the FIRST ?name= parameter,
+        extracted without urllib.parse.parse_qs: that parser decodes '+'
+        as a space, and the maza: contract keeps '+' LITERAL (QUrlQuery
+        semantics, MazaUri.pctDecode). None when the parameter is absent."""
+        for part in query.split("&"):
+            if part.startswith(name + "="):
+                return part[len(name) + 1:]
+        return None
+
+    @staticmethod
+    def _strict_pct_decode(raw: str) -> Any:
+        """MazaUri.pctDecode semantics (crypto/MazaUri.java): UTF-8
+        percent-decoding where '+' stays literal and any malformed escape
+        fails closed (returns None). Byte-level like the Java contract.
+        Strictly stricter on invalid UTF-8 byte sequences (Java's String
+        constructor substitutes U+FFFD, we reject) - documented in
+        DECISIONS.md D14 as the backend QR-layer mirror."""
+        if "%" not in raw:
+            return raw
+        bs = raw.encode("utf-8")
+        out = bytearray()
+        i = 0
+        n = len(bs)
+        while i < n:
+            if bs[i] == 0x25:  # '%'
+                if i + 2 >= n:
+                    return None  # truncated escape
+                hi = WalletBenchHandler._hexval_byte(bs[i + 1])
+                lo = WalletBenchHandler._hexval_byte(bs[i + 2])
+                if hi < 0 or lo < 0:
+                    return None  # malformed escape
+                out.append((hi << 4) | lo)
+                i += 3
+            else:
+                out.append(bs[i])
+                i += 1
+        try:
+            return out.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+    @staticmethod
+    def _hexval_byte(b: int) -> int:
+        """ASCII hex-digit value of one byte, -1 otherwise (the byte-level
+        twin of MazaUri.hexVal)."""
+        if 48 <= b <= 57:  # '0'..'9'
+            return b - 48
+        if 97 <= b <= 102:  # 'a'..'f'
+            return b - 97 + 10
+        if 65 <= b <= 70:  # 'A'..'F'
+            return b - 65 + 10
+        return -1
+
+    @staticmethod
+    def _valid_uri_amount(value: str) -> bool:
+        """Mirror of MazaUri.parseAmount (BitcoinUnits::parse(BTC) rules):
+        spaces/thin spaces ignored, at most one '.', at most 8 fractional
+        digits, digits-only (no sign), combined digit string 1..18 chars
+        (the 63-bit guard). Empty is handled by the caller (absent)."""
+        cleaned = "".join(ch for ch in value
+                          if ch not in (" ", "\u2009", "\u202f"))
+        if cleaned.count(".") > 1:
+            return False
+        dot = cleaned.find(".")
+        whole, frac = (cleaned, "") if dot < 0 else \
+            (cleaned[:dot], cleaned[dot + 1:])
+        if len(frac) > 8:
+            return False
+        digits = whole + frac.ljust(8, "0")
+        if not digits or len(digits) > 18:
+            return False
+        return all("0" <= c <= "9" for c in digits)
+
+    @classmethod
+    def _valid_maza_uri_payload(cls, payload: str, watch: Any) -> bool:
+        """Mirror of the M9 MazaUri.parse accept/reject contract, scoped to
+        what the QR layer must enforce: the payload must BE a
+        maza:/maza:// payment URI whose ADDRESS part is a watch-book
+        address (the same no-arbitrary-address invariant as ?addr=), and
+        every parameter must decode/validate under the same rules (strict
+        percent-decoding fail-closed, '+' literal, digits-only <=8dp
+        amounts, req-<unknown> rejects, unknown plain params ignored).
+        Label/message are carried, never acted on."""
+        s = payload.strip()
+        lower = s.lower()
+        if lower.startswith("maza://"):
+            rest = s[7:]  # 7-char prefix strip per D14 (never upstream's 11)
+        elif lower.startswith("maza:"):
+            rest = s[5:]
+        else:
+            return False
+        q = rest.find("?")
+        path = rest if q < 0 else rest[:q]
+        query = None if q < 0 else rest[q + 1:]
+        if path.endswith("/"):
+            path = path[:-1]  # one trailing '/' trimmed (guiutil.cpp:154)
+        if not path or path not in watch:
+            return False
+        if query is None:
+            return True
+        for item in query.split("&"):
+            if not item:
+                continue
+            eq = item.find("=")
+            raw_key = item if eq < 0 else item[:eq]
+            raw_val = "" if eq < 0 else item[eq + 1:]
+            key = cls._strict_pct_decode(raw_key)
+            value = cls._strict_pct_decode(raw_val)
+            if key is None or value is None:
+                return False
+            required = key.startswith("req-")
+            if required:
+                key = key[4:]
+            known = True
+            if key == "amount":
+                if value and not cls._valid_uri_amount(value):
+                    return False
+            elif key not in ("label", "message"):
+                known = False
+            if required and not known:
+                return False
+        return True
+
+    def _requested_qr_payload(self, primary: str) -> Any:
+        """Resolve the /api/qr.* payload: the default receive address, a
+        ?addr= watch-book address, or a M9-ii ?uri= payment request.
+        Returns (payload, error); error is None on success, else a short
+        user-safe string for the 400 body. The uri payload is decoded
+        STRICTLY and re-validated against the same contract the app's
+        MazaUri enforces BEFORE it is encoded - this endpoint is a
+        payment-request renderer for THIS wallet's addresses, never a
+        generic QR-content service."""
         parsed = urllib.parse.urlsplit(self.path)
-        params = urllib.parse.parse_qs(parsed.query)
-        vals = params.get("addr", [])
-        if not vals:
-            return primary
-        addr = vals[0]
-        if not (isinstance(addr, str) and addr.startswith("M")
-                and len(addr) == 34):
-            return None
-        if addr not in self._watch_addresses():
-            return None
-        return addr
+        query = parsed.query
+        raw_addr = self._query_param_raw(query, "addr")
+        raw_uri = self._query_param_raw(query, "uri")
+        if raw_addr is not None and raw_uri is not None:
+            return None, "use either addr or uri, not both"
+        if raw_uri is not None:
+            payload = self._strict_pct_decode(raw_uri)
+            if payload is None:
+                return None, "uri is malformed"
+            if not payload.strip():
+                return None, "uri is empty"
+            if len(payload) > self.QR_URI_MAX_CHARS:
+                return None, f"uri too long (max {self.QR_URI_MAX_CHARS} chars)"
+            if not self._valid_maza_uri_payload(payload,
+                                                self._watch_addresses()):
+                return None, "uri is not a payment request for this wallet"
+            return payload, None
+        if raw_addr is not None:
+            addr = raw_addr
+            if not (isinstance(addr, str) and addr.startswith("M")
+                    and len(addr) == 34):
+                return None, "addr not valid or not watched"
+            if addr not in self._watch_addresses():
+                return None, "addr not valid or not watched"
+            return addr, None
+        return primary, None
 
     def _qr(self) -> None:
         if not self._require_auth():
             return
         try:
-            address = self._requested_qr_address(self._primary_address())
-            if address is None:
-                self._json(HTTPStatus.BAD_REQUEST,
-                           {"error": "addr not valid or not watched"})
+            payload, err = self._requested_qr_payload(self._primary_address())
+            if err is not None:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": err})
                 return
-            svg = qr.address_svg(address)
+            svg = qr.address_svg(payload)
         except ChainError as exc:
             self._json(HTTPStatus.BAD_GATEWAY, {"error": f"chain: {exc}"})
             return
@@ -895,12 +1048,11 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
         if not self._require_auth():
             return
         try:
-            address = self._requested_qr_address(self._primary_address())
-            if address is None:
-                self._json(HTTPStatus.BAD_REQUEST,
-                           {"error": "addr not valid or not watched"})
+            payload, err = self._requested_qr_payload(self._primary_address())
+            if err is not None:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": err})
                 return
-            png = qr.address_png_bytes(address)
+            png = qr.address_png_bytes(payload)
         except ChainError as exc:
             self._json(HTTPStatus.BAD_GATEWAY, {"error": f"chain: {exc}"})
             return

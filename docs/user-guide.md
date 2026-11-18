@@ -69,6 +69,11 @@ A wallet without a PIN has no lock - set one.
   the current one. Give the address (or show its QR) to the sender.
 - **Into the bench account:** the RECEIVE tab shows the bench address with
   a Copy button and a QR code. Funds sent here are held by the server.
+  Type an amount (optional) and tap **Show payment QR** and the code
+  becomes a `maza:` payment REQUEST for that amount — a payer who scans
+  it gets the address AND the amount prefilled. Leave the amount empty
+  for the plain address code. The request is only a displayed QR:
+  nothing is ever sent from this screen.
 
 ## 5. Sending MAZA
 
@@ -177,8 +182,9 @@ confirm the server itself is healthy before troubleshooting the phone.
   recipient field; scanned content is never opened as a link). Since
   the M9 code landed, a `maza:` payment URI (with `?amount=`) fills
   BOTH the recipient and the amount field — you still confirm the send
-  yourself; nothing is ever auto-sent from a scan. The Request-amount
-  receive screen (generating a `maza:` request QR), testnet mode, and
+  yourself; nothing is ever auto-sent from a scan. The RECEIVE tab can
+  also generate a `maza:` payment-request QR for a typed amount —
+  requests are DISPLAYED for a payer to scan. Testnet mode and
   receive notifications are not in the app yet (see `README.md` - What
   works today, and `docs/SPEC-AUDIT.md` for the plan).
 - The bench account is a shared capped play wallet for testing, not a

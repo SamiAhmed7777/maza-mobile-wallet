@@ -147,8 +147,12 @@ class DocsHonesty(unittest.TestCase):
     def test_user_guide_honest_about_scope(self):
         src = read(USER_GUIDE)
         self.assertIn("maza:", src, "payment-URI scan documented")
-        self.assertIn("Request-amount", src,
-                      "receive screen still documented as pending")
+        # M9-ii shipped: the guide must DOCUMENT the request screen (not
+        # list it as pending any more) and keep the display-only scope.
+        self.assertIn("Show payment QR", src,
+                      "receive request screen documented as shipped")
+        self.assertNotIn("Request-amount\n  receive screen", src,
+                         "no stale 'pending' wording left")
 
 
 if __name__ == "__main__":

@@ -824,6 +824,40 @@ public final class SelfTest {
         ScanOrigin.Result bareSr = ScanOrigin.parse(addr);
         check("mazauri: bare-address scan result carries amountSats 0",
                 bareSr.ok && bareSr.amountSats == 0L);
+
+        // --- M9-ii: typed-amount entry (receive request screen)
+        Long typed = MazaUri.parseAmountText("1.5");
+        check("mazauri: parseAmountText 1.5 -> 150000000 (same rules)",
+                typed != null && typed == 150000000L);
+        typed = MazaUri.parseAmountText(".5");
+        check("mazauri: parseAmountText .5 -> 50000000",
+                typed != null && typed == 50000000L);
+        typed = MazaUri.parseAmountText("1.23456789");
+        check("mazauri: parseAmountText accepts exactly 8 fraction digits",
+                typed != null && typed == 123456789L);
+        typed = MazaUri.parseAmountText("1.234567890");
+        check("mazauri: parseAmountText rejects 9 fraction digits",
+                typed == null);
+        typed = MazaUri.parseAmountText("-1");
+        check("mazauri: parseAmountText rejects a signed amount (D14)",
+                typed == null);
+        typed = MazaUri.parseAmountText("abc");
+        check("mazauri: parseAmountText rejects non-numeric text",
+                typed == null);
+        typed = MazaUri.parseAmountText("");
+        check("mazauri: parseAmountText EMPTY -> 0L, not null (the "
+                        + "screen treats sats <= 0 as invalid / no request)",
+                typed != null && typed == 0L);
+        typed = MazaUri.parseAmountText(null);
+        check("mazauri: parseAmountText null -> null (never throws)",
+                typed == null);
+        // The exact compose the receive screen performs, end to end.
+        String composed = MazaUri.format(addr,
+                MazaUri.parseAmountText("0.25"), null, null);
+        p = MazaUri.parse(composed);
+        check("mazauri: receive-screen compose (format of typed 0.25) "
+                        + "re-parses to the same address + 25000000 sats",
+                p.ok && addr.equals(p.address) && p.amountSats == 25000000L);
     }
 
     private static boolean throwsIllegal(Runnable r) {

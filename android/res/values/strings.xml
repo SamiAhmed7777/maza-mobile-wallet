@@ -86,6 +86,10 @@
     <string name="qr_loading">Loading QR...</string>
     <string name="qr_failed">QR code unavailable: %1$s</string>
     <string name="qr_bad_image">QR code unavailable: the server sent an unreadable image.</string>
+    <!-- M9-ii: payment-request QR on RECEIVE -->
+    <string name="req_amount_hint">Amount to request (optional, MAZA)</string>
+    <string name="req_qr_button">Show payment QR</string>
+    <string name="req_amount_invalid">Enter a valid amount: digits only, up to 8 decimals.</string>
     <string name="send_failed">Send failed: %1$s</string>
     <string name="send_unknown">Send not confirmed (%1$s). Check HISTORY before trying again - the transaction may have been submitted.</string>
 
