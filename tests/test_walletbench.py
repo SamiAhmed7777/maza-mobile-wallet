@@ -1390,6 +1390,20 @@ class TestQrPaymentRequestUri(BenchTestCase):
         self.assertEqual(status, 400)
         self.assertIn("payment request for this wallet", body.decode())
 
+    def test_bench_book_address_is_a_valid_request_target(self):
+        # The RECEIVE screen composes its request around the BENCH address
+        # (the /api/state "address") - book'd, not watched. Live-verified
+        # defect (first deploy 20261118-055223 returned 400 for exactly
+        # this shape): the allowed set is bench book UNION watch book.
+        cookie = self.unlock()
+        _, _, sbody = self.request("GET", "/api/state", cookie=cookie)
+        primary = json.loads(sbody)["address"]
+        status, headers, body = self.request(
+            "GET", self._req(f"maza:{primary}?amount=0.5"), cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Content-Type"), "image/png")
+        self.assertTrue(body.startswith(b"\x89PNG"))
+
     def test_non_maza_schemes_rejected(self):
         cookie = self.unlock()
         self._watch(cookie, WATCH_A)

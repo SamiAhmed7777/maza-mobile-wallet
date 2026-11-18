@@ -942,14 +942,17 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
         return all("0" <= c <= "9" for c in digits)
 
     @classmethod
-    def _valid_maza_uri_payload(cls, payload: str, watch: Any) -> bool:
+    def _valid_maza_uri_payload(cls, payload: str, allowed: Any) -> bool:
         """Mirror of the M9 MazaUri.parse accept/reject contract, scoped to
         what the QR layer must enforce: the payload must BE a
-        maza:/maza:// payment URI whose ADDRESS part is a watch-book
-        address (the same no-arbitrary-address invariant as ?addr=), and
-        every parameter must decode/validate under the same rules (strict
-        percent-decoding fail-closed, '+' literal, digits-only <=8dp
-        amounts, req-<unknown> rejects, unknown plain params ignored).
+        maza:/maza:// payment URI whose ADDRESS part is one of THIS
+        WALLET's own addresses (the bench book ∪ the watch book — the
+        no-arbitrary-address invariant, widened for ?uri= because the
+        receive screen legitimately composes requests around the BENCH
+        address, which is book'd, not watched), and every parameter must
+        decode/validate under the same rules (strict percent-decoding
+        fail-closed, '+' literal, digits-only <=8dp amounts,
+        req-<unknown> rejects, unknown plain params ignored).
         Label/message are carried, never acted on."""
         s = payload.strip()
         lower = s.lower()
@@ -964,7 +967,7 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
         query = None if q < 0 else rest[q + 1:]
         if path.endswith("/"):
             path = path[:-1]  # one trailing '/' trimmed (guiutil.cpp:154)
-        if not path or path not in watch:
+        if not path or path not in allowed:
             return False
         if query is None:
             return True
@@ -998,8 +1001,8 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
         user-safe string for the 400 body. The uri payload is decoded
         STRICTLY and re-validated against the same contract the app's
         MazaUri enforces BEFORE it is encoded - this endpoint is a
-        payment-request renderer for THIS wallet's addresses, never a
-        generic QR-content service."""
+        payment-request renderer for THIS wallet's addresses (bench book
+        ∪ watch book), never a generic QR-content service."""
         parsed = urllib.parse.urlsplit(self.path)
         query = parsed.query
         raw_addr = self._query_param_raw(query, "addr")
@@ -1014,8 +1017,9 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
                 return None, "uri is empty"
             if len(payload) > self.QR_URI_MAX_CHARS:
                 return None, f"uri too long (max {self.QR_URI_MAX_CHARS} chars)"
-            if not self._valid_maza_uri_payload(payload,
-                                                self._watch_addresses()):
+            if not self._valid_maza_uri_payload(
+                    payload,
+                    set(self._ensure_addresses()) | set(self._watch_addresses())):
                 return None, "uri is not a payment request for this wallet"
             return payload, None
         if raw_addr is not None:

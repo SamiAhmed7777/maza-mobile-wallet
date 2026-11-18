@@ -151,9 +151,13 @@ class BackendContractMirror(unittest.TestCase):
 
     def test_watch_book_membership_enforced(self):
         # Same no-arbitrary-address invariant as ?addr=: the ADDRESS part
-        # of the payload must be a watch-book address.
-        self.assertIn("path not in watch", self.src)
+        # of the payload must be one of THIS WALLET's own addresses
+        # (bench book ∪ watch book - the receive screen composes around
+        # the BENCH address, live-verified defect fix).
+        self.assertIn("path not in allowed", self.src)
         self.assertIn("payment request for this wallet", self.src)
+        self.assertIn("set(self._ensure_addresses()) | set(self._watch_addresses())",
+                      self.src)
 
     def test_length_cap_and_both_params_guard(self):
         self.assertIn("QR_URI_MAX_CHARS = 512", self.src)

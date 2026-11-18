@@ -380,7 +380,10 @@ Backend QR-layer mirror (M9-ii, added 2026-11-17): walletbench's
 `/api/qr.png?uri=` and `/api/qr.svg?uri=` re-validate a payment-request
 payload against the SAME contract (Python mirror of the rules above,
 behaviourally tested in `tests/test_walletbench.py`) before encoding:
-the address part must be a watch-book address, '+' stays literal
+the address part must be one of THIS WALLET's own addresses (bench
+book ∪ watch book — the receive screen composes around the BENCH
+address; a first deploy that required watch-book membership only was
+caught live and fixed), '+' stays literal
 (urllib's query parser would decode it as a space, so the parameter is
 extracted raw), percent-decoding fails closed, amounts are
 digits-only ≤ 8 dp, `req-<unknown>` rejects. ONE deliberately
