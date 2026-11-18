@@ -87,7 +87,12 @@ A wallet without a PIN has no lock - set one.
   spends from its own play wallet. Per-send cap 50 MAZA; fee 0.0001 MAZA.
 - **WALLET tab send (self-custody):** enter an address and amount; the app
   builds and signs the transaction on the device and the server just
-  broadcasts the signed bytes. Fee 0.0001 MAZA.
+  broadcasts the signed bytes. The fee is per-transaction, the same rate
+  the official MazaCore desktop wallet pays when it has no fee estimates:
+  **10 sat/byte** (10000 sat/kB fallback rate, wallet.h:49 + fees.cpp
+  FALLBACK branch), so a typical payment costs about 0.0000226 MAZA.
+  Change smaller than 546 sat is folded into the fee instead of creating
+  a dust output (MazaCore behavior, DECISIONS.md D4).
 
 Confirmations follow the chain's defaults: one confirmation is enough to
 spend, and blocks arrive about once a minute on average (inherited node

@@ -49,6 +49,33 @@ chain code on three fields (noted per item).
 - Default paytxfee **0** (wallet.h:47) — fee is calculated per tx, not flat.
 - Relay floor **1000 sat/kB** (validation.h:53), dust threshold at
   **3000 sat/kB** relay fee (policy.h:46). NOT Komodo's flat 10000 sat.
+- M10 (2026-11-17, loop tick ec0a949+1): the self-custody send pays
+  **FeePolicy.feeForSize(signedTxBytes)** — the MazaCore GetMinimumFee
+  cold-start chain executed step for step from the FETCHED upstream tree
+  (MazaCoin/maza master = 0.16.3): paytxfee 0 (wallet.h:47) → fee
+  estimates unavailable on a phone → **fallbackFee 10000 sat/kB**
+  (wallet/fees.cpp:50-54 FALLBACK branch; wallet.cpp:63;
+  wallet.h:49 DEFAULT_FALLBACK_FEE = 10000) → required-fee floor
+  minRelay 1000 sat/kB (wallet/fees.cpp GetRequiredFee;
+  validation.h:53) → maxTxFee cap 0.1 MAZA (wallet/fees.cpp:71-74;
+  validation.h:56). Net effect: **10 sat/byte**, so a typical
+  226-byte 1-in/2-out payment is 2260 sat (0.00002260 MAZA).
+  CFeeRate::GetFee semantics mirrored exactly (policy/feerate.h:37,
+  truncating size×rate/1000); sizes over MAX_STANDARD_TX_SIZE 100000
+  are refused loud (policy.h). Dust change handling mirrored too:
+  **no change output below 546 sats** (policy.cpp:20-30, 182 = 34+148;
+  "546 satoshis at the default rate of 3000 sat/kB" is the source's own
+  literal) — the remainder folds into the fee, the fold rate being the
+  discard rate floored at dustRelayFee (wallet.cpp:3091;
+  wallet/fees.cpp:80-89 GetDiscardRate; policy.h:46). Selection and fee
+  converge in a bounded fixpoint loop (MazaCore CreateTransaction
+  shape); nothing broadcasts unless the loop stabilizes. The flat
+  10000-sat constant (bench-era, ~44× the floor fee for typical txs)
+  is REMOVED — DIVERGENCE NOTE for Payu (fee-adjacent, routed per the
+  standing coin-policy directive): the app now pays MazaCore's own
+  inherited rate rather than a flat; adding headroom over the fallback
+  rate would be a fee-policy change and stays Payu's call. The bench
+  edition fee (D7, server-side FLAT_FEE) is untouched by this change.
 
 ## D5 — Block timing (for UI copy only)
 - Target spacing **120 s per algo** (chainparams.cpp:89, "Maza: 2 minutes");

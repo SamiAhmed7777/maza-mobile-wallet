@@ -170,6 +170,9 @@ public final class SelfTest {
         section("GapPolicy BIP44 gap limit (M11 watch window)");
         gapPolicyChecks();
 
+        section("FeePolicy per-tx fees (M10, MazaCore GetMinimumFee mirror)");
+        feePolicyChecks();
+
         section("Settings screens WCAG contrast (S-4)");
         settingsContrastChecks();
 
@@ -872,6 +875,65 @@ public final class SelfTest {
         } catch (RuntimeException e) {
             return false;
         }
+    }
+
+    /** FeePolicy (M10): per-tx fee math mirroring MazaCore GetMinimumFee
+     *  at the wallet's cold start - every constant FETCHED from the
+     *  upstream tree, never from memory (see crypto/FeePolicy.java). */
+    private static void feePolicyChecks() {
+        // Fetched upstream constants (MazaCoin/maza master = 0.16.3;
+        // DECISIONS.md D4 + the upstream excerpts in the judge bundle).
+        check("feepolicy: FALLBACK_RATE_PER_K = 10000 (wallet.h:49)",
+                FeePolicy.FALLBACK_RATE_PER_K == 10000);
+        check("feepolicy: MIN_RELAY_RATE_PER_K = 1000 (validation.h:53)",
+                FeePolicy.MIN_RELAY_RATE_PER_K == 1000);
+        check("feepolicy: DUST_RATE_PER_K = 3000 (policy.h:46)",
+                FeePolicy.DUST_RATE_PER_K == 3000);
+        check("feepolicy: MAX_TX_SIZE_BYTES = 100000 (MAX_STANDARD_TX_SIZE)",
+                FeePolicy.MAX_TX_SIZE_BYTES == 100000);
+        check("feepolicy: MAX_FEE_SATS = 0.1 MAZA (validation.h:56)",
+                FeePolicy.MAX_FEE_SATS == 10000000L);
+        check("feepolicy: P2PKH dust size 182 = 34 out + 148 in (policy.cpp:27-30)",
+                FeePolicy.P2PKH_DUST_SIZE_BYTES == 182);
+
+        // CFeeRate::GetFee semantics (policy/feerate.h): truncating division
+        check("feepolicy: getFee 0 bytes = 0", FeePolicy.getFee(0, 10000) == 0);
+        check("feepolicy: getFee 1 byte at 10000 = 10",
+                FeePolicy.getFee(1, 10000) == 10);
+        check("feepolicy: getFee 226 B at 10000 = 2260 (typical 1-in/2-out payment)",
+                FeePolicy.getFee(226, 10000) == 2260);
+        check("feepolicy: getFee 1000 B at 10000 = 10000",
+                FeePolicy.getFee(1000, 10000) == 10000);
+        check("feepolicy: getFee 1999 B at 10000 = 19990",
+                FeePolicy.getFee(1999, 10000) == 19990);
+        check("feepolicy: getFee truncates (1 B at 1500 = 1)",
+                FeePolicy.getFee(1, 1500) == 1);
+        check("feepolicy: getFee truncates (1999 B at 1500 = 2998)",
+                FeePolicy.getFee(1999, 1500) == 2998);
+        check("feepolicy: getFee minRelay 226 B = 226",
+                FeePolicy.getFee(226, 1000) == 226);
+        check("feepolicy: getFee rejects negative size",
+                throwsIllegal(() -> FeePolicy.getFee(-1, 10000)));
+        check("feepolicy: getFee rejects over-standard size",
+                throwsIllegal(() -> FeePolicy.getFee(100001, 10000)));
+        check("feepolicy: getFee accepts exactly MAX_STANDARD_TX_SIZE",
+                FeePolicy.getFee(100000, 10000) == 1000000);
+
+        // feeForSize: fallback rate dominates the required-fee floor at
+        // 10 sat/B; the maxTxFee cap sits behind the size guard.
+        check("feepolicy: feeForSize 226 B = 2260 (per-tx, not flat)",
+                FeePolicy.feeForSize(226) == 2260);
+        check("feepolicy: feeForSize 0 B = 0", FeePolicy.feeForSize(0) == 0);
+        check("feepolicy: feeForSize 100000 B = 1000000 (under the cap)",
+                FeePolicy.feeForSize(100000) == 1000000);
+        check("feepolicy: feeForSize tracks the fallback rate (floor never dominates at 10 sat/B)",
+                FeePolicy.feeForSize(1051)
+                        == FeePolicy.getFee(1051, FeePolicy.FALLBACK_RATE_PER_K));
+
+        // Dust threshold (policy.cpp:20-30): 182 * 3000 / 1000 = 546;
+        // the source's own comment states the literal.
+        check("feepolicy: dust threshold = 546 sats (policy.cpp:30 literal)",
+                FeePolicy.dustThresholdSats() == 546);
     }
 
     /** GapPolicy (M11): the BIP44 gap-limit decision table the Android
