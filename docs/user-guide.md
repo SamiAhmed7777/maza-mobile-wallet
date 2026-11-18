@@ -174,9 +174,12 @@ confirm the server itself is healthy before troubleshooting the phone.
   wallet is PIN-based.
 - QR camera scanning is in the app from 2026-11-17 (SEND tab "Scan QR":
   the camera reads a MAZA QR and the validated address lands in the
-  recipient field; scanned content is never opened as a link). Payment-URI
-  requests, testnet mode, and receive notifications are not in the app
-  yet (see `README.md` - What works today, and `docs/SPEC-AUDIT.md` for
-  the plan).
+  recipient field; scanned content is never opened as a link). Since
+  the M9 code landed, a `maza:` payment URI (with `?amount=`) fills
+  BOTH the recipient and the amount field — you still confirm the send
+  yourself; nothing is ever auto-sent from a scan. The Request-amount
+  receive screen (generating a `maza:` request QR), testnet mode, and
+  receive notifications are not in the app yet (see `README.md` - What
+  works today, and `docs/SPEC-AUDIT.md` for the plan).
 - The bench account is a shared capped play wallet for testing, not a
   place to hold real amounts.

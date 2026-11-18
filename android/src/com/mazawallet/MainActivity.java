@@ -40,6 +40,7 @@ import com.mazawallet.crypto.BiometricPolicy;
 import com.mazawallet.crypto.LockPolicy;
 import com.mazawallet.crypto.ScanFlowPolicy;
 import com.mazawallet.crypto.ScanOrigin;
+import com.mazawallet.crypto.MazaUri;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -807,6 +808,13 @@ public class MainActivity extends Activity
             if (action == ScanFlowPolicy.FILL_AND_CLOSE) {
                 sendResultTv.setText("");
                 toEt.setText(r.address);
+                // M9: a maza: URI's parsed amount prefills the amount
+                // field (8dp desktop format). The user still confirms
+                // the send through the same guards as a typed send -
+                // nothing is ever auto-sent from a scan.
+                if (r.amountSats > 0 && amountEt != null) {
+                    amountEt.setText(MazaUri.formatAmount(r.amountSats));
+                }
                 toEt.requestFocus();
                 closeScan();
             } else if (action == ScanFlowPolicy.KEEP_SCANNING

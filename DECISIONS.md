@@ -328,6 +328,54 @@ evidence.
   one-per-streak "Still looking..." status added in the same fix).
   On-device scan proof = M8b-ii (device evidence tick).
 
+## D14 — maza: payment-URI contract (M9 scan side, added 2026-11-17)
+
+The official `maza:` payment-URI contract, ported from the MazaCoin
+desktop wallet sources FETCHED 2026-11-17 from
+github.com/MazaCoin/maza master (never from memory):
+
+- `src/qt/guiutil.cpp:146-206` — parseBitcoinURI: scheme `maza`
+  (case-insensitive; the address part is never case-folded); address =
+  everything before the first `?` with ONE trailing `/` trimmed;
+  params percent-decoded, in order, later duplicates overwriting;
+  `label`/`message` carried; `amount` parsed by BitcoinUnits (empty
+  value = absent = 0); unknown params silently ignored;
+  `req-<unknown>` REJECTS the whole URI (req-label / req-message /
+  req-amount accepted via the known rows).
+- `src/qt/bitcoinunits.cpp:144-181` + `bitcoinunits.h:112-120` — the
+  amount rules: spaces/thin spaces ignored; ≤ 1 dot; ≤ 8 fractional
+  digits; digit string capped at 18 chars (63-bit guard); fraction
+  left-justified to 8 (`"0.5"` and `".5"` both = 50000000 sats).
+- `src/qt/guiutil.cpp:221-243` — formatBitcoinURI (the M9-ii build
+  side, shipped with the parse half): `maza:<addr>`, then
+  `?amount=<8dp no separators>` when non-zero, then label, then
+  message; percent-encoding escapes everything outside the RFC 3986
+  unreserved set (a strict superset of upstream's table — always
+  decodes to the same value).
+
+TWO DOCUMENTED DIVERGENCES (both stricter than upstream):
+
+1. `maza://` normalization: upstream's normalizer replaces 11
+   characters against a 7-character prefix
+   (`guiutil.cpp:213-215`, `uri.replace(0, 11, "maza:")`), slicing the
+   first four characters off the address. We strip exactly the
+   7-character prefix. Mirroring the upstream slice would corrupt
+   every `maza://` payment address.
+2. Signed amounts: upstream hands the digit string to
+   `QString::toLongLong`, which accepts a leading `+`/`-`. A scanned
+   payment request can never carry a signed amount into this wallet —
+   digits-only is enforced (this also rejects every non-digit shape).
+
+Scope: the SCAN side this change — ScanOrigin routes `maza:`/`maza://`
+payloads through `crypto/MazaUri.java` and STILL re-validates the
+parsed address through the same base58check contract as the typed send
+path (MazaUri never blesses an address); a scanned amount only
+PREFILLS the SEND amount field and the user confirms through the
+normal send guards — nothing is ever auto-sent from a scan. The
+receive-side Request-amount screen (M9-ii) consumes `MazaUri.format`
+and is a separate tick. Desktop-driven by `SelfTest.mazaUriChecks`
+(41 checks); wiring pinned by `tests/test_maza_uri_contract.py`.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

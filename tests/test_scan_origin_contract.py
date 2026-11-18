@@ -74,8 +74,8 @@ class ScanOriginPurity(unittest.TestCase):
                       "explicit no-fetch rule")
         self.assertIn('"Unsupported URI scheme - content is never opened"',
                       src, "unknown schemes rejected")
-        self.assertIn('"URI parameters are not supported yet"', src,
-                      "maza: params fail-closed until M9")
+        self.assertIn("MazaUri.parse(s)", src,
+                      "maza: params now parse via the M9 MazaUri contract")
         self.assertIn('"Multi-line content rejected"', src)
         # the address contract must match the send path exactly
         self.assertIn("Bip44Maza.ADDRESS_VERSION", src)

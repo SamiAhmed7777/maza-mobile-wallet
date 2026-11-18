@@ -79,8 +79,10 @@ HybridBinarizer; decode in memory, nothing fetched/opened/stored). The M8a
 scope shipped the dependency + its supply-chain fence + the scan-origin
 policy (`android/src/com/mazawallet/crypto/ScanOrigin.java`:
 scanned payload text may only ever become a validated MAZA address; URLs
-and foreign schemes are never fetched or opened; `maza:` URI parameters
-fail-closed until M9).
+and foreign schemes are never fetched or opened; since M9 `maza:`
+payment-URI parameters parse through `crypto/MazaUri.java` (official
+desktop port, DECISIONS D14) with the address re-validated by the same
+send-path contract and nothing ever fetched or opened).
 
 **Vendored data (not code):** `android/res/raw/bip39_english.txt` — the BIP39
 English wordlist, 2048 words, data-only:

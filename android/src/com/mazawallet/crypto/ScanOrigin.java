@@ -18,8 +18,11 @@ import java.util.Locale;
  *    bytes and version 50 (Bip44Maza.ADDRESS_VERSION) - the SAME
  *    contract the SelfCustody send path enforces on typed addresses,
  *    so a scan can never insert anything the typed path would reject.
- *  - maza: URI parameters (?amount=...) are REJECTED until M9 ships
- *    the payment-URI contract; fail-closed beats half-parsed.
+ *  - maza:/maza:// payloads go through MazaUri.parse (M9: the official
+ *    payment-URI contract ported from MazaCoin guiutil.cpp) and the
+ *    parsed address still re-validates through the SAME base58check
+ *    contract as the typed send path; a URI that carries an amount
+ *    fills only the SEND amount field, never anything auto-sent.
  *  - Length is capped before any decode work, so hostile oversized
  *    payloads cannot burn decode time.
  *
@@ -37,15 +40,20 @@ public final class ScanOrigin {
     public static final int MAX_LENGTH = 200;
 
     /** Parsed outcome: ok=true carries exactly the address substring that
-     *  validated; ok=false carries a user-safe reason and NO address. */
+     *  validated (amountSats = a maza: URI's parsed amount, 0 when the
+     *  payload carried none); ok=false carries a user-safe reason and NO
+     *  address. */
     public static final class Result {
         public final boolean ok;
-        public final String address; // non-null only when ok
-        public final String reason;  // non-null only when !ok
-        private Result(boolean ok, String address, String reason) {
+        public final String address;   // non-null only when ok
+        public final String reason;    // non-null only when !ok
+        public final long amountSats;  // meaningful only when ok (0 = none)
+        private Result(boolean ok, String address, String reason,
+                       long amountSats) {
             this.ok = ok;
             this.address = address;
             this.reason = reason;
+            this.amountSats = amountSats;
         }
     }
 
@@ -72,14 +80,16 @@ public final class ScanOrigin {
         }
         String lower = s.toLowerCase(Locale.US);
         if (lower.startsWith("maza:")) {
-            String rest = s.substring(5);
-            if (rest.indexOf('?') >= 0) {
-                return reject("URI parameters are not supported yet");
+            // M9: the official payment-URI parse (MazaUri mirrors the
+            // MazaCoin desktop guiutil.cpp contract, divergences
+            // documented in DECISIONS.md D14). The parsed address is
+            // still validated HERE through the same base58check contract
+            // as the typed path - MazaUri never blesses an address.
+            MazaUri.Parsed p = MazaUri.parse(s);
+            if (!p.ok) {
+                return reject(p.reason);
             }
-            if (rest.isEmpty()) {
-                return reject("URI carries no address");
-            }
-            return addressResult(rest);
+            return addressResult(p.address, p.amountSats);
         }
         if (lower.startsWith("http:") || lower.startsWith("https:")
                 || lower.startsWith("www.")) {
@@ -91,10 +101,10 @@ public final class ScanOrigin {
         if (s.indexOf(':') >= 0) {
             return reject("Unsupported URI scheme - content is never opened");
         }
-        return addressResult(s);
+        return addressResult(s, 0L);
     }
 
-    private static Result addressResult(String s) {
+    private static Result addressResult(String s, long amountSats) {
         byte[] payload;
         try {
             payload = Base58Check.decode(s);
@@ -108,10 +118,10 @@ public final class ScanOrigin {
                 || (payload[0] & 0xFF) != Bip44Maza.ADDRESS_VERSION) {
             return reject("Not a MAZA address");
         }
-        return new Result(true, s, null);
+        return new Result(true, s, null, amountSats);
     }
 
     private static Result reject(String reason) {
-        return new Result(false, null, reason);
+        return new Result(false, null, reason, 0L);
     }
 }

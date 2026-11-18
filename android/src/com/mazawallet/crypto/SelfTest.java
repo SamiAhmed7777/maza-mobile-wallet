@@ -164,6 +164,9 @@ public final class SelfTest {
         scanFlowChecks();
         lumaRotateChecks();
 
+        section("MazaUri payment-URI contract (M9, official desktop port)");
+        mazaUriChecks();
+
         section("Settings screens WCAG contrast (S-4)");
         settingsContrastChecks();
 
@@ -596,9 +599,10 @@ public final class SelfTest {
      *  are VECTOR-DERIVED (canonical Trezor mnemonic through the MAZA
      *  profile) plus one real in-repo mainnet anchor; negatives cover the
      *  origin-discipline rules (no URL is ever fetched/opened, unknown
-     *  schemes rejected, URI parameters fail-closed until M9), the
-     *  base58check contract shared with the send path, and the resource
-     *  guards (length cap, multi-line). */
+     *  schemes rejected, maza: URIs parsed through MazaUri per the
+     *  official desktop contract with the address re-validated here),
+     *  the base58check contract shared with the send path, and the
+     *  resource guards (length cap, multi-line). */
     private static void scanOriginChecks() {
         byte[] seed = Bip39.mnemonicToSeed("abandon abandon abandon abandon"
                 + " abandon abandon abandon abandon abandon abandon abandon"
@@ -632,8 +636,8 @@ public final class SelfTest {
                 !ScanOrigin.parse(corrupt).ok);
         check("scanorigin: BTC version byte rejected (wrong coin)",
                 !ScanOrigin.parse("1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA").ok);
-        check("scanorigin: maza: URI parameters rejected until M9",
-                !ScanOrigin.parse("maza:" + addr + "?amount=1.5").ok);
+        check("scanorigin: maza: payment URI parses - amount lands in the result",
+                ScanOrigin.parse("maza:" + addr + "?amount=1.5").ok);
         check("scanorigin: https URL rejected - never fetched or opened",
                 !ScanOrigin.parse("https://example.com/pay?x=1").ok);
         check("scanorigin: http URL rejected - never fetched or opened",
@@ -656,6 +660,181 @@ public final class SelfTest {
         ScanOrigin.Result okInv = ScanOrigin.parse(addr);
         check("scanorigin: ok result carries no reason",
                 okInv.ok && okInv.reason == null);
+    }
+
+    /** MazaUri (M9): the official maza: payment-URI contract ported from
+     *  the MazaCoin desktop wallet (guiutil.cpp + bitcoinunits.cpp, file/
+     *  line cites in the class javadoc and DECISIONS.md D14), driven
+     *  behaviorally: parse, the two documented divergences (the maza://
+     *  11-char upstream slicing bug vs our exact-prefix strip; digits-
+     *  only amounts), req-* rejection, percent-decode fail-closed, and
+     *  the format() build side with a full round-trip. */
+    private static void mazaUriChecks() {
+        byte[] seed = Bip39.mnemonicToSeed("abandon abandon abandon abandon"
+                + " abandon abandon abandon abandon abandon abandon abandon"
+                + " about", "");
+        Bip32.Node k0 = Bip44Maza.keyAt(Bip44Maza.accountNode(seed), 0, 0);
+        String addr = Bip44Maza.address(k0);
+
+        // --- parse: accepted shapes
+        MazaUri.Parsed p = MazaUri.parse("maza:" + addr);
+        check("mazauri: bare maza: parses (address, zero amount)",
+                p.ok && addr.equals(p.address) && p.amountSats == 0L
+                        && p.label.isEmpty() && p.message.isEmpty());
+        p = MazaUri.parse("MAZA://" + addr);
+        check("mazauri: maza:// normalizes and keeps the FULL address "
+                + "(upstream replace(0,11,..) would slice 4 chars - D14)",
+                p.ok && addr.equals(p.address));
+        p = MazaUri.parse("maza:" + addr + "/");
+        check("mazauri: one trailing slash trimmed (guiutil.cpp:154-157)",
+                p.ok && addr.equals(p.address));
+        p = MazaUri.parse("maza:" + addr + "?amount=1.5");
+        check("mazauri: amount 1.5 -> 150000000 sats",
+                p.ok && p.amountSats == 150000000L);
+        p = MazaUri.parse("maza:" + addr + "?amount=0.5");
+        check("mazauri: amount 0.5 -> 50000000 sats",
+                p.ok && p.amountSats == 50000000L);
+        p = MazaUri.parse("maza:" + addr + "?amount=.5");
+        check("mazauri: amount .5 -> 50000000 (empty whole, left-justified)",
+                p.ok && p.amountSats == 50000000L);
+        p = MazaUri.parse("maza:" + addr + "?amount=5.");
+        check("mazauri: amount 5. -> 500000000 (empty fraction)",
+                p.ok && p.amountSats == 500000000L);
+        p = MazaUri.parse("maza:" + addr + "?amount=");
+        check("mazauri: EMPTY amount value = absent = 0 (guiutil.cpp:194)",
+                p.ok && p.amountSats == 0L);
+        p = MazaUri.parse("maza:" + addr + "?amount=1 2");
+        check("mazauri: ASCII spaces ignored (removeSpaces) - '1 2' = 12",
+                p.ok && p.amountSats == 1200000000L);
+        p = MazaUri.parse("maza:" + addr + "?amount=1\u2009.5");
+        check("mazauri: thin space U+2009 ignored (bitcoinunits.h:115)",
+                p.ok && p.amountSats == 150000000L);
+        p = MazaUri.parse("maza:" + addr + "?label=Fund&message=note");
+        check("mazauri: label and message carried verbatim",
+                p.ok && "Fund".equals(p.label) && "note".equals(p.message));
+        p = MazaUri.parse("maza:" + addr
+                + "?req-label=R&req-message=M&req-amount=1");
+        check("mazauri: req-label/req-message/req-amount accepted",
+                p.ok && "R".equals(p.label) && "M".equals(p.message)
+                        && p.amountSats == 100000000L);
+        p = MazaUri.parse("maza:" + addr + "?amount=1&amount=2");
+        check("mazauri: duplicate amount - LAST wins (official loop)",
+                p.ok && p.amountSats == 200000000L);
+        p = MazaUri.parse("maza:" + addr + "?foo=bar&amount=1");
+        check("mazauri: unknown plain parameter silently ignored",
+                p.ok && p.amountSats == 100000000L);
+        p = MazaUri.parse("maza:" + addr + "?%61mount=2");
+        check("mazauri: percent-decoded KEY (%61mount = amount)",
+                p.ok && p.amountSats == 200000000L);
+        p = MazaUri.parse("maza:" + addr + "?label=%41B%43");
+        check("mazauri: percent-decoded VALUE (%41B%43 = ABC)",
+                p.ok && "ABC".equals(p.label));
+        p = MazaUri.parse("maza:" + addr + "?label=%C3%A9");
+        check("mazauri: UTF-8 percent-decode (%C3%A9 = U+00E9)",
+                p.ok && "\u00e9".equals(p.label));
+        p = MazaUri.parse("maza:" + addr + "?label=a+b");
+        check("mazauri: '+' stays literal (QUrlQuery is not form encoding)",
+                p.ok && "a+b".equals(p.label));
+
+        // --- parse: rejected shapes (every rejection is fail-closed)
+        p = MazaUri.parse("maza:" + addr + "?req-expiry=123");
+        check("mazauri: req-<unknown> REJECTS the whole URI",
+                !p.ok && "Required URI parameter not supported".equals(p.reason));
+        p = MazaUri.parse("maza:" + addr + "?amount=1.500000000");
+        check("mazauri: 9 fractional digits rejected (max precision 8)",
+                !p.ok && "Amount is not valid".equals(p.reason));
+        p = MazaUri.parse("maza:" + addr + "?amount=1.5.0");
+        check("mazauri: two dots rejected",
+                !p.ok && "Amount is not valid".equals(p.reason));
+        p = MazaUri.parse("maza:" + addr + "?amount=-1");
+        check("mazauri: signed amount rejected (D14: upstream toLongLong "
+                        + "would accept -1; a scan never prefills a signed amount)",
+                !p.ok && "Amount is not valid".equals(p.reason));
+        p = MazaUri.parse("maza:" + addr + "?amount=+1");
+        check("mazauri: plus-signed amount rejected",
+                !p.ok && "Amount is not valid".equals(p.reason));
+        p = MazaUri.parse("maza:" + addr + "?amount=1.5x");
+        check("mazauri: non-digit garbage rejected",
+                !p.ok && "Amount is not valid".equals(p.reason));
+        p = MazaUri.parse("maza:" + addr + "?amount=1234567890123456789");
+        check("mazauri: 19-digit amount rejected (63-bit guard, "
+                        + "bitcoinunits.cpp:171)",
+                !p.ok && "Amount is not valid".equals(p.reason));
+        p = MazaUri.parse("maza:" + addr + "?amount=1%2E5");
+        check("mazauri: percent-encoded dot in amount still parses "
+                        + "(%2E = '.')",
+                p.ok && p.amountSats == 150000000L);
+        p = MazaUri.parse("maza:" + addr + "?label=%4");
+        check("mazauri: truncated percent-escape rejected (fail closed)",
+                !p.ok && "URI is malformed".equals(p.reason));
+        p = MazaUri.parse("maza:" + addr + "?label=%zz");
+        check("mazauri: malformed percent-escape rejected (fail closed)",
+                !p.ok && "URI is malformed".equals(p.reason));
+        p = MazaUri.parse("maza:");
+        check("mazauri: scheme with no address rejected",
+                !p.ok && "URI carries no address".equals(p.reason));
+        p = MazaUri.parse("maza://");
+        check("mazauri: maza:// with no address rejected",
+                !p.ok && "URI carries no address".equals(p.reason));
+        p = MazaUri.parse("bitcoin:" + addr);
+        check("mazauri: foreign scheme refused at the URI layer",
+                !p.ok && "Not a maza: URI".equals(p.reason));
+        p = MazaUri.parse(null);
+        check("mazauri: null input rejected, never throws",
+                !p.ok && "Nothing scanned".equals(p.reason));
+
+        // --- format: the build side (formatBitcoinURI mirror)
+        check("mazauri: formatAmount 8dp no separators",
+                "0.50000000".equals(MazaUri.formatAmount(50000000L)));
+        check("mazauri: formatAmount(0) renders 0.00000000",
+                "0.00000000".equals(MazaUri.formatAmount(0L)));
+        String built = MazaUri.format(addr, 150000000L, null, null);
+        check("mazauri: format = maza:ADDR?amount=1.50000000",
+                built.equals("maza:" + addr + "?amount=1.50000000"));
+        String full = MazaUri.format(addr, 150000000L, "a b&c=d", "m");
+        check("mazauri: param order amount,label,message with ? then &",
+                full.equals("maza:" + addr + "?amount=1.50000000"
+                        + "&label=a%20b%26c%3Dd&message=m"));
+        check("mazauri: negative formatAmount is a caller error "
+                        + "(IllegalArgumentException)",
+                throwsIllegal(new Runnable() {
+                    public void run() { MazaUri.formatAmount(-1L); }
+                }));
+
+        // --- round trip
+        p = MazaUri.parse(MazaUri.format(addr, 150000000L, "Cafe Fund",
+                "order 7"));
+        check("mazauri: format -> parse round trip (address, amount, "
+                        + "label, message)",
+                p.ok && addr.equals(p.address) && p.amountSats == 150000000L
+                        && "Cafe Fund".equals(p.label)
+                        && "order 7".equals(p.message));
+
+        // --- through ScanOrigin (the only scan-side consumer)
+        ScanOrigin.Result sr = ScanOrigin.parse("maza:" + addr
+                + "?amount=0.25");
+        check("mazauri: scan fills address AND amountSats in one result",
+                sr.ok && addr.equals(sr.address)
+                        && sr.amountSats == 25000000L);
+        ScanOrigin.Result bad = ScanOrigin.parse("maza:NotABase58Payload"
+                + "?amount=1");
+        check("mazauri: URI with an invalid address still rejected - "
+                        + "the send-path contract stays authoritative",
+                !bad.ok && bad.address == null);
+        ScanOrigin.Result bareSr = ScanOrigin.parse(addr);
+        check("mazauri: bare-address scan result carries amountSats 0",
+                bareSr.ok && bareSr.amountSats == 0L);
+    }
+
+    private static boolean throwsIllegal(Runnable r) {
+        try {
+            r.run();
+            return false;
+        } catch (IllegalArgumentException e) {
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /** SettingsActivity.onResume regression proof (desktop-lifecycle

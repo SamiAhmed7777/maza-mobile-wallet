@@ -483,7 +483,12 @@ could have typed. The controls (all in
   into the SEND field that the typed path would reject.
 - URLs (http/https/www) and ANY foreign URI scheme are rejected outright:
   scanned content is never fetched, opened, or parsed as a link.
-- `maza:` URI parameters fail-closed until M9 ships the amount contract.
+- `maza:` URI parameters are parsed by the M9 MazaUri contract
+  (`crypto/MazaUri.java`, official desktop port — DECISIONS D14):
+  unknown `req-*` requirements reject the whole URI, nothing parsed
+  from a URI is ever fetched or opened, and the parsed address still
+  re-validates through the same base58check contract as typed
+  addresses. A parsed amount only prefills the SEND amount field.
 - Length is capped before decode work; multi-line content rejected;
   rejection reasons are user-safe and never echo the payload.
 - The decoder itself is a sha256-pinned vendored jar enforced by the
