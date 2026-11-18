@@ -1,0 +1,12 @@
+[Unit]
+Description=MAZA bench tunnel watchdog cycle (full-chain probe + heal)
+After=network-online.target maza-bench-tunnel.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/maza-bench-watchdog.env
+ExecStart=/usr/local/bin/maza-bench-watchdog tunnel
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

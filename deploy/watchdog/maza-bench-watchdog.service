@@ -1,0 +1,12 @@
+[Unit]
+Description=MAZA wallet bench watchdog cycle (walletbench probe + heal)
+After=network-online.target maza-wallet-bench.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/maza-bench-watchdog.env
+ExecStart=/usr/local/bin/maza-bench-watchdog bench
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

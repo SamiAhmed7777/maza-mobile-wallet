@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the MAZA tunnel watchdog every 60 seconds
+
+[Timer]
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=maza-tunnel-watchdog.service
+
+[Install]
+WantedBy=timers.target
