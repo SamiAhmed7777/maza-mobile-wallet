@@ -467,6 +467,63 @@ fee, confirmation or URI parameter is touched, so no Payu routing).
   Android wiring is pinned by `tests/test_gap_policy_wiring.py`. The
   on-device "receive 21 times" demonstration is a device-lane item.
 
+## D16 — Local receive notifications (M14 code half, added 2026-11-18)
+
+The wallet raises a LOCAL Android notification when coins arrive — on
+the bench account and on the self-custody watch set. Scope is honest
+and bounded:
+
+- **App-alive only, no push.** The notification rides the existing
+  15-second poll (`MainActivity.refresh` → `paintState`, and
+  `SelfCustody.refresh` → `applyRefresh`), which keeps running while
+  the app is locked and while it is backgrounded; it stops on activity
+  destroy / disconnect. There is NO push/FCM path — server-side push
+  infra + an exposure decision are deferred (backlog M14 keeps that
+  door; M7-style decisions still apply). Once the process is gone, no
+  notification can fire.
+- **A receive = a STRICT increase** between two consecutive balance
+  samples (`crypto/NotifyPolicy.shouldFire`, pure, desktop-driven by
+  `SelfTest.notifyPolicyChecks`): equal balances never fire, decreases
+  (sends, fees) never fire, and a balance that decreases then recovers
+  fires again (that recovery IS a receive). A malformed balance
+  (negative/NaN — the `json.loads` NaN rule) neither fires nor resets
+  the continuity.
+- **First sample never fires.** The last-seen balance is memory-only
+  per session (`MainActivity.lastBenchSats`, `SelfCustody.lastWatchSats`),
+  reset on session start (`showWallet`) and on seed setup
+  (`finishSetup`). Unlocking, reconnecting, or importing a seed never
+  re-announces an old balance.
+- **Android 13+ permission.** `POST_NOTIFICATIONS` is declared in the
+  manifest and runtime-requested once per session (`ReceiveNotify
+  .requestIfNeeded`); pre-13 APIs are pre-granted. Denied = no
+  notifications; the wallet itself is unaffected (the poll and every
+  other surface run identically). The notification channel
+  (`incoming_maza`, IMPORTANCE_DEFAULT) is created idempotently at
+  session start (API 26+; legacy path below).
+- **Lock-screen exposure is by design.** The notification text carries
+  the received amount ("+0.50000000 MAZA - bench account"). On a locked
+  device this shows the amount on the lock screen — documented in the
+  user guide; a user who prefers zero amount leakage can block the
+  notifications (Android 13+ runtime denial, or the per-app
+  notification switch in system settings on older versions). The
+  notification never carries an address, a txid, or any secret.
+- **d8 shape rule held**: `ReceiveNotify` is a top-level class with no
+  platform supertype; the pure decisions live in `crypto/NotifyPolicy`
+  (no Android imports). The wiring is pinned by
+  `tests/test_notify_wiring.py`; the beta battery permission allowlist
+  widened to exactly INTERNET + USE_BIOMETRIC + CAMERA +
+  POST_NOTIFICATIONS in the same change. The on-device receive proof is
+  a device-lane item (M14-ii).
+- **What the delta means** (judge polish fold): the notification reports
+  the NET change of one poll interval. A send and a receive landing in
+  the same 15-second window report only the net increase; per-tx
+  attribution rides HISTORY, not the notification.
+- **Small icon** (judge polish fold): the notification's small icon is a
+  flat monochrome technical glyph (`res/drawable/ic_notify.xml`) — the
+  shade's alpha/tint pipeline renders launcher mipmaps poorly. The
+  official MazaCoin roundel stays the brand surface (launcher + QR
+  cards) and is untouched.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

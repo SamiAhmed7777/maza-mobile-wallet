@@ -158,6 +158,11 @@ public class MainActivity extends Activity
     private TextView qrStatusTv;
     /** M9-ii: optional amount for the payment-request QR on RECEIVE. */
     private EditText reqAmountEt;
+    /** M14: last-seen bench balance in sats (memory-only per session; the
+     *  first sample of a session never notifies - NotifyPolicy.shouldFire). */
+    private Long lastBenchSats;
+    /** M14: the Android 13+ POST_NOTIFICATIONS ask happens once per session. */
+    private boolean notifPermAsked;
     private EditText toEt;
     private EditText amountEt;
     private TextView feeHintTv;
@@ -355,6 +360,14 @@ public class MainActivity extends Activity
      *  so a theme switch does not re-trigger the M21 watch import. */
     private void showWallet() {
         buildWalletUi();
+        // M14: notification channel exists before any receive can fire, the
+        // last-seen balance resets per session (unlock/reconnect never
+        // re-announces an old balance), and the Android 13+ notification
+        // permission is asked once per session (denied = no notifications,
+        // wallet unaffected).
+        ReceiveNotify.ensureChannel(this);
+        lastBenchSats = null;
+        notifPermAsked = ReceiveNotify.requestIfNeeded(this, notifPermAsked);
         // Unlock path watch re-import (M21): the landing tab is BALANCE, so
         // the WALLET tab's onShown() will not fire until the user switches
         // there. Fire the idempotent re-import now - a creation-time import
@@ -1120,6 +1133,10 @@ public class MainActivity extends Activity
         lastState = ws;
         fee = ws.fee;
         balanceTv.setText(fmtAmount(ws.balance) + " MAZA");
+        // M14: bench-account receive notification (strict increase between
+        // consecutive polls; the first sample of a session never fires).
+        // Returns the sat sample to keep for the next comparison.
+        lastBenchSats = ReceiveNotify.observeBench(this, lastBenchSats, ws.balance);
         accountTv.setText("account " + ws.account + " \u00B7 fee "
                 + fmtAmount(ws.fee) + " MAZA");
         feeHintTv.setText("fee " + fmtAmount(ws.fee) + " MAZA");

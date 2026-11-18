@@ -80,6 +80,9 @@ A wallet without a PIN has no lock - set one.
   it gets the address AND the amount prefilled. Leave the amount empty
   for the plain address code. The request is only a displayed QR:
   nothing is ever sent from this screen.
+- **Arrival notification:** while the app is alive it raises a local
+  "MAZA received" notification when either balance increases (see
+  section 11 for the exact scope - app-alive only, not push).
 
 ## 5. Sending MAZA
 
@@ -195,8 +198,18 @@ confirm the server itself is healthy before troubleshooting the phone.
   BOTH the recipient and the amount field — you still confirm the send
   yourself; nothing is ever auto-sent from a scan. The RECEIVE tab can
   also generate a `maza:` payment-request QR for a typed amount —
-  requests are DISPLAYED for a payer to scan. Testnet mode and
-  receive notifications are not in the app yet (see `README.md` - What
-  works today, and `docs/SPEC-AUDIT.md` for the plan).
+  requests are DISPLAYED for a payer to scan. Testnet mode is not in
+  the app yet (see `README.md` - What works today, and
+  `docs/SPEC-AUDIT.md` for the plan).
+- Receive notifications: when the app is ALIVE (open, locked on its
+  PIN cover, or backgrounded but not killed) it raises a local
+  "MAZA received" notification when the balance increases - on the
+  bench account and on the self-custody wallet. It is NOT push: if the
+  phone or the app process is off, nothing is raised until you next
+  open the app. The notification shows the amount on the lock screen
+  by design; if you prefer zero amount leakage, deny the notification
+  permission (Android 13+, asked once per session) or block
+  notifications for the app in system settings - the wallet itself is
+  unaffected.
 - The bench account is a shared capped play wallet for testing, not a
   place to hold real amounts.

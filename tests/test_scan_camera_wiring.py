@@ -154,6 +154,7 @@ class PermissionFlow(unittest.TestCase):
         perms = sorted(set(re.findall(r"android\.permission\.[A-Z_]+", mf)))
         self.assertEqual(perms, ["android.permission.CAMERA",
                                  "android.permission.INTERNET",
+                                 "android.permission.POST_NOTIFICATIONS",
                                  "android.permission.USE_BIOMETRIC"])
 
     def test_mainactivity_requests_camera_through_policy_rows(self):

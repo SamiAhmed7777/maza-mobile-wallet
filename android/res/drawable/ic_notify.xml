@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- M14: the notification small icon - a flat monochrome glyph (Android
+     renders small icons through the shade's alpha/tint pipeline, where a
+     launcher mipmap renders poorly; judge polish fold). A technical
+     status-bar glyph: the official MazaCoin roundel remains the brand
+     surface (launcher + QR cards) and is untouched. Even-odd fill cuts
+     the "M" out of the solid disc so the glyph survives tinting. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M12,1.5 A10.5,10.5 0 1,0 12,22.5 A10.5,10.5 0 1,0 12,1.5 Z M7,16.5 L7,7.5 L9.6,7.5 L12,10.8 L14.4,7.5 L17,7.5 L17,16.5 L14.8,16.5 L14.8,10.9 L12,14.6 L9.2,10.9 L9.2,16.5 Z" />
+</vector>

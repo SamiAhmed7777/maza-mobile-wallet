@@ -106,4 +106,14 @@
          pure ASCII. -->
     <string name="scan_hint">Point the camera at a MAZA QR code</string>
     <string name="scan_cancel">Cancel</string>
+
+    <!-- M14: local receive notifications (app-alive poll scope; DECISIONS
+         D16). Amounts appear in the notification text by design; the
+         lock-screen exposure is documented in the user guide. Additions
+         only; pure ASCII. -->
+    <string name="notify_channel_name">Incoming MAZA</string>
+    <string name="notify_channel_desc">Tells you when coins arrive at the wallet.</string>
+    <string name="notify_title">MAZA received</string>
+    <string name="notify_src_bench">bench account</string>
+    <string name="notify_src_wallet">self-custody wallet</string>
 </resources>

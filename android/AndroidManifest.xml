@@ -12,6 +12,11 @@
          Scan (ScanFlowPolicy gates the flow); the camera feed is decoded
          in memory only - no image capture, no storage. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- M14: local receive notifications. Runtime-requested once per
+         session on Android 13+ (denied = no notifications, wallet
+         unaffected); pre-13 APIs are pre-granted. App-alive poll scope
+         only - no push (DECISIONS D16). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-sdk
         android:minSdkVersion="24"

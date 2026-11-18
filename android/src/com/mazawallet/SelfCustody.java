@@ -108,6 +108,9 @@ public final class SelfCustody {
     /** Last usage scan of the receive chain (UI-thread only; null until the
      *  first refresh with usage surfaces returns). Drives NEXT/auto-advance. */
     private boolean[] lastRecvUsed;
+    /** M14: last-seen watch-set balance in sats (memory-only per session;
+     *  the first sample of a session never notifies - NotifyPolicy.shouldFire). */
+    private Long lastWatchSats;
 
     // Wallet-state widgets.
     private TextView balanceTv;
@@ -398,6 +401,9 @@ public final class SelfCustody {
         // refreshes, which then grows the window and advances the display.
         recvIndex = 0;
         changeIndex = 0;
+        // M14: a fresh/imported seed is a new continuity - the next sample
+        // is a first sample and must not announce the existing balance.
+        lastWatchSats = null;
         recvWindow = ADDR_COUNT;
         prefs.edit().putInt(KEY_RECV_IDX, 0)
                 .putInt(KEY_CHANGE_IDX, 0)
@@ -601,6 +607,10 @@ public final class SelfCustody {
             GapScan scan) {
         if (balanceTv == null) return;
         balanceTv.setText(fmt(balance) + " MAZA");
+        // M14: seed-address receive notification (strict increase between
+        // consecutive watch-utxos polls; first sample of a session never
+        // fires). observeWallet also returns the sat sample to keep.
+        lastWatchSats = ReceiveNotify.observeWallet(act, lastWatchSats, balance);
         applyGapScan(scan);
         historyList.removeAllViews();
         if (txs == null || txs.length() == 0) {

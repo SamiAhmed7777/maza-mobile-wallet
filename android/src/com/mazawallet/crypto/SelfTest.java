@@ -173,6 +173,9 @@ public final class SelfTest {
         section("FeePolicy per-tx fees (M10, MazaCore GetMinimumFee mirror)");
         feePolicyChecks();
 
+        section("NotifyPolicy receive notifications (M14 decision table)");
+        notifyPolicyChecks();
+
         section("Settings screens WCAG contrast (S-4)");
         settingsContrastChecks();
 
@@ -934,6 +937,84 @@ public final class SelfTest {
         // the source's own comment states the literal.
         check("feepolicy: dust threshold = 546 sats (policy.cpp:30 literal)",
                 FeePolicy.dustThresholdSats() == 546);
+    }
+
+    /** NotifyPolicy (M14): the local receive-notification decision table.
+     *  Pure rows - the Android notification shell is pinned by wiring tests
+     *  and the device lane. */
+    private static void notifyPolicyChecks() {
+        check("notifypolicy: COIN = 1e8 sats", NotifyPolicy.COIN == 100000000L);
+        check("notifypolicy: channel id is the app's single channel",
+                "incoming_maza".equals(NotifyPolicy.CHANNEL_ID));
+        check("notifypolicy: runtime perm gate = API 33 (Android 13)",
+                NotifyPolicy.RUNTIME_PERM_API == 33);
+        check("notifypolicy: channel gate = API 26 (Android 8.0)",
+                NotifyPolicy.CHANNEL_API == 26);
+
+        // toSats: exact 8dp conversion, half-up rounding, loud on NaN/negative.
+        check("notifypolicy: toSats(0) = 0", NotifyPolicy.toSats(0.0) == 0L);
+        check("notifypolicy: toSats(0.5) = 5e7 sats",
+                NotifyPolicy.toSats(0.5) == 50000000L);
+        check("notifypolicy: toSats(1) = 1e8 sats",
+                NotifyPolicy.toSats(1.0) == 100000000L);
+        check("notifypolicy: toSats 1e-8 precision = 1 sat",
+                NotifyPolicy.toSats(0.00000001) == 1L);
+        check("notifypolicy: toSats 8dp = exact (0.12345678)",
+                NotifyPolicy.toSats(0.12345678) == 12345678L);
+        try {
+            NotifyPolicy.toSats(-0.0001);
+            check("notifypolicy: toSats negative throws", false);
+        } catch (IllegalArgumentException e) {
+            check("notifypolicy: toSats negative throws", true);
+        }
+        try {
+            NotifyPolicy.toSats(Double.NaN);
+            check("notifypolicy: toSats NaN throws (json.loads NaN rule)", false);
+        } catch (IllegalArgumentException e) {
+            check("notifypolicy: toSats NaN throws (json.loads NaN rule)", true);
+        }
+
+        // shouldFire: STRICT increase between consecutive samples only.
+        check("notifypolicy: first sample (null prev) never fires",
+                !NotifyPolicy.shouldFire(null, 5000L));
+        check("notifypolicy: equal balance never fires",
+                !NotifyPolicy.shouldFire(5000L, 5000L));
+        check("notifypolicy: decrease never fires (send/fee)",
+                !NotifyPolicy.shouldFire(5000L, 4999L));
+        check("notifypolicy: strict increase fires",
+                NotifyPolicy.shouldFire(5000L, 5001L));
+        check("notifypolicy: 1-sat increase fires",
+                NotifyPolicy.shouldFire(0L, 1L));
+        check("notifypolicy: decrease-then-recover fires again (new receive)",
+                NotifyPolicy.shouldFire(1000L, 2000L));
+        try {
+            NotifyPolicy.shouldFire(-1L, 0L);
+            check("notifypolicy: negative prev throws", false);
+        } catch (IllegalArgumentException e) {
+            check("notifypolicy: negative prev throws", true);
+        }
+        try {
+            NotifyPolicy.shouldFire(0L, -1L);
+            check("notifypolicy: negative new throws", false);
+        } catch (IllegalArgumentException e) {
+            check("notifypolicy: negative new throws", true);
+        }
+
+        // Runtime permission + channel gates.
+        check("notifypolicy: API 28 ungranted needs no runtime ask",
+                !NotifyPolicy.runtimeRequestNeeded(28, false));
+        check("notifypolicy: API 33 ungranted needs the runtime ask",
+                NotifyPolicy.runtimeRequestNeeded(33, false));
+        check("notifypolicy: API 33 granted needs no ask",
+                !NotifyPolicy.runtimeRequestNeeded(33, true));
+        check("notifypolicy: API 34 granted needs no ask",
+                !NotifyPolicy.runtimeRequestNeeded(34, true));
+        check("notifypolicy: API 24 needs no channel (legacy path)",
+                !NotifyPolicy.channelNeeded(24));
+        check("notifypolicy: API 26 needs a channel",
+                NotifyPolicy.channelNeeded(26));
+        check("notifypolicy: API 34 needs a channel",
+                NotifyPolicy.channelNeeded(34));
     }
 
     /** GapPolicy (M11): the BIP44 gap-limit decision table the Android
