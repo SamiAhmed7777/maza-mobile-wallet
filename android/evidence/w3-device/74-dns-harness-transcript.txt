@@ -1,0 +1,93 @@
+### W4-DEV DNS-offline harness transcript (verbatim commands and raw output)
+# Host: DNS2 (Linux) -> ssh sami-pc -> C:\Program Files\BlueStacks_nxt\HD-Adb.exe -s emulator-5554
+# Device clock is UTC. Blank line separates one command's output from the next.
+# The harness is DEVICE-SIDE and needs no root: private DNS (DoT) is pointed at a
+# hostname that cannot exist, so every NEW lookup fails while cached answers keep
+# resolving. Airplane mode is NOT usable here - see 58-airplane-mode-device-state.txt.
+
+# ---- phase 1: harness already armed by the previous lane; measured 2026-11-18T01:10Z ----
+$ HD-Adb.exe -s emulator-5554 shell settings get global private_dns_mode
+hostname
+
+$ HD-Adb.exe -s emulator-5554 shell settings get global private_dns_specifier
+blackhole.invalid
+
+$ HD-Adb.exe -s emulator-5554 shell ping -c 1 -W 3 example.com
+ping: unknown host example.com
+
+$ HD-Adb.exe -s emulator-5554 shell ping -c 1 -W 3 sami-host.me
+ping: unknown host sami-host.me
+
+$ HD-Adb.exe -s emulator-5554 shell ping -c 1 -W 3 mazatest.sami-host.me
+PING mazatest.sami-host.me (194.163.161.162) 56(84) bytes of data.
+64 bytes from 194.163.161.162: icmp_seq=1 ttl=49 time=155 ms
+# ^ general DNS is broken, but the front door's A record is still in the resolver
+#   cache. The app was still syncing off that cached answer (see 73-...).
+
+$ HD-Adb.exe -s emulator-5554 shell getprop net.dns1
+8.8.8.8
+$ HD-Adb.exe -s emulator-5554 shell getprop net.dns2
+10.0.2.3
+# (the DHCP-resolver pair is still configured; strict private DNS overrides it and fails)
+
+$ HD-Adb.exe -s emulator-5554 shell dumpsys connectivity    (excerpt)
+  NetworkAgentInfo{ ni{[type: WIFI[], state: CONNECTED/CONNECTED, ... InterfaceName: eth0
+  ... DnsAddresses: [8.8.8.8,10.0.2.3,] UsePrivateDns: true PrivateDnsServerName: blackhole.invalid ...]}
+
+$ HD-Adb.exe -s emulator-5554 shell ping -c 1 -W 3 8.8.8.8
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=116 time=5.31 ms
+# ^ CONTROL: the link itself is up. Everything below is name resolution only.
+
+# ---- cache eviction experiments (all device-side, no root) ----
+# `ndc resolver flushnet 100` is the documented flush, but adbd is uid=2000(shell) on
+# this image (no `adb root`, no `su`), so it is refused:
+$ HD-Adb.exe -s emulator-5554 shell id
+uid=2000(shell) gid=2000(shell) groups=2000(shell),1004(input),...
+$ HD-Adb.exe -s emulator-5554 shell ndc resolver flushnet 100
+Error connecting (Permission denied)
+$ HD-Adb.exe -s emulator-5554 root -> (no change; `shell id` stays uid=2000(shell))
+
+# The Android-9 airplane broadcast is a protected intent and throws for shell:
+$ HD-Adb.exe -s emulator-5554 shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true
+... at android.os.Binder.execTransact(Binder.java:731)   (SecurityException)
+# and `svc wifi disable` does not touch this virtual NIC either:
+$ HD-Adb.exe -s emulator-5554 shell svc wifi disable
+$ HD-Adb.exe -s emulator-5554 shell dumpsys connectivity   (excerpt)
+Active default network: 100
+  NetworkAgentInfo{ ni{[type: WIFI[], state: CONNECTED/CONNECTED ... ]}}
+
+# `cmd connectivity airplane-mode enable|disable` cycling DOES sometimes evict the
+# resolver cache (observed ~01:17Z and again below at 01:31Z) and sometimes does
+# not (01:39Z, on a record cached 60 s earlier). It is not a reliable lever.
+$ HD-Adb.exe -s emulator-5554 shell date -u
+Wed Nov 18 01:31:36 GMT 2026
+$ HD-Adb.exe -s emulator-5554 shell settings put global private_dns_mode hostname
+$ HD-Adb.exe -s emulator-5554 shell settings put global private_dns_specifier blackhole.invalid
+$ HD-Adb.exe -s emulator-5554 shell settings get global private_dns_mode
+hostname
+$ HD-Adb.exe -s emulator-5554 shell cmd connectivity airplane-mode enable
+$ HD-Adb.exe -s emulator-5554 shell cmd connectivity airplane-mode disable
+$ HD-Adb.exe -s emulator-5554 shell settings get global airplane_mode_on
+0
+$ HD-Adb.exe -s emulator-5554 shell ping -c 2 -W 3 mazatest.sami-host.me
+ping: unknown host mazatest.sami-host.me
+$ HD-Adb.exe -s emulator-5554 shell ping -c 1 -W 3 example.com
+ping: unknown host example.com
+$ HD-Adb.exe -s emulator-5554 shell ping -c 2 -W 3 8.8.8.8
+2 packets transmitted, 2 received, 0% packet loss, time 1001ms
+# -> clean offline window: front door AND general names unknown, raw IP still answers.
+
+# ---- the record that outlives the harness ----
+$ dig +noall +answer mazatest.sami-host.me @8.8.8.8      (from DNS2)
+mazatest.sami-host.me.	3600	IN	A	194.163.161.162
+# 3600 s TTL. A cached answer therefore keeps the app online for up to an hour after
+# the harness is armed; at 01:39Z a one-minute-old cache entry survived the same
+# airplane cycle that had evicted the older one at 01:31Z:
+$ HD-Adb.exe -s emulator-5554 shell date -u
+Wed Nov 18 01:39:16 GMT 2026
+$ ... settings put global private_dns_mode hostname
+$ ... cmd connectivity airplane-mode enable / disable
+$ ... shell ping -c 2 -W 3 mazatest.sami-host.me
+64 bytes from 194.163.161.162: icmp_seq=1 ttl=49 time=213 ms
+# The final offline window used in this lane is therefore the natural TTL expiry, and
+# every capture in it is timestamped after the cached answer is gone (75-, 76-, 77-).

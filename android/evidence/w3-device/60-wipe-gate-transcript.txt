@@ -1,0 +1,73 @@
+### Task-3 WIPE GATE - evidence transcript
+# Captured 2026-11-18T00:37:19Z (TZ=UTC) from dns2. Token read from the live environment file on samihost
+# and passed only as an HTTP header; never printed, never written into any artifact.
+# These are the three read-only endpoints the APK itself uses, plus the node's own sync state.
+
+$ curl -s -H "Authorization: Bearer ${WB_TOKEN}" https://mazatest.sami-host.me/api/state
+{"balance": 0, "address": "MWRVvgWrLRqyEEQSm7J8NuYor1X9J4J9Fa", "account": "mobile-play", "fee": 0.0001, "txs": [{"category": "receive", "amount": 50.0, "confirmations": 0, "time": 1794794707, "address": "MWRVvgWrLRqyEEQSm7J8NuYor1X9J4J9Fa"}, {"category": "receive", "amount": 48.9999, "confirmations": 0, "time": 1794797983, "address": "MCCqc3Ckf7rZ3v3meFSJkDBGAQVoiFmBNL"}, {"category": "send", "amount": -1.0, "confirmations": 0, "time": 1794797983, "address": "MLRe5sWp7LE3skDMQhFbkfd2n5XcZdpKMs"}]}
+
+$ curl -s -H "Authorization: Bearer ${WB_TOKEN}" https://mazatest.sami-host.me/api/watch/utxos
+{"utxos": []}
+
+$ curl -s -H "Authorization: Bearer ${WB_TOKEN}" https://mazatest.sami-host.me/api/watch/history
+{"transactions": [{"category": "send", "txid": "7a0af47a1d3c1f8a6b83885baf473d9f6a7a0ff8ccfe39b658cdd23d2e5fcc34", "amount": -2.0, "confirmations": 0, "time": 1794818622, "address": "MPHoBsbsNUduo7fsvMCREpDSMWpyeUxq2H"}]}
+
+# Node sync state (the decisive check: an IBD/reindex node cannot prove a zero balance).
+$ maza-cli -datadir=/var/lib/mazad getblockchaininfo
+{
+  "chain": "main",
+  "blocks": 488622,
+  "headers": 2365298,
+  "bestblockhash": "00000000000006cf28fadffe8478fceb79f13c4a99639755fa96aa98aa6e3a7e",
+  "difficulty": 1933534.719482278,
+  "mediantime": 1453902637,
+  "verificationprogress": 0.2125145065586871,
+  "initialblockdownload": true,
+  "chainwork": "00000000000000000000000000000000000000000000008eedc03cdf8f4447ae",
+  "size_on_disk": 1556351089,
+  "pruned": false,
+  "softforks": [
+    {
+      "id": "bip34",
+      "version": 2,
+      "reject": {
+        "status": true
+      }
+    },
+    {
+      "id": "bip66",
+      "version": 3,
+      "reject": {
+        "status": false
+      }
+    },
+    {
+      "id": "bip65",
+      "version": 4,
+      "reject": {
+        "status": false
+      }
+    }
+  ],
+  "bip9_softforks": {
+    "csv": {
+      "status": "defined",
+      "startTime": 1644645600,
+      "timeout": 1676181600,
+      "since": 0
+    },
+    "segwit": {
+      "status": "defined",
+      "startTime": 1644645600,
+      "timeout": 1676181600,
+      "since": 0
+    },
+    "minotaurx_and_hive_1_2": {
+      "status": "defined",
+      "startTime": 1644645600,
+      "timeout": 1676181600,
+      "since": 0
+    }
+  },
+  "warnings": ""
+}

@@ -1,0 +1,135 @@
+### Airplane-mode attempt: measured device state (SAMI-PC BlueStacks Pie64, emulator-5554)
+# Captured 2026-11-18T00:35:30Z (TZ=UTC). Each block: exact command, then raw stdout.
+# `cmd connectivity airplane-mode enable` was executed at ~2026-11-18T00:20Z. The BlueStacks virtual NIC
+# (eth0 / WIFI transport) stayed CONNECTED, so a real transport cut had to be produced device-side.
+# See PROOF.md section B for the honest framing.
+
+$ HD-Adb.exe -s emulator-5554 shell settings get global airplane_mode_on
+# (airplane mode setting after `cmd connectivity airplane-mode enable`)
+1
+
+$ HD-Adb.exe -s emulator-5554 shell dumpsys connectivity | findstr /i "Active default network"
+# (active network (still CONNECTED - BlueStacks virtual WIFI ignores airplane mode))
+NetworkFactories for: WIFI PhoneSwitcherNetworkRequstListener WIFI_UT Ethernet TelephonyNetworkFactory[0]
+Active default network: 100
+Current Networks:
+  NetworkAgentInfo{ ni{[type: WIFI[], state: CONNECTED/CONNECTED, reason: (unspecified), extra: 08:00:27:0e:38:b3, failover: false, available: true, roaming: false]}  network{100}  nethandle{432902426637}  lp{{InterfaceName: eth0 LinkAddresses: [fe80::d261:9e54:3818:9949/64,10.0.2.15/24,]  Routes: [fe80::/64 -> :: eth0,10.0.2.0/24 -> 0.0.0.0 eth0,0.0.0.0/0 -> 10.0.2.2 eth0,] DnsAddresses: [8.8.8.8,10.0.2.3,] UsePrivateDns: true PrivateDnsServerName: blackhole.invalid Domains: null MTU: 0 TcpBufferSizes: 524288,1048576,3145728,524288,1048576,2097152}}  nc{[ Transports: WIFI|ETHERNET Capabilities: NOT_METERED&INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN&NOT_ROAMING&FOREGROUND&NOT_CONGESTED&NOT_SUSPENDED Unwanted:  LinkUpBandwidth>=100000Kbps LinkDnBandwidth>=100000Kbps]}  Score{30}  everValidated{true}  lastValidated{false}  created{true} lingering{false} explicitlySelected{false} acceptUnvalidated{false} everCaptivePortalDetected{false} lastCaptivePortalDetected{false} clat{null} }
+      NetworkRequest [ REQUEST id=1, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted: ] ]
+      NetworkRequest [ LISTEN id=3, [] ]
+      NetworkRequest [ TRACK_DEFAULT id=5, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 1000] ]
+      NetworkRequest [ LISTEN id=7, [ Transports: WIFI Capabilities: NOT_VPN Unwanted: ] ]
+      NetworkRequest [ TRACK_DEFAULT id=8, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10030] ]
+      NetworkRequest [ LISTEN id=9, [] ]
+      NetworkRequest [ TRACK_DEFAULT id=10, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+      NetworkRequest [ TRACK_DEFAULT id=12, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+      NetworkRequest [ LISTEN id=13, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+      NetworkRequest [ TRACK_DEFAULT id=14, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10035] ]
+      NetworkRequest [ LISTEN id=15, [ Capabilities: INTERNET&TRUSTED Unwanted:  Uid: 10004] ]
+      NetworkRequest [ TRACK_DEFAULT id=16, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+      NetworkRequest [ TRACK_DEFAULT id=17, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10035] ]
+      NetworkRequest [ TRACK_DEFAULT id=19, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10033] ]
+      NetworkRequest [ LISTEN id=20, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10033] ]
+      NetworkRequest [ TRACK_DEFAULT id=21, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10012] ]
+      NetworkRequest [ LISTEN id=22, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10012] ]
+      NetworkRequest [ TRACK_DEFAULT id=23, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10012] ]
+      NetworkRequest [ TRACK_DEFAULT id=24, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+      NetworkRequest [ LISTEN id=25, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+      NetworkRequest [ TRACK_DEFAULT id=26, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+      NetworkRequest [ TRACK_DEFAULT id=28, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+      NetworkRequest [ LISTEN id=29, [ Transports: WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+      NetworkRequest [ LISTEN id=30, [ Transports: WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+      NetworkRequest [ LISTEN id=31, [ Transports: CELLULAR|WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+      NetworkRequest [ LISTEN id=32, [ Transports: CELLULAR|WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+      NetworkRequest [ TRACK_DEFAULT id=33, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10062] ]
+      NetworkRequest [ LISTEN id=35, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10062] ]
+      NetworkRequest [ TRACK_DEFAULT id=36, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10062] ]
+      NetworkRequest [ LISTEN id=37, [ Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10062] ]
+Network Requests:
+  uid/pid:10004/3393 NetworkRequest [ LISTEN id=25, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  uid/pid:10035/2681 NetworkRequest [ TRACK_DEFAULT id=14, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10035] ]
+  uid/pid:10012/3331 NetworkRequest [ TRACK_DEFAULT id=23, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10012] ]
+  uid/pid:10030/2194 NetworkRequest [ LISTEN id=7, [ Transports: WIFI Capabilities: NOT_VPN Unwanted: ] ]
+  uid/pid:10004/2349 NetworkRequest [ LISTEN id=32, [ Transports: CELLULAR|WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+  uid/pid:10062/4105 NetworkRequest [ TRACK_DEFAULT id=36, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10062] ]
+  uid/pid:10062/4105 NetworkRequest [ LISTEN id=35, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10062] ]
+  uid/pid:10062/4105 NetworkRequest [ LISTEN id=37, [ Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10062] ]
+  uid/pid:10004/2349 NetworkRequest [ LISTEN id=13, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  uid/pid:10004/2349 NetworkRequest [ LISTEN id=31, [ Transports: CELLULAR|WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+  uid/pid:1000/2010 NetworkRequest [ LISTEN id=4, [ Transports: CELLULAR Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 1000] ]
+  uid/pid:10004/2349 NetworkRequest [ LISTEN id=30, [ Transports: WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+  uid/pid:10012/3200 NetworkRequest [ TRACK_DEFAULT id=21, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10012] ]
+  uid/pid:10033/2623 NetworkRequest [ LISTEN id=20, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10033] ]
+  uid/pid:1000/2010 NetworkRequest [ TRACK_DEFAULT id=5, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 1000] ]
+  uid/pid:10035/2681 NetworkRequest [ TRACK_DEFAULT id=17, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10035] ]
+  uid/pid:10033/2623 NetworkRequest [ TRACK_DEFAULT id=19, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10033] ]
+  uid/pid:10004/2349 NetworkRequest [ TRACK_DEFAULT id=26, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  uid/pid:10012/3200 NetworkRequest [ LISTEN id=22, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10012] ]
+  uid/pid:10004/2349 NetworkRequest [ TRACK_DEFAULT id=28, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  uid/pid:10062/4105 NetworkRequest [ TRACK_DEFAULT id=33, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10062] ]
+  uid/pid:1000/2010 NetworkRequest [ LISTEN id=3, [] ]
+  uid/pid:10004/3393 NetworkRequest [ TRACK_DEFAULT id=24, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  uid/pid:1000/2010 NetworkRequest [ LISTEN id=6, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&VALIDATED Unwanted:  Uid: 1000] ]
+  uid/pid:10030/2194 NetworkRequest [ LISTEN id=9, [] ]
+  uid/pid:10004/2349 NetworkRequest [ LISTEN id=15, [ Capabilities: INTERNET&TRUSTED Unwanted:  Uid: 10004] ]
+  uid/pid:10030/2194 NetworkRequest [ TRACK_DEFAULT id=8, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10030] ]
+  uid/pid:10004/2349 NetworkRequest [ TRACK_DEFAULT id=16, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  uid/pid:1000/2010 NetworkRequest [ BACKGROUND_REQUEST id=2, [ Transports: CELLULAR Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted: ] ]
+  uid/pid:10004/2349 NetworkRequest [ LISTEN id=38, [ Transports: CELLULAR Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+  uid/pid:1000/2010 NetworkRequest [ REQUEST id=1, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted: ] ]
+  uid/pid:10004/2349 NetworkRequest [ TRACK_DEFAULT id=10, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  uid/pid:10004/2349 NetworkRequest [ TRACK_DEFAULT id=12, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  uid/pid:10004/2349 NetworkRequest [ LISTEN id=29, [ Transports: WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+    1 NetworkAgentInfo [WIFI () - 100] CONNECTED/CONNECTED
+    defaultIPv4DNS: [8.8.4.4, 8.8.8.8]
+mNetworkRequestInfoLogs (most recent first):
+  2026-11-17T16:09:20.792 - RELEASE uid/pid:10043/3470 NetworkRequest [ TRACK_DEFAULT id=27, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10043] ]
+  2026-11-17T16:09:05.141 - RELEASE uid/pid:10062/4105 NetworkRequest [ TRACK_DEFAULT id=34, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10062] ]
+  2026-11-17T16:09:00.877 - REGISTER uid/pid:10004/2349 NetworkRequest [ LISTEN id=38, [ Transports: CELLULAR Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+  2026-11-17T16:09:00.592 - REGISTER uid/pid:10062/4105 NetworkRequest [ LISTEN id=37, [ Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10062] ]
+  2026-11-17T16:08:59.785 - REGISTER uid/pid:10062/4105 NetworkRequest [ TRACK_DEFAULT id=36, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10062] ]
+  2026-11-17T16:08:59.410 - REGISTER uid/pid:10062/4105 NetworkRequest [ LISTEN id=35, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10062] ]
+  2026-11-17T16:08:59.401 - REGISTER uid/pid:10062/4105 NetworkRequest [ TRACK_DEFAULT id=34, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10062] ]
+  2026-11-17T16:08:58.118 - REGISTER uid/pid:10062/4105 NetworkRequest [ TRACK_DEFAULT id=33, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10062] ]
+  2026-11-17T16:08:55.165 - REGISTER uid/pid:10004/2349 NetworkRequest [ LISTEN id=32, [ Transports: CELLULAR|WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+  2026-11-17T16:08:55.164 - REGISTER uid/pid:10004/2349 NetworkRequest [ LISTEN id=31, [ Transports: CELLULAR|WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+  2026-11-17T16:08:55.085 - REGISTER uid/pid:10004/2349 NetworkRequest [ LISTEN id=30, [ Transports: WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+  2026-11-17T16:08:55.050 - REGISTER uid/pid:10004/2349 NetworkRequest [ LISTEN id=29, [ Transports: WIFI Capabilities: NOT_RESTRICTED&TRUSTED&NOT_VPN Unwanted:  Uid: 10004] ]
+  2026-11-17T16:08:54.715 - REGISTER uid/pid:10004/2349 NetworkRequest [ TRACK_DEFAULT id=28, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  2026-11-17T16:08:50.299 - REGISTER uid/pid:10043/3470 NetworkRequest [ TRACK_DEFAULT id=27, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10043] ]
+  2026-11-17T16:08:50.665 - REGISTER uid/pid:10004/2349 NetworkRequest [ TRACK_DEFAULT id=26, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  2026-11-17T16:08:49.704 - REGISTER uid/pid:10004/3393 NetworkRequest [ LISTEN id=25, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  2026-11-17T16:08:49.668 - REGISTER uid/pid:10004/3393 NetworkRequest [ TRACK_DEFAULT id=24, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10004] ]
+  2026-11-17T16:08:48.114 - REGISTER uid/pid:10012/3331 NetworkRequest [ TRACK_DEFAULT id=23, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10012] ]
+  2026-11-17T16:08:47.251 - REGISTER uid/pid:10012/3200 NetworkRequest [ LISTEN id=22, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10012] ]
+  2026-11-17T16:08:47.249 - REGISTER uid/pid:10012/3200 NetworkRequest [ TRACK_DEFAULT id=21, [ Capabilities: INTERNET&NOT_RESTRICTED&TRUSTED Unwanted:  Uid: 10012] ]
+mNetworkInfoBlockingLogs (most recent first):
+
+$ HD-Adb.exe -s emulator-5554 shell ping -c 1 -W 3 10.0.2.2
+# (guest -> NAT gateway ICMP (reaches: the virtual NIC still routes))
+PING 10.0.2.2 (10.0.2.2) 56(84) bytes of data.
+64 bytes from 10.0.2.2: icmp_seq=1 ttl=64 time=0.213 ms
+
+--- 10.0.2.2 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.213/0.213/0.213/0.000 ms
+
+$ HD-Adb.exe -s emulator-5554 shell ping -c 1 -W 3 mazatest.sami-host.me
+# (guest -> front door ICMP via CACHED DNS)
+PING mazatest.sami-host.me (194.163.161.162) 56(84) bytes of data.
+64 bytes from 194.163.161.162: icmp_seq=1 ttl=49 time=161 ms
+
+--- mazatest.sami-host.me ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 161.788/161.788/161.788/0.000 ms
+
+$ HD-Adb.exe -s emulator-5554 shell ping -c 1 -W 3 example.com
+# (guest -> an uncached name (fails: the offline harness))
+(no output)
+
+$ HD-Adb.exe -s emulator-5554 shell settings get global private_dns_mode
+# (private DNS mode)
+hostname
+
+$ HD-Adb.exe -s emulator-5554 shell settings get global private_dns_specifier
+# (private DNS specifier (unresolvable: new lookups fail))
+blackhole.invalid

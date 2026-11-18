@@ -1,0 +1,94 @@
+# PROVENANCE: this artifact vs commit 0150e90 (HEAD of origin/master)
+
+The rsync snapshot excludes .git by policy. The authoritative tree is
+/root/maza-mobile-wallet @ 0150e90. Recorded below is the COMPLETE git
+working-tree status and diff-stat at artifact build time (2026-11-18 UTC):
+
+--- git status --porcelain (sorted) ---
+ M android/evidence/w3-device/DRIVE-README.md
+ M android/evidence/w3-device/PROOF.md
+ M android/evidence/w3-device/SHA256SUMS
+?? android/evidence/w3-device/53-online-balance-before-airplane.png
+?? android/evidence/w3-device/53-online-balance-before-airplane.xml
+?? android/evidence/w3-device/54-camera-scan-live-preview.png
+?? android/evidence/w3-device/54-camera-scan-live-preview.xml
+?? android/evidence/w3-device/55-camera-scan-live-preview-frame2.png
+?? android/evidence/w3-device/55-camera-scan-live-preview-frame2.xml
+?? android/evidence/w3-device/56-send-form-after-camera-cancel.png
+?? android/evidence/w3-device/56-send-form-after-camera-cancel.xml
+?? android/evidence/w3-device/57-camera-pipeline-logcat.txt
+?? android/evidence/w3-device/58-airplane-mode-device-state.txt
+?? android/evidence/w3-device/59-wallet-selfcustody-balance-zero.png
+?? android/evidence/w3-device/59-wallet-selfcustody-balance-zero.xml
+?? android/evidence/w3-device/60-wipe-gate-transcript.txt
+?? android/evidence/w3-device/61-history-online-baseline.png
+?? android/evidence/w3-device/61-history-online-baseline.xml
+?? android/evidence/w3-device/62-offline-probe-current-state.png
+?? android/evidence/w3-device/62-offline-probe-current-state.xml
+?? android/evidence/w3-device/63-history-offline-failure.png
+?? android/evidence/w3-device/63-history-offline-failure.xml
+?? android/evidence/w3-device/64-balance-offline-failure.png
+?? android/evidence/w3-device/64-balance-offline-failure.xml
+?? android/evidence/w3-device/65-balance-offline-manual-refresh.png
+?? android/evidence/w3-device/65-balance-offline-manual-refresh.xml
+?? android/evidence/w3-device/66-send-form-before-offline-attempt.png
+?? android/evidence/w3-device/66-send-form-before-offline-attempt.xml
+?? android/evidence/w3-device/67-dns-harness-release-reconnect.txt
+?? android/evidence/w3-device/68-recovery-connect-online.png
+?? android/evidence/w3-device/68-recovery-connect-online.xml
+?? android/evidence/w3-device/69-recovery-balance-online.png
+?? android/evidence/w3-device/69-recovery-balance-online.xml
+?? android/evidence/w3-device/70-recovery-history-online.png
+?? android/evidence/w3-device/70-recovery-history-online.xml
+?? android/evidence/w3-device/71-balance-offline-failure-rearmed.png
+?? android/evidence/w3-device/71-balance-offline-failure-rearmed.xml
+?? android/evidence/w3-device/72-reconnect-session-restored.png
+?? android/evidence/w3-device/72-reconnect-session-restored.xml
+?? android/evidence/w3-device/73-pre-expiry-still-syncing-on-cached-dns.png
+?? android/evidence/w3-device/73-pre-expiry-still-syncing-on-cached-dns.xml
+?? android/evidence/w3-device/74-dns-harness-transcript.txt
+?? android/evidence/w3-device/75-balance-offline-after-ttl.png
+?? android/evidence/w3-device/75-balance-offline-after-ttl.xml
+?? android/evidence/w3-device/76-history-offline-after-ttl.png
+?? android/evidence/w3-device/76-history-offline-after-ttl.xml
+?? android/evidence/w3-device/77-send-filled-before-offline-send.png
+?? android/evidence/w3-device/77-send-filled-before-offline-send.xml
+?? android/evidence/w3-device/78-send-offline-no-retry.png
+?? android/evidence/w3-device/78-send-offline-no-retry.xml
+?? android/evidence/w3-device/79-balance-online-after-restore.png
+?? android/evidence/w3-device/79-balance-online-after-restore.xml
+?? android/evidence/w3-device/80-dns-restored-final-proof.txt
+?? android/evidence/w3-device/81-history-after-restore-no-new-tx.png
+?? android/evidence/w3-device/81-history-after-restore-no-new-tx.xml
+?? android/evidence/w3-device/w4-connect.ps1
+?? android/evidence/w3-device/w4-send.ps1
+?? android/evidence/w3-device/w4-unlock.ps1
+?? deploy/electrumx-maza.env.template
+?? deploy/electrumx-maza.service
+?? indexer/parity_check.py
+--- DIFFSTAT ---
+ android/evidence/w3-device/DRIVE-README.md |  34 ++++++
+ android/evidence/w3-device/PROOF.md        | 163 ++++++++++++++++++++++++++++-
+ android/evidence/w3-device/SHA256SUMS      |  59 ++++++++++-
+ 3 files changed, 252 insertions(+), 4 deletions(-)
+
+Three distinct sets must be distinguished:
+1. THE EVIDENCE CHANGESET UNDER REVIEW: android/evidence/w3-device/** only
+   (new captures 53-81 + PROOF.md/DRIVE-README.md appends + SHA256SUMS).
+2. THE COMPLETE DIRTY WORKING TREE (what the `git status --porcelain` list
+   above actually shows): the evidence dir PLUS the three untracked txindex
+   leftovers disclosed at the bottom of this file
+   (deploy/electrumx-maza.env.template, deploy/electrumx-maza.service,
+   indexer/parity_check.py) - NOT part of the changeset under review.
+3. THE COMMITTED/TRACKED TREE vs 0150e90: no tracked file differs from
+   0150e90 outside android/evidence/w3-device; the modified files
+   (PROOF.md, DRIVE-README.md, SHA256SUMS) are all inside the evidence dir.
+
+Disclosure (also reflected in set 2 above): three UNTRACKED files also
+appear in the tree and are NOT part of this changeset. They are pre-existing
+leftovers from the ElectrumX/txindex evaluation (the deployment decision
+sits with Payu; the files predate this addendum and multiple graded commits):
+  ?? deploy/electrumx-maza.env.template
+  ?? deploy/electrumx-maza.service
+  ?? indexer/parity_check.py
+No COMMITTED file outside android/evidence/w3-device/ differs from 0150e90.

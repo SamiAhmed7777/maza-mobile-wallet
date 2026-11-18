@@ -1,0 +1,46 @@
+### W4-DEV harness release + reconnect transcript (verbatim commands and raw output)
+# Host: DNS2 (Linux) -> ssh sami-pc -> C:\Program Files\BlueStacks_nxt\HD-Adb.exe -s emulator-5554
+# Device clock is UTC. Release was performed at 2026-11-18T01:26Z (2026-11-17 17:26 PST).
+# Blank line after each block separates one command's output from the next command.
+
+$ HD-Adb.exe -s emulator-5554 shell date -u
+Wed Nov 18 01:26:41 GMT 2026
+
+$ HD-Adb.exe -s emulator-5554 shell settings put global private_dns_mode off
+(no output)
+
+$ HD-Adb.exe -s emulator-5554 shell settings get global private_dns_mode
+off
+
+$ HD-Adb.exe -s emulator-5554 shell settings get global private_dns_specifier
+blackhole.invalid
+# (leftover specifier string; inert while the mode is off - the resolver ignores it)
+
+$ HD-Adb.exe -s emulator-5554 shell ping -c 2 -W 3 example.com
+PING example.com (172.66.147.243) 56(84) bytes of data.
+64 bytes from 172.66.147.243: icmp_seq=1 ttl=55 time=5.49 ms
+64 bytes from 172.66.147.243: icmp_seq=2 ttl=55 time=4.12 ms
+
+--- example.com ping statistics ---
+
+$ HD-Adb.exe -s emulator-5554 shell ping -c 2 -W 3 mazatest.sami-host.me
+PING mazatest.sami-host.me (194.163.161.162) 56(84) bytes of data.
+64 bytes from mail.sami-host.me (194.163.161.162): icmp_seq=1 ttl=49 time=160 ms
+64 bytes from mail.sami-host.me (194.163.161.162): icmp_seq=2 ttl=49 time=156 ms
+
+--- mazatest.sami-host.me ping statistics ---
+# General DNS works again (example.com) and the front door resolves again: recovery is real, not a cached name.
+
+# ---- reconnect with the bench token (stdin only, never argv / never echoed) ----
+$ TOKEN=$(ssh samihost "sed -n 's/^WB_TOKEN=//p' /etc/maza-wallet-bench.env" | tr -d '\r\n')
+$ printf 'HOSTLEN=%s\n' "${#TOKEN}"
+HOSTLEN=32
+$ printf '%s' "$TOKEN" | ssh sami-pc 'powershell -NoProfile -Command "$t=[Console]::In.ReadToEnd().Trim(); [IO.File]::WriteAllText(\"C:\Users\hello\.maza-token\", $t); Write-Output (\"STAGED-LEN=\" + $t.Length)"'
+STAGED-LEN=32
+$ ssh sami-pc 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\hello\w3bench\w4-connect.ps1'
+TOKENFILE-DELETED=True
+$ ssh sami-pc 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\hello\w3bench\w4-unlock.ps1'
+UNLOCK-TAPPED
+
+# Result captured as 68-recovery-connect-online.{png,xml} (Last sync 2026-11-17 17:28:22,
+# then 69-recovery-balance-online.{png,xml} at 17:29:38 and 70-recovery-history-online.{png,xml}).

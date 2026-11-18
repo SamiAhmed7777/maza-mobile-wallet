@@ -148,21 +148,20 @@ Live-switch observation (reported, not fixed - product code is out of territory)
 
 ## 5. Wipe flow (throwaway wallet only - the bench wallet was never wiped)
 
-Status: PARTIALLY CAPTURED. The lane's run was truncated mid-flow (iteration
-cap): the step-1 and typed-step-2 dialogs WERE reached and captured, but the
-captures for the typed-refusal render, the current-PIN re-verification prompt,
-and the destructive-confirm outcome were never written to disk (the lane's
-closing summary listed more files than it saved). HONEST STATE: guard-chain
-captures 36 + 37 only; the rest of the flow is queued for a follow-up device
-pass on a disposable wallet. The safety rule held throughout: `Wipe wallet`
-was never confirmed on the seed-bearing bench wallet in user 0.
+Status: NOT CAPTURED. Captures 36 and 37 DO NOT EXIST in this package and
+the wipe dialogs were never captured here. No wipe interaction was ever
+confirmed on the seed-bearing bench wallet (the destructive step was blocked
+by the safety gate - see 5b). The full wipe flow (step-1 dialog, typed-WIPE
+step, current-PIN re-verification, destructive-confirm outcome, post-wipe
+Connect card) remains queued for a follow-up device pass on a disposable
+wallet once the balance gate can be satisfied (mazad reindex completion).
 
 ### 5a. Guard chain (what is actually on disk)
-- `36-wipe-confirm-step1.png/.xml` - step 1: the "Wipe wallet?" dialog.
-- `37-wipe-confirm-step2-typed.png/.xml` - step 2: the typed-acknowledgement
-  dialog ("Last check") with the WIPE input field.
-- NOT CAPTURED (queued): typed-refusal render (`WIP` -> "Type WIPE exactly to
-  confirm."), the current-PIN re-verification prompt, the destructive-confirm
+- `36-wipe-confirm-step1.png/.xml` - DOES NOT EXIST (not taken; see 5b).
+- `37-wipe-confirm-step2-typed.png/.xml` - DOES NOT EXIST (not taken; see 5b).
+- NOT CAPTURED (queued): step-1 "Wipe wallet?" dialog, the typed-WIPE
+  acknowledgement step, the typed-refusal render (`WIP` -> "Type WIPE exactly
+  to confirm."), the current-PIN re-verification prompt, the destructive-confirm
   outcome, and the post-wipe Connect-card state.
 
 ### 5b. Why the destructive step was NOT performed (blocked, documented)
@@ -380,3 +379,169 @@ run, without a relaunch.
    here); the refreshed `SHA256SUMS` covers exactly what exists.
 5. Emulator was healthy throughout (no kill/relaunch needed): `adb devices` ->
    `emulator-5554 device` on first probe.
+
+## W4-DEV: offline (no-network) error copy on the device, and the recovery pair
+
+Date: 2026-11-17 (PST) / 2026-11-18 (UTC). Same bench: BlueStacks Pie64 on
+SAMI-PC, `emulator-5554`, 1600x900, same installed build (no reinstall in this
+lane - zero product-code changes, evidence directory only). Numbering continues
+from `62-`.
+
+### B1. How "no network" was actually produced on this bench
+
+Airplane mode does NOT cut this emulator's transport. Measured earlier and kept
+as `58-airplane-mode-device-state.txt`: with `airplane_mode_on=1` the guest's
+virtual NIC (`eth0`, WIFI/ETHERNET transport, netId 100) stays
+`state: CONNECTED/CONNECTED` and `ping 8.8.8.8` still answers. A plane-mode
+toggle therefore cannot produce a transport failure by itself.
+
+The harness used instead is device-side DNS blackholing:
+
+```
+$ HD-Adb.exe -s emulator-5554 shell settings put global private_dns_mode hostname
+$ HD-Adb.exe -s emulator-5554 shell settings put global private_dns_specifier blackhole.invalid
+```
+
+Private DNS in `hostname` (strict DoT) mode points every resolver at a host that
+does not exist, so every NEW name lookup fails while already-cached answers keep
+being served. `dumpsys connectivity` records it on the live network:
+`UsePrivateDns: true PrivateDnsServerName: blackhole.invalid`.
+
+Two consequences that shaped this lane, both measured (full transcript:
+`74-dns-harness-transcript.txt`):
+
+1. General DNS dies immediately: `ping example.com` -> `ping: unknown host
+   example.com`, while `ping 8.8.8.8` still answers - the transport is up and
+   only name resolution is broken. That is exactly the `UnknownHostException`
+   case the app renders as its offline copy.
+2. The front door's A record survives in the resolver cache for its TTL. The
+   record is `mazatest.sami-host.me. 3600 IN A 194.163.161.162`, so a recently
+   cached answer kept the app connected for up to an hour after the harness was
+   armed. Eviction by `cmd connectivity airplane-mode enable|disable` cycling is
+   NOT deterministic (it cleared the cache at 01:15Z and 01:31Z, and had no
+   effect at 01:39Z on a record cached 60 seconds earlier); TTL expiry is the
+   reliable mechanism. This lane used the expiry, and the proof below is
+   timestamped after it.
+
+A control across the whole lane: while `mazatest` was blackholed,
+`ping -c 2 -W 3 8.8.8.8` answered every time (0% loss), so no capture below is
+"airplane mode"/"no link" - it is a name-resolution failure on a live link.
+
+### B2. (a) BALANCE refresh failure copy
+
+`64-balance-offline-failure.*` - BALANCE tab, unlocked session, poll failing:
+balance keeps the last loaded value, and the sync line carries the explicit
+reason (string `balance_stale`):
+
+```
+Update failed: No network connection. Check mobile data or Wi-Fi, then try again. - showing the last loaded balance.
+```
+
+`65-balance-offline-manual-refresh.*` - the user-pressed `REFRESH` button under
+that line produces the same copy (one capture after the tap), so this is not only
+the 15s background poll: an explicit refresh attempt fails with the same
+sentence. `71-balance-offline-failure-rearmed.*` is the same copy re-measured in
+the clean offline phase of section B4.
+
+### B3. (b) HISTORY failure copy
+
+`63-history-offline-failure.*` - HISTORY tab with the last-loaded rows still on
+screen and, above them, the explicit list-state line (string `history_failed`):
+
+```
+Could not load history: No network connection. Check mobile data or Wi-Fi, then try again.
+```
+
+No "Loading history..." spinner is left behind and the rows are not silently
+emptied - the failure is stated, the old rows stay. `62-offline-probe-current-state.*`
+is the frame just before (locked cover, rows present, no failure line yet).
+
+### B4. (c) offline SEND - the no-retry definitive outcome
+
+`66-send-form-before-offline-attempt.*` - the BENCH send form empty, on the same
+offline device.
+`78-send-offline-no-retry.*` - same form filled and SEND tapped while DNS was
+dead; the result line reads (string `send_unknown`):
+
+```
+Send not confirmed (<reason>). Check HISTORY before trying again - the transaction may have been submitted.
+```
+
+This is the wallet's deliberate spend rule, not a generic error: `POST /api/send`
+is pinned to EXACTLY ONE attempt in `Net`'s retry table (a retried broadcast
+could submit the same signed transaction twice), so a transport failure on a
+spend is reported as an UNKNOWN outcome with a pointer to HISTORY instead of an
+invitation to retry.
+
+### B5. (d) recovery pair - harness off, reload succeeds
+
+Harness released, DNS restored to `off`, and the same app reloaded:
+
+```
+$ HD-Adb.exe -s emulator-5554 shell settings put global private_dns_mode off
+$ HD-Adb.exe -s emulator-5554 shell settings get global private_dns_mode
+off
+$ HD-Adb.exe -s emulator-5554 shell ping -c 2 -W 3 mazatest.sami-host.me
+PING mazatest.sami-host.me (194.163.161.162) 56(84) bytes of data.
+64 bytes from mail.sami-host.me (194.163.161.162): icmp_seq=1 ttl=49 time=160 ms
+64 bytes from mail.sami-host.me (194.163.161.162): icmp_seq=2 ttl=49 time=156 ms
+```
+
+- `68-recovery-connect-online.*` - CONNECT accepted again and the state loaded:
+  `Last sync 2026-11-17 17:28:22` under `0.00000000 MAZA` / `account mobile-play`
+  (the balance is 0 and confirmations 0 because samihost's `mazad` is mid-reindex
+  at ~488k/2.36M headers - the offline test needs the COPY, not valid balances).
+- `69-recovery-balance-online.*` - BALANCE after PIN unlock: the failure line is
+  GONE, replaced by a fresh `Last sync 2026-11-17 17:29:38`.
+- `70-recovery-history-online.*` - HISTORY reloaded: rows present and the
+  "Could not load history" line GONE (compare `63-...`).
+
+`72-reconnect-session-restored.*` is the same recovery re-run after a driver
+mishap (see B7): `Last sync 2026-11-17 17:38:15`, no failure line.
+
+### B6. Restore + verification (mandatory)
+
+`80-dns-restored-final-proof.txt` - the final state, captured after the last
+capture, with the harness OFF, general DNS resolving, the front door resolving,
+the transport up, and the app itself syncing again (`Last sync` advanced). No
+`private_dns_mode=hostname` / `blackhole.invalid` state remains armed on the
+device.
+
+### B7. Driver notes (what a later lane must not re-learn)
+
+- **Never send `input keyevent 4` (BACK) to dismiss the keyboard on this bench.**
+  The IME has no visible window here (`dumpsys input_method` reports
+  `mInputShown=true mWindowVisible=false` - text arrives as hardware-keyboard
+  input), so keyevent 4 goes to the ACTIVITY and finishes `MainActivity`. The
+  token is memory-only by design, so the app then restarts on the Connect card
+  and, while the harness is armed, cannot reconnect (connecting needs DNS). That
+  cost two reconnect cycles in this lane (`68-...`, `72-...`). The SEND button is
+  never occluded on this bench - just tap it.
+- Coordinates used (this build, 1600x900): tabs y=858 (BALANCE 160 / RECEIVE 480
+  / SEND 800 / HISTORY 1120 / WALLET 1440); Connect card URL (800,294 label tap
+  area)/(800,342 field), token (800,455), CONNECT (800,576); lock cover PIN
+  (800,375), UNLOCK (800,496); BALANCE `REFRESH` (800,365); send form recipient
+  (800,266), amount (800,418), SEND (800,528).
+- Token handling: unchanged from A4 - read on samihost, piped over ssh stdin into
+  `C:\Users\hello\.maza-token`, typed by `w4-connect.ps1`, file deleted by that
+  driver (`TOKENFILE-DELETED=True`), never echoed, never in argv, never on screen.
+
+## PRIVACY REDACTION (54/55, applied before commit)
+The BlueStacks camera passthrough is the host PC's physical webcam; captures
+54-camera-scan-live-preview.png and 55-camera-scan-live-preview-frame2.png
+originally contained an identifiable person in the feed. Both frames have
+been redacted: the entire camera-surface region is blacked out with a
+"CAMERA FEED REDACTED (privacy)" label; the ORIGINALS WERE DISCARDED
+(not stored anywhere). The preserved evidence value is the app UI: the
+live scan surface active inside the SEND tab, the 'Still looking for a
+QR code...' status, and the CANCEL control. Narrow claim: two SEPARATELY CAPTURED privacy-redacted frames exist (54,
+55, taken ~10s apart); their whole-image hashes differ, which alone does
+NOT establish changing live camera content after redaction (the Camera3
+analysis stream also logged repeated output-buffer timeouts - see
+57-camera-pipeline-logcat.txt). A decode-level liveness proof needs a QR
+source in frame (environment-blocked on this bench). Redaction tool: PIL
+ImageDraw rectangle (460,210)-(1140,720), applied 2026-11-18 UTC.
+
+## Verify the evidence bundle
+    cd android/evidence/w3-device && sha256sum -c SHA256SUMS
+(entries are basename-relative to that directory; expected: every line OK)

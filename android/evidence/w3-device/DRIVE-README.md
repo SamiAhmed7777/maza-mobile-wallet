@@ -34,3 +34,37 @@ APPEARANCE row y=872 (System 295 / Light 799 / Dark 1304), SETTINGS button
 (800,718) after two upward swipes on the WALLET tab. `52-lifecycle-logcat-excerpt.txt`
 is a filtered `logcat -d -v time | grep com.mazawallet` capture, not a screen.
 Every file here is covered by SHA256SUMS.
+
+## W4-DEV addendum (62-* .. 81-*, 2026-11-17 17:17-18:5x PST / 2026-11-18 01:17-02:5xZ)
+
+Same bench, same installed build (NO reinstall in this lane; zero product-code
+changes, evidence directory only). New captures use the same per-capture
+pipeline as above: `rm -f /sdcard/ui.xml /sdcard/shot.png` -> `uiautomator dump`
++ `screencap -p` -> `adb pull` to `C:\Users\hello\w3bench\` -> `scp` here
+(`/root/.hermes/cache/scratch/cap.sh 62..79` is the helper that ran it).
+
+What is new is the OFFLINE mechanism. Airplane mode cannot cut this bench's
+transport (`58-airplane-mode-device-state.txt`), so the lane arms a
+DEVICE-SIDE DNS harness instead:
+
+  settings put global private_dns_mode hostname
+  settings put global private_dns_specifier blackhole.invalid
+
+Every NEW lookup then fails (`ping example.com` -> `unknown host`) while the
+raw link stays up (`ping 8.8.8.8` answers), and the front door's cached A record
+(`mazatest.sami-host.me. 3600 IN A 194.163.161.162`) keeps the app online for up
+to its 3600 s TTL. The offline captures below are timestamped AFTER that cache
+entry expired; the harness was released with `settings put global
+private_dns_mode off` at the end and connectivity re-verified.
+
+Transcripts in this directory: `67-dns-harness-release-reconnect.txt`,
+`74-dns-harness-transcript.txt`, `80-dns-restored-final-proof.txt`. Each is
+verbatim command + raw output, UTC, blank-line separated.
+
+Driver note for the next lane: on this bench never send `input keyevent 4` to
+dismiss the keyboard - the IME has no visible window (`mInputShown=true
+mWindowVisible=false`), so BACK reaches the activity, finishes MainActivity, and
+the memory-only token is lost (two reconnect cycles were burned on that; the
+SEND button is never occluded, just tap it). Token handling is unchanged from A4
+(ssh stdin -> `C:\Users\hello\.maza-token`, typed by `w4-connect.ps1`, deleted
+by that driver, `TOKENFILE-DELETED=True`, never echoed or screenshotted).
