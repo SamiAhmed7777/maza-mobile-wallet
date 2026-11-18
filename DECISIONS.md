@@ -394,6 +394,52 @@ The encoded QR payload is the EXACT composed string (byte-exact round
 trip), and the endpoint is a payment-request renderer for THIS
 wallet's addresses only — never a generic QR-content service.
 
+## D15 — BIP44 gap-limit watch window (M11, added 2026-11-17)
+
+The self-custody watch window follows the BIP44 standard gap limit
+(GAP = 20 look-ahead per chain — the convention every Bitcoin-family
+wallet ships; an INHERITED convention, not a coin-policy change: no
+fee, confirmation or URI parameter is touched, so no Payu routing).
+
+- **Policy** (`crypto/GapPolicy.java`, pure, desktop-driven by
+  `SelfTest.gapPolicyChecks`): the watch window for a chain is
+  `max(floor, highestUsed + 1 + GAP)`; the displayed receive index
+  never lands on a used address (`nextAfter` scans forward then wraps,
+  never reusing); `firstUnused`/`highestUsed`/`usedAt` are the shared
+  vocabulary. The floor never shrinks: a grown window is persisted
+  (`recv_window` pref, grow-only) so usage that later ages out of the
+  backend's reporting surface cannot un-watch an address.
+- **Wiring** (`SelfCustody`): the refresh surfaces the wallet already
+  polls (watch utxos + watch history — both carry the receiving
+  address) drive a usage scan on the refresh worker thread. When the
+  scan demands a bigger window, the wallet persists it and re-imports
+  the full window immediately (idempotent `/api/watch/import`) — the
+  watch book grows automatically, including mid-session. When the
+  DISPLAYED receive address is used, the display advances to the first
+  unused index (marked "moved past a used address"); the old address
+  stays watched and its funds spendable — only the display moves. The
+  NEXT button advances to the next unused index (the old
+  `(recvIndex + 1) % ADDR_COUNT` wrap landed back on address 0 after
+  20 receives — a reuse hazard this decision retires). A fresh seed
+  (created or imported) starts at index 0 with the base window.
+- **One shared bound**: `SelfCustody.windowBound()` is the single
+  derivation/import bound for BOTH chains — a superset of the earlier
+  `max(ADDR_COUNT, changeIndex + 1)` recovery invariant (which it
+  still implies). `keyForAddress()` and `allAddresses()` must call it;
+  nothing else may invent its own bound.
+- **Detection surface honesty**: usage detection is bounded by what
+  the backend reports on those surfaces (history rows are capped by
+  the endpoint; utxos reflect the current set). An address whose
+  activity aged out of BOTH surfaces may be re-displayed, but it is
+  never un-watched (persisted floor) and its UTXOs remain spendable —
+  the send path signs by derived key, not by display state. A seed
+  imported on a fresh install re-learns usage within the first
+  refreshes (the import surfaces the address history, the scan grows
+  the window again).
+- Desktop-driven by `SelfTest.gapPolicyChecks` (26 checks); the
+  Android wiring is pinned by `tests/test_gap_policy_wiring.py`. The
+  on-device "receive 21 times" demonstration is a device-lane item.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

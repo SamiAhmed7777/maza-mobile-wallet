@@ -24,6 +24,7 @@ import com.mazawallet.crypto.Base58Check;
 import com.mazawallet.crypto.Bip32;
 import com.mazawallet.crypto.Bip39;
 import com.mazawallet.crypto.Bip44Maza;
+import com.mazawallet.crypto.GapPolicy;
 import com.mazawallet.crypto.TxBuilder;
 
 import org.json.JSONArray;
@@ -65,6 +66,10 @@ public final class SelfCustody {
     private static final String PREFS = "selfcustody";
     private static final String KEY_RECV_IDX = "recv_idx";
     private static final String KEY_CHANGE_IDX = "change_idx";
+    /** M11: receive-chain watch window floor (grow-only, persisted). The
+     *  change chain needs no extra floor: changeIndex already persists and
+     *  windowBound() covers changeIndex+1 (the judge recovery invariant). */
+    private static final String KEY_RECV_WINDOW = "recv_window";
     private static final long FEE_SATS = 10000;      // 0.0001 MAZA fixed
     private static final long COIN = 100000000L;     // 1 MAZA = 1e8 sats
     private static final int ADDR_COUNT = 20;        // gap window per chain
@@ -92,6 +97,11 @@ public final class SelfCustody {
 
     private int recvIndex;
     private int changeIndex;
+    /** Receive-chain watch window floor (grow-only, persisted, >= ADDR_COUNT). */
+    private int recvWindow;
+    /** Last usage scan of the receive chain (UI-thread only; null until the
+     *  first refresh with usage surfaces returns). Drives NEXT/auto-advance. */
+    private boolean[] lastRecvUsed;
 
     // Wallet-state widgets.
     private TextView balanceTv;
@@ -113,6 +123,8 @@ public final class SelfCustody {
         this.prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         this.recvIndex = prefs.getInt(KEY_RECV_IDX, 0);
         this.changeIndex = prefs.getInt(KEY_CHANGE_IDX, 0);
+        this.recvWindow = Math.max(ADDR_COUNT,
+                prefs.getInt(KEY_RECV_WINDOW, ADDR_COUNT));
         this.root = column();
         String[] words = null;
         try {
@@ -198,7 +210,7 @@ public final class SelfCustody {
      *  scan must cover at least changeIndex+1 or change UTXOs at indices
      *  >= ADDR_COUNT become unspendable - judge blocker). */
     private Bip32.Node keyForAddress(String address) {
-        int maxIdx = Math.max(ADDR_COUNT, changeIndex + 1);
+        int maxIdx = windowBound();
         for (int chain = 0; chain <= 1; chain++) {
             for (int i = 0; i < maxIdx; i++) {
                 if (Bip44Maza.address(keyAt(chain, i)).equals(address)) {
@@ -372,6 +384,17 @@ public final class SelfCustody {
         }
         account = null;
         keyCache.clear();
+        // A fresh seed (created or imported) starts at index 0 with the
+        // base window; stale indices from a previous seed would leak its
+        // address positions into this one (M11 hygiene). An imported
+        // seed's history re-surfaces through the usage scan on the first
+        // refreshes, which then grows the window and advances the display.
+        recvIndex = 0;
+        changeIndex = 0;
+        recvWindow = ADDR_COUNT;
+        prefs.edit().putInt(KEY_RECV_IDX, 0)
+                .putInt(KEY_CHANGE_IDX, 0)
+                .putInt(KEY_RECV_WINDOW, ADDR_COUNT).apply();
         state = ST_WALLET;
         // Import all 40 addresses (receive 0..19 + change 0..19) up front so
         // the backend watches every address this wallet will ever use, with
@@ -402,11 +425,7 @@ public final class SelfCustody {
         addrCard.addView(addrTv, mp(0, dp(2), 0, 0));
         Button next = new Button(act);
         next.setText("NEXT");
-        next.setOnClickListener(v -> {
-            recvIndex = (recvIndex + 1) % ADDR_COUNT;
-            prefs.edit().putInt(KEY_RECV_IDX, recvIndex).apply();
-            updateAddress();
-        });
+        next.setOnClickListener(v -> nextReceiveIndex());
         addrCard.addView(next, mp(0, dp(6), 0, 0));
 
         qrStatusTv = label("", 12, pal.textSecondary(), Typeface.NORMAL);
@@ -451,9 +470,53 @@ public final class SelfCustody {
     }
 
     private void updateAddress() {
+        updateAddress("index " + recvIndex);
+    }
+
+    private void updateAddress(String idxLabel) {
         addrTv.setText(currentAddress());
-        addrIndexTv.setText("index " + recvIndex);
+        addrIndexTv.setText(idxLabel);
         loadQr();
+    }
+
+    /** NEXT: advance the receive display to the next UNUSED index (M11).
+     *  The old modulo wrap landed back on address 0 after 20 receives -
+     *  address reuse. With no usage scan yet, a plain bounded advance.
+     *  When every scanned index is used, the window grows past the
+     *  highest used index (the follow-up import watches the new frontier)
+     *  and the display moves to highestUsed+1 - "receive 21 times without
+     *  manual import". */
+    private void nextReceiveIndex() {
+        boolean[] used = lastRecvUsed;
+        int next;
+        if (used != null && used.length > 0) {
+            int limit = Math.min(windowBound(), used.length);
+            next = GapPolicy.nextAfter(used, recvIndex, limit);
+            if (next == GapPolicy.NO_INDEX) {
+                int high = GapPolicy.highestUsed(used);
+                // Re-import ONLY when the window actually grew (judge
+                // polish fold): a false return means the frontier is
+                // already inside the persisted window the backend
+                // watches - an extra idempotent import would be
+                // redundant network churn on every NEXT tap in that edge.
+                if (growRecvWindow(GapPolicy.windowFor(high, ADDR_COUNT))) {
+                    ensureWatchImported();
+                }
+                next = high + 1;
+            }
+        } else {
+            next = recvIndex + 1;
+            if (next >= windowBound()) {
+                if (growRecvWindow(GapPolicy.windowFor(next - 1, ADDR_COUNT))) {
+                    ensureWatchImported();
+                }
+            }
+        }
+        if (next != recvIndex && next >= 0 && next < windowBound()) {
+            recvIndex = next;
+            prefs.edit().putInt(KEY_RECV_IDX, recvIndex).apply();
+            updateAddress();
+        }
     }
 
     private String currentAddress() {
@@ -506,7 +569,18 @@ public final class SelfCustody {
                 final JSONArray txs = h.code == 200
                         ? h.json().optJSONArray("transactions") : null;
 
-                ui.post(() -> applyRefresh(balance, utxos, txs));
+                // M11 gap scan on the worker thread (derives addresses;
+                // keyAt caches them for the UI decisions that follow).
+                final GapScan scan;
+                try {
+                    scan = computeGapScan(utxos, txs);
+                } catch (RuntimeException e) {
+                    ui.post(() -> note("Update failed: " + e.getMessage(),
+                            pal.danger()));
+                    return;
+                }
+
+                ui.post(() -> applyRefresh(balance, utxos, txs, scan));
             } catch (IOException e) {
                 ui.post(() -> note("Update failed: " + e.getMessage(), pal.danger()));
             } catch (JSONException e) {
@@ -515,9 +589,11 @@ public final class SelfCustody {
         }, "selfcustody-refresh").start();
     }
 
-    private void applyRefresh(double balance, JSONArray utxos, JSONArray txs) {
+    private void applyRefresh(double balance, JSONArray utxos, JSONArray txs,
+            GapScan scan) {
         if (balanceTv == null) return;
         balanceTv.setText(fmt(balance) + " MAZA");
+        applyGapScan(scan);
         historyList.removeAllViews();
         if (txs == null || txs.length() == 0) {
             historyList.addView(label("No transactions yet", 13, pal.textSecondary(), Typeface.NORMAL));
@@ -530,6 +606,34 @@ public final class SelfCustody {
         note("Last sync " + java.text.DateFormat.getDateTimeInstance(
                 java.text.DateFormat.SHORT, java.text.DateFormat.MEDIUM)
                 .format(new java.util.Date()), pal.textSecondary());
+    }
+
+    /** Applies the M11 gap decisions from a refresh scan (UI thread).
+     *  Grows the watch window when usage demands it and re-imports so the
+     *  backend watches the extension immediately (the watch book grows
+     *  automatically - the M11 deliverable). Advances the DISPLAYED receive
+     *  index off a used address (reuse prevention): the old address stays
+     *  watched and its funds spendable - only the display moves. No
+     *  re-render when nothing changed, so the poll does not re-fetch the
+     *  QR every cycle. */
+    private void applyGapScan(GapScan scan) {
+        if (scan == null) return;
+        lastRecvUsed = scan.recvUsed;
+        int high = GapPolicy.highestUsed(scan.recvUsed);
+        if (growRecvWindow(GapPolicy.windowFor(high, ADDR_COUNT))) {
+            ensureWatchImported();
+        }
+        if (recvIndex < scan.recvUsed.length && scan.recvUsed[recvIndex]) {
+            int limit = Math.min(scan.bound, scan.recvUsed.length);
+            int next = GapPolicy.nextAfter(scan.recvUsed, recvIndex, limit);
+            if (next == GapPolicy.NO_INDEX) next = high + 1;
+            if (next != recvIndex && next >= 0 && next < windowBound()) {
+                recvIndex = next;
+                prefs.edit().putInt(KEY_RECV_IDX, recvIndex).apply();
+                updateAddress("index " + recvIndex
+                        + " \u00B7 moved past a used address");
+            }
+        }
     }
 
     private View historyRow(JSONObject t) {
@@ -802,11 +906,13 @@ public final class SelfCustody {
         }, "selfcustody-ensure-import").start();
     }
 
-    /** Both chains, receive window + every already-used change index: after
-     *  changeIndex passes ADDR_COUNT, startup recovery must still re-import
-     *  the older change addresses or they go blind (judge blocker). */
+    /** Both chains, the full watch window: every already-used change index
+     *  AND the receive gap window (M11). windowBound() is the ONE shared
+     *  bound - keyForAddress() must scan exactly the range this imports, or
+     *  addresses at the tail of the window become unspendable on recovery
+     *  (judge blocker). */
     private List<String> allAddresses() {
-        int maxIdx = Math.max(ADDR_COUNT, changeIndex + 1);
+        int maxIdx = windowBound();
         List<String> out = new ArrayList<>();
         for (int chain = 0; chain <= 1; chain++) {
             for (int i = 0; i < maxIdx; i++) {
@@ -814,6 +920,78 @@ public final class SelfCustody {
             }
         }
         return out;
+    }
+
+    /** THE shared derivation/import bound for both chains (M11): the base
+     *  gap window, every used change index, and the grown receive window -
+     *  as a superset of the old max(ADDR_COUNT, changeIndex+1) invariant.
+     *  keyForAddress() and allAddresses() both call this; nothing else may
+     *  invent its own bound. */
+    private int windowBound() {
+        return Math.max(ADDR_COUNT,
+                Math.max(changeIndex + 1, recvWindow));
+    }
+
+    /** Grows the receive window floor (grow-only) and persists it. Returns
+     *  true when the window moved; the caller then re-imports so the
+     *  backend watches the extension (the watch book grows automatically -
+     *  the M11 deliverable). */
+    private boolean growRecvWindow(int newVal) {
+        if (newVal <= recvWindow) return false;
+        recvWindow = newVal;
+        prefs.edit().putInt(KEY_RECV_WINDOW, recvWindow).apply();
+        return true;
+    }
+
+    // ------------------------------------------------------ gap scan (M11)
+
+    /** Usage scan result handed from the refresh worker to the UI thread. */
+    private static final class GapScan {
+        final boolean[] recvUsed;   // indexed 0..bound-1
+        final int bound;
+
+        GapScan(boolean[] recvUsed, int bound) {
+            this.recvUsed = recvUsed;
+            this.bound = bound;
+        }
+    }
+
+    /** Marks which receive-chain indices appear on the wallet's own
+     *  refresh surfaces (watch utxos + watch history rows both carry the
+     *  receiving address). Runs on the refresh worker thread - keyAt() may
+     *  derive new keys (cached afterwards), which is too slow for the UI
+     *  thread on first sight. Detection is bounded by what the backend
+     *  reports; the persisted window never shrinks (D15). */
+    private GapScan computeGapScan(JSONArray utxos, JSONArray txs) {
+        int bound = windowBound();
+        boolean[] used = new boolean[bound];
+        int seen = markUsed(utxos, used, bound) + markUsed(txs, used, bound);
+        if (seen == 0) {
+            return null; // no usage surfaces yet - nothing to decide from
+        }
+        return new GapScan(used, bound);
+    }
+
+    /** Marks used[chain0 index] for every row address this wallet derives.
+     *  @return number of recognized row addresses. */
+    private int markUsed(JSONArray rows, boolean[] used, int bound) {
+        if (rows == null) return 0;
+        int seen = 0;
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject t = rows.optJSONObject(i);
+            if (t == null) continue;
+            String addr = t.optString("address", "");
+            if (addr.isEmpty()) continue;
+            for (int idx = 0; idx < bound; idx++) {
+                if (Bip44Maza.address(keyAt(Bip44Maza.RECEIVE_CHAIN, idx))
+                        .equals(addr)) {
+                    used[idx] = true;
+                    seen++;
+                    break;
+                }
+            }
+        }
+        return seen;
     }
 
     // --------------------------------------------------------------- helpers

@@ -67,6 +67,12 @@ A wallet without a PIN has no lock - set one.
   shows your current receiving address. Settings - WALLET MANAGEMENT -
   RECEIVE ADDRESSES lists the addresses derived from your seed and marks
   the current one. Give the address (or show its QR) to the sender.
+  When an address has received funds, the card moves to the next unused
+  one on its own (marked "moved past a used address"); NEXT also skips
+  used addresses, and the wallet keeps a look-ahead window of fresh
+  addresses watched on the server, so you can keep receiving without
+  any manual step. The previous address stays valid forever - funds
+  sent to it still arrive and are spendable.
 - **Into the bench account:** the RECEIVE tab shows the bench address with
   a Copy button and a QR code. Funds sent here are held by the server.
   Type an amount (optional) and tap **Show payment QR** and the code

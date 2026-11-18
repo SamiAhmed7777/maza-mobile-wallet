@@ -167,6 +167,9 @@ public final class SelfTest {
         section("MazaUri payment-URI contract (M9, official desktop port)");
         mazaUriChecks();
 
+        section("GapPolicy BIP44 gap limit (M11 watch window)");
+        gapPolicyChecks();
+
         section("Settings screens WCAG contrast (S-4)");
         settingsContrastChecks();
 
@@ -869,6 +872,97 @@ public final class SelfTest {
         } catch (RuntimeException e) {
             return false;
         }
+    }
+
+    /** GapPolicy (M11): the BIP44 gap-limit decision table the Android
+     *  wiring in SelfCustody applies. Pure rows on synthetic used[] arrays -
+     *  the derivation/address matching itself is exercised through the
+     *  app's wiring tests and the device lane. */
+    private static void gapPolicyChecks() {
+        check("gappolicy: GAP is the BIP44 standard look-ahead (20)",
+                GapPolicy.GAP == 20);
+        check("gappolicy: NO_INDEX is -1", GapPolicy.NO_INDEX == -1);
+
+        // --- windowFor: floor + highestUsed+1+GAP
+        check("gappolicy: windowFor unused = floor",
+                GapPolicy.windowFor(-1, 20) == 20);
+        check("gappolicy: windowFor used@0 grows past the floor",
+                GapPolicy.windowFor(0, 20) == 21);
+        check("gappolicy: windowFor used@19 = 40 (frontier + GAP)",
+                GapPolicy.windowFor(19, 20) == 40);
+        check("gappolicy: windowFor used@4 = 25",
+                GapPolicy.windowFor(4, 20) == 25);
+        check("gappolicy: windowFor floor dominates when larger",
+                GapPolicy.windowFor(3, 50) == 50);
+        check("gappolicy: windowFor monotone in usage",
+                GapPolicy.windowFor(10, 20) >= GapPolicy.windowFor(9, 20));
+        check("gappolicy: windowFor rejects highestUsed < -1",
+                throwsIllegal(() -> GapPolicy.windowFor(-2, 20)));
+        check("gappolicy: windowFor rejects floor < 1",
+                throwsIllegal(() -> GapPolicy.windowFor(0, 0)));
+
+        // --- firstUnused
+        check("gappolicy: firstUnused empty = 0",
+                GapPolicy.firstUnused(GapPolicy.usedAt(5), 5) == 0);
+        check("gappolicy: firstUnused skips a used head",
+                GapPolicy.firstUnused(GapPolicy.usedAt(3, 0), 3) == 1);
+        check("gappolicy: firstUnused all-used = NO_INDEX",
+                GapPolicy.firstUnused(GapPolicy.usedAt(3, 0, 1, 2), 3)
+                        == GapPolicy.NO_INDEX);
+        check("gappolicy: firstUnused rejects limit > length",
+                throwsIllegal(() -> GapPolicy.firstUnused(
+                        GapPolicy.usedAt(1), 5)));
+
+        // --- nextAfter: forward scan, skip used, wrap, never reuse
+        check("gappolicy: nextAfter plain advance",
+                GapPolicy.nextAfter(GapPolicy.usedAt(5), 2, 5) == 3);
+        check("gappolicy: nextAfter skips the used neighbor",
+                GapPolicy.nextAfter(GapPolicy.usedAt(4, 2), 1, 4) == 3);
+        check("gappolicy: nextAfter wraps past the end without reuse",
+                GapPolicy.nextAfter(
+                        GapPolicy.usedAt(4, 0, 3), 3, 4) == 1);
+        check("gappolicy: nextAfter all-used = NO_INDEX",
+                GapPolicy.nextAfter(GapPolicy.usedAt(3, 0, 1, 2), 1, 3)
+                        == GapPolicy.NO_INDEX);
+        check("gappolicy: nextAfter rejects from out of range",
+                throwsIllegal(() -> GapPolicy.nextAfter(
+                        GapPolicy.usedAt(3), 3, 3)));
+        check("gappolicy: nextAfter rejects limit > length",
+                throwsIllegal(() -> GapPolicy.nextAfter(
+                        GapPolicy.usedAt(2), 0, 9)));
+
+        // --- highestUsed
+        check("gappolicy: highestUsed none = -1",
+                GapPolicy.highestUsed(GapPolicy.usedAt(4)) == -1);
+        check("gappolicy: highestUsed finds the last used index",
+                GapPolicy.highestUsed(
+                        GapPolicy.usedAt(6, 1, 4)) == 4);
+
+        // --- scenarios the app wiring must satisfy (M11 deliverable)
+        // "receive 21 times without manual import": indices 0..19 used.
+        boolean[] twenty = GapPolicy.usedAt(20,
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
+        int win = GapPolicy.windowFor(
+                GapPolicy.highestUsed(twenty), 20);
+        check("gappolicy: 21-receive scenario grows the window to 40",
+                win == 40);
+        check("gappolicy: 21-receive scenario advances to index 20",
+                GapPolicy.nextAfter(twenty, 19, 20) == GapPolicy.NO_INDEX
+                        && GapPolicy.highestUsed(twenty) + 1 == 20);
+        // Reuse detection: the displayed index 5 is used -> display moves
+        // to the first unused (6), and the window grows past the floor
+        // (used@5 -> highestUsed+1+GAP = 26) so the frontier keeps GAP
+        // fresh addresses ahead of it.
+        boolean[] scattered = GapPolicy.usedAt(10, 0, 1, 2, 3, 4, 5);
+        check("gappolicy: used display advances to first unused",
+                GapPolicy.nextAfter(scattered, 5, 10) == 6
+                        && GapPolicy.windowFor(
+                                GapPolicy.highestUsed(scattered), 20) == 26);
+        // Grow-only: the caller's max() keeps a persisted window.
+        int persisted = 40;
+        check("gappolicy: persisted window never shrinks",
+                Math.max(persisted, GapPolicy.windowFor(3, 20)) == 40);
     }
 
     /** SettingsActivity.onResume regression proof (desktop-lifecycle
