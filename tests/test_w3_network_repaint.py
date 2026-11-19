@@ -44,7 +44,8 @@ JAVAC = shutil.which("javac")
 JAVA = shutil.which("java")
 
 SPEND_PATHS = ("/api/send", "/api/broadcast")
-READ_PATHS = ("/api/state", "/api/qr.png", "/api/watch/utxos", "/api/watch/history")
+READ_PATHS = ("/api/state", "/api/qr.png", "/api/watch/utxos", "/api/watch/history",
+              "/api/v0/address", "/api/v0/tx", "/api/v0/block")
 
 
 def read_text(path):
@@ -543,8 +544,9 @@ class OsDayNightFoldWiring(unittest.TestCase):
 
     def test_manifest_handles_uimode_without_recreate(self):
         manifest = read_text(os.path.join(REPO_ROOT, "android", "AndroidManifest.xml"))
-        self.assertEqual(manifest.count("android:configChanges="), 2,
-                         "both activities declare configChanges")
+        self.assertEqual(manifest.count("android:configChanges="), 3,
+                         "all three activities (Main, Settings, Explorer) "
+                         "declare configChanges")
         self.assertNotIn('keyboardHidden">', manifest,
                          "an activity without uiMode would be recreated on a "
                          "day/night flip and drop the session")

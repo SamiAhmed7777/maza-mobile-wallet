@@ -226,6 +226,15 @@ public final class SettingsActivity extends Activity {
                 Typeface.NORMAL), mp(0, dp(8), 0, 0));
         renderTheme();
 
+        // ---- read-only chain explorer entry ----
+        LinearLayout explorer = card();
+        root.addView(explorer, mp(0, 0, 0, dp(12)));
+        explorer.addView(label(getString(R.string.settings_explorer), 13, accent, Typeface.BOLD));
+        explorer.addView(label(getString(R.string.settings_explorer_note), 12, muted,
+                Typeface.NORMAL), mp(0, dp(6), 0, dp(6)));
+        explorer.addView(button(getString(R.string.settings_explorer_open), accent, bg,
+                v -> startActivity(new Intent(this, ExplorerActivity.class))));
+
         // ---- wallet management entry ----
         LinearLayout wallet = card();
         root.addView(wallet, mp(0, 0, 0, dp(12)));

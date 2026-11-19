@@ -1,0 +1,88 @@
+#!/bin/sh
+# deploy/maza-indexer-launcher.example - ExecStart wrapper for the MAZA lean
+# chain indexer (unit template: deploy/maza-indexer.service.example).
+#
+# WHY A LAUNCHER EXISTS
+# ---------------------
+# systemd refuses a VARIABLE as the first component of a command:
+#   ExecStart=${MAZA_INDEXER_HOME}/bin/maza-indexer-launcher   <-- FORBIDDEN
+# fails `systemd-analyze verify` with "Executable path is not absolute".
+# (MAZA_INDEXER_HOME is not a real key and is used here only to show the
+# shape that does not work - nothing writes or reads it.)
+# So the unit names a FIXED ABSOLUTE PATH and this script does the
+# expansion with real shell semantics at exec time:
+#
+#   /opt/maza-indexer/current            -> /opt/maza-indexer/releases/<stamp>
+#   /opt/maza-indexer/current/bin/maza-indexer-launcher
+#
+# WHAT IT DOES
+# ------------
+#   1. Works out which release tree it lives in (the parent of its own bin/
+#      directory, resolved through the "current" symlink) and puts THAT tree
+#      on PYTHONPATH - so "python3 -m maza_indexer" imports the package from
+#      this release, never from a stray copy elsewhere on the box.
+#   2. Exports PYTHONDONTWRITEBYTECODE=1, because the release tree is
+#      read-only at runtime (ProtectSystem=strict).
+#   3. Execs: python3 -m maza_indexer
+#
+# THE CLI IS "run (DEFAULT)" - "run" IS NOT A SUBCOMMAND
+# ------------------------------------------------------
+# The package's argparse accepts only [-h] [--reorg-delete HEIGHT] [--status].
+# The server is what you get when you pass NO arguments. The literal word
+# "run" is REJECTED:
+#     python3 -m maza_indexer run
+#     -> error: unrecognized arguments: run     (exit status 2)
+# (verified against the package, 2026-11-19). So the launcher passes no
+# positional and lets the package apply its own default.
+#
+# OPERATOR COMMANDS (the unit passes no arguments, so the server is what runs)
+# ------------------------------------------------------------------------
+#   .../bin/maza-indexer-launcher                      -> python3 -m maza_indexer
+#   .../bin/maza-indexer-launcher --status             -> prints cursor + counts
+#   .../bin/maza-indexer-launcher --reorg-delete 1000  -> deletes blocks >= 1000
+#
+# --reorg-delete REQUIRES the height. The flags come from the package CLI -
+# run `python3 -m maza_indexer --help` if they ever change.
+# Docs: docs/maza-indexer/README.md.
+#
+# ENVIRONMENT (from the unit's EnvironmentFile=/etc/maza-indexer.env):
+#   MAZA_INDEXER_RPC_URL       full mazad RPC URL, e.g. http://127.0.0.1:12832
+#   MAZA_INDEXER_RPC_USER      mazad rpcuser
+#   MAZA_INDEXER_RPC_PASSWORD  mazad rpcpassword
+#   MAZA_INDEXER_DATADIR       index database directory
+#   MAZA_INDEXER_BIND          HTTP bind, host:port
+#   MAZA_INDEXER_BATCH         block-hash lookups per crawl batch
+#   MAZA_INDEXER_RATE          per-IP requests per minute
+# The RPC password reaches the process through systemd; this script never
+# prints it, echoes it, writes it to a log, or puts it on a command line.
+set -u
+
+# --- locate the release tree that contains us --------------------------------
+# $0 is .../<release>/bin/maza-indexer-launcher. pwd -P resolves the
+# "current" symlink, so we act on the release that is physically live.
+self_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+release_root="$(CDPATH= cd -- "${self_dir}/.." && pwd -P)"
+
+if [ ! -d "${release_root}/maza_indexer" ]; then
+    echo "maza-indexer-launcher: no maza_indexer package under ${release_root}" >&2
+    exit 1
+fi
+
+# Read-only release tree (ProtectSystem=strict): never try to write .pyc.
+PYTHONDONTWRITEBYTECODE=1
+export PYTHONDONTWRITEBYTECODE
+
+PYTHONPATH="${release_root}${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH
+
+# MAZA_INDEXER_PYTHON lets an operator point at a different interpreter.
+# It is a LAUNCHER-LEVEL convenience ONLY - it is NOT part of the indexer's
+# environment contract, the installer never writes it into the env file, and
+# the package does not read it. The package is expected to be stdlib-only;
+# see the README.
+PY_BIN="${MAZA_INDEXER_PYTHON:-python3}"
+
+# No arguments (the systemd case) means: serve. The package's CLI is
+# "run (default)" - passing the literal word "run" is an argparse error, so
+# it is NOT passed here. See the header.
+exec "${PY_BIN}" -m maza_indexer "$@"

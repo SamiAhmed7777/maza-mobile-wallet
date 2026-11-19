@@ -1,0 +1,88 @@
+# deploy/maza-indexer.service.example - the MAZA lean chain indexer as a
+# systemd unit.
+#
+# The installer (deploy/maza-indexer-install.sh) copies THIS FILE to
+# /etc/systemd/system/maza-indexer.service. It is a template, not a live
+# unit: edit it here, re-run the installer, and the change is installed.
+# The installer only substitutes the service user and the data directory
+# (both default to the values below).
+#
+# THE ExecStart IS AN ABSOLUTE PATH ON PURPOSE
+# --------------------------------------------
+# systemd refuses a variable as the first component of a command:
+#   ExecStart=${MAZA_INDEXER_HOME}/bin/maza-indexer-launcher   <-- FORBIDDEN
+# fails `systemd-analyze verify` ("Executable path is not absolute"). So the
+# unit names a FIXED path and the launcher does the expansion:
+#
+#   /opt/maza-indexer/current                -> /opt/maza-indexer/releases/<stamp>
+#   /opt/maza-indexer/current/bin/maza-indexer-launcher  (this release's copy)
+#
+# (MAZA_INDEXER_HOME is not a real key; it is here only to show the shape
+# that does not work. Nothing writes or reads it.)
+#
+# The launcher execs: python3 -m maza_indexer
+# (the package's CLI is "run (default)": the server runs when NO argument is
+# passed. The literal word "run" is rejected by its argparse - exit 2.)
+#
+# ENVIRONMENT (EnvironmentFile=/etc/maza-indexer.env, written by the
+# installer, 0600 root:root - systemd reads it as root and injects the
+# values into the service's environment). These are EXACTLY the keys the
+# indexer package reads - do not invent others here:
+#   MAZA_INDEXER_RPC_URL       full mazad RPC URL    (default http://127.0.0.1:12832)
+#   MAZA_INDEXER_RPC_USER      mazad rpcuser         (required)
+#   MAZA_INDEXER_RPC_PASSWORD  mazad rpcpassword     (required, never logged)
+#   MAZA_INDEXER_DATADIR       index database dir    (default /var/lib/maza-indexer)
+#   MAZA_INDEXER_BIND          HTTP bind, host:port  (default 127.0.0.1:18711)
+#   MAZA_INDEXER_BATCH         block-hash lookups per crawl batch (default 24)
+#   MAZA_INDEXER_RATE          per-IP requests per minute          (default 60)
+# There is NO chain key: the chain identity comes from the node.
+# MAZA_INDEXER_PYTHON is a launcher-only convenience (which interpreter to
+# use); the package does not read it and the installer never writes it.
+#
+# MANUAL COMMANDS (--status, --reorg-delete) are documented in
+# docs/maza-indexer/README.md - "Everyday commands" and "Recovery".
+[Unit]
+Description=MAZA lean chain indexer (read-only address/tx/block/merkle queries)
+Documentation=https://github.com/SamiAhmed7777/maza-mobile-wallet/blob/master/docs/maza-indexer/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A DEDICATED, NON-ROOT USER. The installer creates "maza-indexer" if it is
+# missing. Do not run this unit as root: the indexer only needs to read the
+# chain over RPC and write its own database.
+User=maza-indexer
+Group=maza-indexer
+WorkingDirectory=/opt/maza-indexer/current
+# REQUIRED, and deliberately NOT "-"-prefixed: a missing env file must FAIL
+# THE START loudly instead of serving an indexer with no RPC credentials.
+EnvironmentFile=/etc/maza-indexer.env
+# ABSOLUTE PATH - see the header. The launcher expands the release tree.
+ExecStart=/opt/maza-indexer/current/bin/maza-indexer-launcher
+Restart=on-failure
+RestartSec=5
+# systemd creates/chowns the state directory with the service user before
+# the first start (the installer also creates it, so a custom MAZA_INDEXER_DATADIR
+# works too).
+StateDirectory=maza-indexer
+
+# --- hardening ---------------------------------------------------------------
+# The indexer reads the chain over RPC and writes ONLY its own index
+# database. Everything else on the box is read-only to it.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# The ONE writable path: the index database.
+ReadWritePaths=/var/lib/maza-indexer
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

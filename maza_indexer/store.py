@@ -1,0 +1,398 @@
+"""SQLite store for the MAZA indexer (WAL mode).
+
+Design points pinned by the lane brief:
+- outputs() is the DURABLE PREVOUT TABLE: written for EVERY vout at ingest;
+  vin resolution is a durable SELECT against it (never in-memory), which is
+  what makes /api/v0/tx vin data restart-invariant.
+- Balance updates are transactional with history inserts, and the whole
+  store carries an integrity invariant asserted ON WRITE:
+      addresses.balance_sats == SUM(addr_tx.value_sats * sign(direction)).
+- Reorg deletion (--reorg-delete) is ONE transaction: delete blocks/txs at or
+  above the height, delete the affected outputs rows, un-mark outputs spent
+  by deleted txs, delete the affected addr_tx rows, and recompute every
+  affected address from surviving rows.  The store is integrity-consistent
+  on both sides of it.
+- Money is int satoshis everywhere (no floats; difficulty is the only REAL).
+"""
+
+import json
+import os
+import sqlite3
+import threading
+from typing import Dict, List, Optional, Tuple
+
+_ADDR_TABLE = """
+CREATE TABLE IF NOT EXISTS addresses(
+  address TEXT PRIMARY KEY,
+  balance_sats INTEGER NOT NULL,
+  tx_count INTEGER NOT NULL)
+"""
+
+
+class StoreError(Exception):
+    pass
+
+
+class StoreIntegrityError(StoreError):
+    """The signed-sum invariant between addresses and addr_tx broke."""
+
+
+class Store:
+    def __init__(self, path: str):
+        self.path = path
+        # The API is a ThreadingHTTPServer: request threads share this
+        # connection, so cross-thread use must be allowed and serialized
+        # through _lock.
+        self._lock = threading.RLock()
+        # sqlite3.connect does NOT create parent directories; a fresh
+        # datadir must be bootstrapped here (the CLI opens the Store before
+        # its first save_cursor on every path).
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        self.conn = sqlite3.connect(path, check_same_thread=False)
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=FULL")
+        self._init_schema()
+
+    def _init_schema(self) -> None:
+        c = self.conn
+        c.execute("""
+CREATE TABLE IF NOT EXISTS blocks(
+  height INTEGER PRIMARY KEY,
+  hash TEXT NOT NULL,
+  header_hex TEXT NOT NULL,
+  merkleroot TEXT NOT NULL,
+  ntx INTEGER NOT NULL,
+  time INTEGER NOT NULL,
+  difficulty REAL NOT NULL)""")
+        c.execute("""
+CREATE TABLE IF NOT EXISTS txs(
+  txid TEXT PRIMARY KEY,
+  height INTEGER NOT NULL,
+  idx INTEGER NOT NULL,
+  hex TEXT NOT NULL)""")
+        c.execute("CREATE INDEX IF NOT EXISTS txs_height ON txs(height)")
+        c.execute("""
+CREATE TABLE IF NOT EXISTS outputs(
+  txid TEXT NOT NULL,
+  vout INTEGER NOT NULL,
+  addresses_json TEXT NOT NULL,
+  value_sats INTEGER NOT NULL,
+  script_type TEXT NOT NULL,
+  spent_by TEXT,
+  spent_height INTEGER,
+  PRIMARY KEY(txid, vout))""")
+        c.execute("CREATE INDEX IF NOT EXISTS outputs_spent_by"
+                  " ON outputs(spent_by)")
+        c.execute("""
+CREATE TABLE IF NOT EXISTS addr_tx(
+  address TEXT NOT NULL,
+  txid TEXT NOT NULL,
+  height INTEGER NOT NULL,
+  idx INTEGER NOT NULL,
+  value_sats INTEGER NOT NULL,
+  direction TEXT NOT NULL,
+  PRIMARY KEY(address, txid))""")
+        c.execute("CREATE INDEX IF NOT EXISTS addr_tx_height"
+                  " ON addr_tx(height)")
+        c.execute(_ADDR_TABLE)
+        c.commit()
+
+    def close(self) -> None:
+        self.conn.close()
+
+    # ------------------------------------------------------------------
+    # ingest path
+    # ------------------------------------------------------------------
+    def add_block(self, height: int, block_hash: str, header_hex: str,
+                  merkleroot: str, ntx: int, block_time: int,
+                  difficulty: float, txs: List[dict]) -> None:
+        """Write one block transactionally.
+
+        `txs` entries carry (from the ingest parser): txid, hex, vouts = list
+        of {vout, addresses (list of str), value_sats, script_type}, and
+        vins = list of {prev_txid (display hex or None for coinbase),
+        prev_vout (int or None)}.
+        """
+        with self._lock:
+            return self._add_block_locked(
+                height, block_hash, header_hex, merkleroot, ntx, block_time,
+                difficulty, txs)
+
+    def _add_block_locked(self, height: int, block_hash: str,
+                          header_hex: str, merkleroot: str, ntx: int,
+                          block_time: int, difficulty: float,
+                          txs: List[dict]) -> None:
+        c = self.conn
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            c.execute(
+                "INSERT INTO blocks(height, hash, header_hex, merkleroot,"
+                " ntx, time, difficulty) VALUES(?,?,?,?,?,?,?)",
+                (height, block_hash, header_hex, merkleroot, ntx,
+                 block_time, difficulty))
+            touched = set()
+            for idx, tx in enumerate(txs):
+                c.execute(
+                    "INSERT INTO txs(txid, height, idx, hex)"
+                    " VALUES(?,?,?,?)",
+                    (tx["txid"], height, idx, tx["hex"]))
+                for vout in tx["vouts"]:
+                    c.execute(
+                        "INSERT INTO outputs(txid, vout, addresses_json,"
+                        " value_sats, script_type, spent_by, spent_height)"
+                        " VALUES(?,?,?,?,?,NULL,NULL)",
+                        (tx["txid"], vout["vout"],
+                         json.dumps(vout["addresses"]), vout["value_sats"],
+                         vout["script_type"]))
+            # Vin resolution is a DURABLE lookup against outputs (the prevout
+            # rows of this block were all inserted above, so same-block
+            # spends resolve too).  Nets accumulate per (address, tx) and
+            # each row is written ONCE with its final net -- one addr_tx row
+            # per (address, tx), the aggregation contract.
+            nets: Dict[Tuple[str, str], list] = {}
+            for idx, tx in enumerate(txs):
+                for vin in tx["vins"]:
+                    if vin["prev_txid"] is None:
+                        continue  # coinbase input: nothing to resolve
+                    row = c.execute(
+                        "SELECT addresses_json, value_sats FROM outputs"
+                        " WHERE txid=? AND vout=?",
+                        (vin["prev_txid"], vin["prev_vout"])).fetchone()
+                    if row is None:
+                        raise StoreError(
+                            "unresolvable prevout %s:%s for input of %s"
+                            % (vin["prev_txid"], vin["prev_vout"],
+                               tx["txid"]))
+                    addresses_json, value_sats = row
+                    c.execute(
+                        "UPDATE outputs SET spent_by=?, spent_height=?"
+                        " WHERE txid=? AND vout=?",
+                        (tx["txid"], height, vin["prev_txid"],
+                         vin["prev_vout"]))
+                    for addr in json.loads(addresses_json):
+                        nets.setdefault((addr, tx["txid"]),
+                                        [0, height, idx])[0] -= value_sats
+                for vout in tx["vouts"]:
+                    for addr in vout["addresses"]:
+                        nets.setdefault((addr, tx["txid"]),
+                                        [0, height, idx])[0] \
+                            += vout["value_sats"]
+            for (addr, txid), (net, row_height, row_idx) in nets.items():
+                touched.add(addr)
+                # net == 0 (self-transfer): direction "in", value 0, row
+                # kept for history completeness.
+                direction = "in" if net >= 0 else "out"
+                c.execute(
+                    "INSERT OR REPLACE INTO addr_tx(address, txid,"
+                    " height, idx, value_sats, direction)"
+                    " VALUES(?,?,?,?,?,?)",
+                    (addr, txid, row_height, row_idx, abs(net), direction))
+            for addr in touched:
+                c.execute(
+                    "INSERT INTO addresses(address, balance_sats, tx_count)"
+                    " VALUES(?,0,0)"
+                    " ON CONFLICT(address) DO NOTHING", (addr,))
+                added_rows = sum(1 for (a, _t) in nets if a == addr)
+                added_net = sum(net for (a, _t), (net, _h, _i)
+                                in nets.items() if a == addr)
+                # INCREMENTAL update -- the signed-sum assert below then has
+                # teeth (it compares the running balance against the history
+                # rows; a drifted balance trips it).
+                c.execute(
+                    "UPDATE addresses SET balance_sats = balance_sats + ?,"
+                    " tx_count = tx_count + ? WHERE address=?",
+                    (added_net, added_rows, addr))
+            for addr in sorted(touched):
+                self._assert_address_integrity(addr)
+            c.execute("COMMIT")
+        except Exception:
+            c.execute("ROLLBACK")
+            raise
+
+    def _assert_address_integrity(self, address: str) -> None:
+        """Signed-sum invariant: balance == SUM(addr_tx signed by direction)."""
+        row = self.conn.execute(
+            "SELECT balance_sats, tx_count FROM addresses WHERE address=?",
+            (address,)).fetchone()
+        sum_row = self.conn.execute(
+            "SELECT COALESCE(SUM(CASE direction WHEN 'in' THEN value_sats"
+            " ELSE -value_sats END),0), COUNT(*) FROM addr_tx"
+            " WHERE address=?", (address,)).fetchone()
+        if row is None:
+            raise StoreIntegrityError(f"missing addresses row for {address}")
+        if row[0] != sum_row[0] or row[1] != sum_row[1]:
+            raise StoreIntegrityError(
+                f"integrity: {address} balance_sats={row[0]} vs sum="
+                f"{sum_row[0]} tx_count={row[1]} vs count={sum_row[1]}")
+
+    # ------------------------------------------------------------------
+    # reorg recovery
+    # ------------------------------------------------------------------
+    def reorg_delete(self, height: int) -> Dict[str, int]:
+        """Delete every block >= height in ONE transaction; recompute every
+        affected address from surviving rows; keep integrity invariant."""
+        with self._lock:
+            return self._reorg_delete_locked(height)
+
+    def _reorg_delete_locked(self, height: int) -> Dict[str, int]:
+        c = self.conn
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            affected = [r[0] for r in c.execute(
+                "SELECT DISTINCT address FROM addr_tx WHERE height >= ?",
+                (height,)).fetchall()]
+            # Un-mark outputs spent by deleted txs BEFORE deleting outputs.
+            c.execute(
+                "UPDATE outputs SET spent_by=NULL, spent_height=NULL"
+                " WHERE spent_height >= ?", (height,))
+            c.execute(
+                "DELETE FROM outputs WHERE txid IN"
+                " (SELECT txid FROM txs WHERE height >= ?)", (height,))
+            n_addr_tx = c.execute(
+                "DELETE FROM addr_tx WHERE height >= ?",
+                (height,)).rowcount
+            n_txs = c.execute(
+                "DELETE FROM txs WHERE height >= ?", (height,)).rowcount
+            n_blocks = c.execute(
+                "DELETE FROM blocks WHERE height >= ?",
+                (height,)).rowcount
+            for addr in affected:
+                c.execute(
+                    "UPDATE addresses SET tx_count ="
+                    " (SELECT COUNT(*) FROM addr_tx WHERE address=?),"
+                    " balance_sats ="
+                    " (SELECT COALESCE(SUM(CASE direction WHEN 'in' THEN"
+                    " value_sats ELSE -value_sats END),0) FROM addr_tx"
+                    " WHERE address=?)"
+                    " WHERE address=?", (addr, addr, addr))
+            for addr in affected:
+                self._assert_address_integrity(addr)
+            c.execute("COMMIT")
+        except Exception:
+            c.execute("ROLLBACK")
+            raise
+        return {"blocks": n_blocks, "txs": n_txs, "addr_tx": n_addr_tx,
+                "addresses_recomputed": len(affected)}
+
+    # ------------------------------------------------------------------
+    # serve paths
+    # ------------------------------------------------------------------
+    def tip_height(self) -> Optional[int]:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT MAX(height) FROM blocks").fetchone()
+            return None if row is None or row[0] is None else int(row[0])
+
+    def block_by_height(self, height: int) -> Optional[dict]:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT height, hash, merkleroot, ntx, time, difficulty"
+                " FROM blocks WHERE height=?", (height,)).fetchone()
+            return self._block_dict(row)
+
+    def block_by_hash(self, block_hash: str) -> Optional[dict]:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT height, hash, merkleroot, ntx, time, difficulty"
+                " FROM blocks WHERE hash=?", (block_hash,)).fetchone()
+            return self._block_dict(row)
+
+    def block_hash_at(self, height: int) -> Optional[str]:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT hash FROM blocks WHERE height=?",
+                (height,)).fetchone()
+            return None if row is None else str(row[0])
+
+    @staticmethod
+    def _block_dict(row) -> Optional[dict]:
+        if row is None:
+            return None
+        return {"height": row[0], "hash": row[1], "merkleroot": row[2],
+                "ntx": row[3], "time": row[4], "difficulty": row[5]}
+
+    def block_txids(self, height: int, cap: Optional[int] = None
+                    ) -> Tuple[List[str], bool]:
+        """txids of a block in index order; (list, truncated flag)."""
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT txid FROM txs WHERE height=? ORDER BY idx",
+                (height,)).fetchall()
+        txids = [r[0] for r in rows]
+        if cap is not None and len(txids) > cap:
+            return txids[:cap], True
+        return txids, False
+
+    def get_tx_row(self, txid: str) -> Optional[Tuple[int, int, str]]:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT height, idx, hex FROM txs WHERE txid=?",
+                (txid,)).fetchone()
+        if row is None:
+            return None
+        return int(row[0]), int(row[1]), str(row[2])
+
+    def get_outputs_for_tx(self, txid: str) -> List[dict]:
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT vout, addresses_json, value_sats, script_type"
+                " FROM outputs WHERE txid=? ORDER BY vout",
+                (txid,)).fetchall()
+        return [{"n": r[0], "addresses": json.loads(r[1]), "value_sats": r[2],
+                 "script_type": r[3]} for r in rows]
+
+    def get_output(self, txid: str,
+                   vout: int) -> Optional[Tuple[list, Optional[int]]]:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT addresses_json, value_sats FROM outputs"
+                " WHERE txid=? AND vout=?", (txid, vout)).fetchone()
+        if row is None:
+            return None
+        return json.loads(row[0]), row[1]
+
+    def address_summary(self, address: str) -> Optional[dict]:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT balance_sats, tx_count FROM addresses WHERE"
+                " address=?", (address,)).fetchone()
+            if row is None:
+                return None
+            return {"balance_sats": int(row[0]), "tx_count": int(row[1])}
+
+    def address_history(self, address: str, cap: int = 100
+                        ) -> Tuple[List[dict], bool]:
+        """Newest first; (rows, truncated).  time = block time."""
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT at.txid, at.height, b.time, at.value_sats,"
+                " at.direction"
+                " FROM addr_tx at LEFT JOIN blocks b ON b.height = at.height"
+                " WHERE at.address=?"
+                " ORDER BY at.height DESC, at.idx DESC LIMIT ?",
+                (address, cap + 1)).fetchall()
+        truncated = len(rows) > cap
+        out = [{"txid": r[0], "height": r[1], "time": r[2],
+                "value_sats": r[3], "direction": r[4]}
+               for r in rows[:cap]]
+        return out, truncated
+
+    def has_address(self, address: str) -> bool:
+        with self._lock:
+            return self.conn.execute(
+                "SELECT 1 FROM addresses WHERE address=?",
+                (address,)).fetchone() is not None
+
+    def counts(self) -> dict:
+        with self._lock:
+            def one(sql: str) -> int:
+                row = self.conn.execute(sql).fetchone()
+                return int(row[0]) if row and row[0] is not None else 0
+            return {
+                "blocks": one("SELECT COUNT(*) FROM blocks"),
+                "txs": one("SELECT COUNT(*) FROM txs"),
+                "outputs": one("SELECT COUNT(*) FROM outputs"),
+                "addresses": one("SELECT COUNT(*) FROM addresses"),
+            }

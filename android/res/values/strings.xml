@@ -19,6 +19,18 @@
     <string name="settings_wallet">WALLET MANAGEMENT</string>
     <string name="settings_wallet_note">Receive addresses, seed phrase, and wipe.</string>
     <string name="settings_wallet_open">Open wallet management</string>
+    <string name="settings_explorer">CHAIN EXPLORER</string>
+    <string name="settings_explorer_note">Look up an address, transaction, or block. Read-only.</string>
+    <string name="settings_explorer_open">Open chain explorer</string>
+    <string name="explorer_title">Chain explorer</string>
+    <string name="explorer_subtitle">Read-only indexer lookup</string>
+    <string name="explorer_hint">Address, transaction ID, or block height</string>
+    <string name="explorer_search">Search</string>
+    <string name="explorer_ready">Enter an address, transaction ID, or block height.</string>
+    <string name="explorer_loading">Loading indexer result...</string>
+    <string name="explorer_unknown">Unknown query. Enter a valid address, 64-character transaction ID, or numeric block height.</string>
+    <string name="explorer_no_indexer">No indexer configured. Save a valid wallet endpoint or set the indexer URL override.</string>
+    <string name="explorer_bad_response">The indexer returned an unreadable response.</string>
 
     <string name="autolock_minutes">%1$d min</string>
     <string name="theme_system">System</string>
