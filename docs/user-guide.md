@@ -132,6 +132,7 @@ sending twice sends twice. Never re-tap a send because it seemed slow.
 | AUTO-LOCK | Minutes of inactivity (and background time) before the wallet locks. Applies immediately. |
 | APPEARANCE | System / Light / Dark. System follows the device's day/night setting, switching live. |
 | WALLET MANAGEMENT | Receive addresses, reveal seed phrase (PIN-gated), and wipe. Wipe deletes the seed phrase, the PIN, the endpoint, and all settings from the device. |
+| CHAIN EXPLORER | Read-only lookups against the indexer: address balances and history, transaction details, blocks. Transaction rows can show **Verified on-chain: merkle proof OK** - the phone re-checked the transaction's inclusion proof against the block's merkle root itself. A confirmed transaction is checked automatically; history rows verify when you tap them. |
 
 **Wipe wallet** deletes the seed phrase, the PIN, the endpoint, and all
 settings from the device. It asks twice, makes you type WIPE, and then

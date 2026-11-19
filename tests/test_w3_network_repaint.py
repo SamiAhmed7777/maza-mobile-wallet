@@ -45,7 +45,7 @@ JAVA = shutil.which("java")
 
 SPEND_PATHS = ("/api/send", "/api/broadcast")
 READ_PATHS = ("/api/state", "/api/qr.png", "/api/watch/utxos", "/api/watch/history",
-              "/api/v0/address", "/api/v0/tx", "/api/v0/block")
+              "/api/v0/address", "/api/v0/tx", "/api/v0/block", "/api/v0/proof")
 
 
 def read_text(path):

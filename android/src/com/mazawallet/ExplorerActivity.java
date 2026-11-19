@@ -5,6 +5,9 @@ import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -14,9 +17,13 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.mazawallet.crypto.Base58Check;
+import com.mazawallet.crypto.MerkleVerify;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Read-only address, transaction, and block explorer. */
 public final class ExplorerActivity extends Activity {
@@ -127,10 +134,19 @@ public final class ExplorerActivity extends Activity {
 
     private void render(ExplorerParse.Result result) {
         results.removeAllViews();
+        // Row views of THIS render only: every proof callback captures this
+        // instance, so a late callback can never write into a newer
+        // screen's rows (re-render replaces the list wholesale).
+        final List<TextView> views = new ArrayList<TextView>();
         TextView heading = text(result.heading, 16,
                 result.error ? pal.danger() : pal.accent());
         heading.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         results.addView(heading);
+        Map<Integer, ExplorerParse.HistoryEntry> byRow =
+                new HashMap<Integer, ExplorerParse.HistoryEntry>();
+        for (ExplorerParse.HistoryEntry entry : result.history) {
+            byRow.put(entry.rowIndex, entry);
+        }
         List<String> rows = result.rows;
         for (int i = 0; i < rows.size(); i++) {
             TextView row = text(rows.get(i), 13,
@@ -138,8 +154,117 @@ public final class ExplorerActivity extends Activity {
             row.setTextIsSelectable(true);
             row.setPadding(dp(10), dp(10), dp(10), dp(10));
             row.setBackgroundColor(pal.surface());
+            final ExplorerParse.HistoryEntry entry = byRow.get(i);
+            if (entry != null && client != null) {
+                final String baseText = rows.get(i);
+                row.setOnClickListener(v -> verifyRow(views, entry, baseText));
+                row.setClickable(true);
+            }
+            views.add(row);
             results.addView(row, margins(0, dp(6), 0, 0));
         }
+        // IDX-8: a confirmed transaction view checks its own merkle proof;
+        // an unconfirmed one gets the localized no-proof row in place of the
+        // parser's transient placeholder.
+        if (!result.error && client != null && result.proofRowIndex >= 0) {
+            if (result.txHeight != null) {
+                final long height = result.txHeight;
+                final String txid = result.txTxid;
+                final int proofRow = result.proofRowIndex;
+                new Thread(() -> checkProof(views, height, txid, proofRow)).start();
+            } else {
+                final int proofRow = result.proofRowIndex;
+                runOnUiThread(() -> {
+                    if (proofRow >= views.size()) return;
+                    TextView row = views.get(proofRow);
+                    row.setText(getString(R.string.explorer_proof_unconfirmed));
+                    row.setTextColor(pal.textSecondary());
+                });
+            }
+        }
+    }
+
+    /** IDX-8: fetch the proof for a confirmed tx view and verify it
+     *  client-side, replacing the placeholder proof row with the verdict. */
+    private void checkProof(List<TextView> views, long height, String txid,
+            int proofRow) {
+        String mark;
+        int color;
+        try {
+            Api.Resp resp = client.proof(String.valueOf(height), txid);
+            if (resp.code < 200 || resp.code >= 300) {
+                mark = getString(R.string.explorer_proof_fetch_failed);
+                color = pal.textSecondary();
+            } else {
+                ExplorerParse.Proof proof = ExplorerParse.proof(resp.text());
+                boolean ok = proof.error == null && MerkleVerify.verify(
+                        txid, proof.merkleroot, proof.merkle, proof.pos);
+                if (ok) {
+                    mark = getString(R.string.explorer_proof_verified);
+                    color = pal.accent();
+                } else {
+                    mark = getString(R.string.explorer_proof_failed);
+                    color = pal.danger();
+                }
+            }
+        } catch (IOException e) {
+            mark = getString(R.string.explorer_proof_fetch_failed);
+            color = pal.textSecondary();
+        }
+        final String fMark = mark;
+        final int fColor = color;
+        runOnUiThread(() -> {
+            if (proofRow >= views.size()) return;
+            TextView row = views.get(proofRow);
+            row.setText(fMark);
+            row.setTextColor(fColor);
+        });
+    }
+
+    /** IDX-8: tap-to-verify one address-history row on-chain. */
+    private void verifyRow(List<TextView> views,
+            ExplorerParse.HistoryEntry entry, String baseText) {
+        if (!entry.markTapStarted()) return;
+        new Thread(() -> {
+            String mark;
+            int color;
+            try {
+                Api.Resp resp = client.proof(String.valueOf(entry.height),
+                        entry.txid);
+                if (resp.code < 200 || resp.code >= 300) {
+                    mark = getString(R.string.explorer_proof_fetch_failed);
+                    color = pal.textSecondary();
+                } else {
+                    ExplorerParse.Proof proof = ExplorerParse.proof(resp.text());
+                    boolean ok = proof.error == null && MerkleVerify.verify(
+                            entry.txid, proof.merkleroot, proof.merkle,
+                            proof.pos);
+                    if (ok) {
+                        mark = getString(R.string.explorer_proof_verified);
+                        color = pal.accent();
+                    } else {
+                        mark = getString(R.string.explorer_proof_failed);
+                        color = pal.danger();
+                    }
+                }
+            } catch (IOException e) {
+                mark = getString(R.string.explorer_proof_fetch_failed);
+                color = pal.textSecondary();
+            }
+            final String fMark = mark;
+            final int fColor = color;
+            runOnUiThread(() -> {
+                if (entry.rowIndex >= views.size()) return;
+                TextView row = views.get(entry.rowIndex);
+                SpannableStringBuilder sb = new SpannableStringBuilder(baseText);
+                sb.append("\n");
+                int start = sb.length();
+                sb.append(fMark);
+                sb.setSpan(new ForegroundColorSpan(fColor), start, sb.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                row.setText(sb);
+            });
+        }).start();
     }
 
     private void showNote(String message, boolean error) {

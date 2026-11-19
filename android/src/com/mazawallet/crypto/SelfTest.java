@@ -176,6 +176,9 @@ public final class SelfTest {
         section("NotifyPolicy receive notifications (M14 decision table)");
         notifyPolicyChecks();
 
+        section("MerkleVerify merkle proof check (IDX-8 two-source verification)");
+        merkleVerifyChecks();
+
         section("Settings screens WCAG contrast (S-4)");
         settingsContrastChecks();
 
@@ -1339,6 +1342,136 @@ public final class SelfTest {
 
     private static void section(String name) {
         System.out.println("-- " + name);
+    }
+
+    /**
+     * IDX-8 two-source verification: drives crypto/MerkleVerify, the Java
+     * port of maza_indexer/verify.py verify_merkle_proof (the indexer's
+     * shipped math), with the CLI's usage-error contract folded in.
+     *
+     * <p>Vector provenance (never memorized, never hand-derived): the
+     * synthetic trees were built from deterministic leaves
+     * sha256("maza-idx8-leaf-N") with the indexer's OWN prover
+     * (maza_indexer.proofs.merkkle pairing: concat left+right, double-SHA256,
+     * odd node duplicated) and every row was verified against
+     * maza_indexer.verify at generation time (2026-11-19);
+     * tests/test_explorer_merkle_crosscheck.py re-derives ALL rows live at
+     * test time and diff-checks the Java port against the Python verify.
+     * The LIVE vectors were fetched from the deployed public indexer
+     * (mazatest.sami-host.me/indexer, release 20261119-121221): the tip
+     * block 41433 proof (6 levels, pos 0) and block 41430 proof (3 levels,
+     * pos 1 - a right-climb at the leaf).
+     */
+    private static void merkleVerifyChecks() {
+        String l0 = "ccc46f41805331e1850207c753e2c60efca9b4f0b4ea5c62699724435196bb26";
+        String l1 = "fceb0c55f557bcde13739303f4aa37566e5453c65da01fccaeb2e1bc179d62d1";
+        String l2 = "c24c9145a2af224cca76b1f4ab4db0d89d6934d068a5beb02b9aa288a79c8823";
+        String l3 = "4d3cd9f7e0019df5a76aa2480b3e8cc74f146c3bc9e1c6b7ab7e509d998bae77";
+        String root2 = "d484040f14cef53657b66a1098f8565c79ba33ec49a646f6499cc468444cdc48";
+        String root3 = "0a00d030a22c99522e95d1fd3f63d6b6570266af08028c0df61ec5be55a8679c";
+        String root4 = "ea971b37f271437da841490dbd15e9e66421899736aaeaca261d1aa3b0f17f23";
+
+        check("merkle: single-tx block (empty branch, root == txid)",
+                MerkleVerify.verify(l0, l0, new String[0], 0));
+        check("merkle: single-tx wrong root rejected",
+                !MerkleVerify.verify(l0, "0" + l0.substring(1), new String[0], 0));
+        check("merkle: pos beyond width rejected (empty branch, pos 1)",
+                !MerkleVerify.verify(l0, l0, new String[0], 1));
+
+        check("merkle: 2-tx pos 0 (left climb)",
+                MerkleVerify.verify(l0, root2, new String[]{l1}, 0));
+        check("merkle: 2-tx pos 1 (right climb at leaf)",
+                MerkleVerify.verify(l1, root2, new String[]{l0}, 1));
+
+        // 3-tx tree: leaf 2's proof carries the DUPLICATED sibling (the odd
+        // last node duplicates itself - Bitcoin Core pairing).
+        check("merkle: 3-tx pos 2 (odd-node duplication climb)",
+                MerkleVerify.verify(l2, root3,
+                        new String[]{l2, root2}, 2));
+
+        // 4-tx tree level-1 siblings: pos 0/1 pair with dsha(l2,l3) = c64b,
+        // pos 2/3 pair with dsha(l0,l1) = root2 (generator rows, verbatim).
+        String s4b = "c64bae4b7ca53292cc8f4d5365ccedd2f564b7e89407f89391574fad1394cda3";
+        check("merkle: 4-tx pos 0",
+                MerkleVerify.verify(l0, root4, new String[]{l1, s4b}, 0));
+        check("merkle: 4-tx pos 1",
+                MerkleVerify.verify(l1, root4, new String[]{l0, s4b}, 1));
+        check("merkle: 4-tx pos 2",
+                MerkleVerify.verify(l2, root4, new String[]{l3, root2}, 2));
+        check("merkle: 4-tx pos 3",
+                MerkleVerify.verify(l3, root4, new String[]{l2, root2}, 3));
+
+        check("merkle: tampered sibling rejected",
+                !MerkleVerify.verify(l1, root4,
+                        new String[]{"0" + l0.substring(1), s4b}, 1));
+        check("merkle: wrong pos rejected",
+                !MerkleVerify.verify(l1, root4, new String[]{l0, s4b}, 0));
+        check("merkle: wrong root rejected",
+                !MerkleVerify.verify(l1, "0a" + root4.substring(2),
+                        new String[]{l0, s4b}, 1));
+        check("merkle: pos >= 2**len rejected (4 >= 2**2)",
+                !MerkleVerify.verify(l1, root4, new String[]{l0, s4b}, 4));
+
+        check("merkle: malformed short sibling rejected",
+                !MerkleVerify.verify(l1, root4,
+                        new String[]{l0.substring(0, 63)}, 1));
+        check("merkle: malformed non-hex sibling rejected",
+                !MerkleVerify.verify(l1, root4,
+                        new String[]{"zz" + l0.substring(2)}, 1));
+        check("merkle: malformed short txid rejected",
+                !MerkleVerify.verify(l1.substring(0, 63), root4,
+                        new String[]{l0, s4b}, 1));
+        check("merkle: malformed non-hex txid rejected",
+                !MerkleVerify.verify("gg" + l1.substring(2), root4,
+                        new String[]{l0, s4b}, 1));
+
+        check("merkle: null branch rejected",
+                !MerkleVerify.verify(l1, root4, null, 1));
+        check("merkle: negative pos rejected",
+                !MerkleVerify.verify(l1, root4, new String[]{l0, s4b}, -1));
+        // Root goes through the same strict decode as every sibling
+        // (judge polish fold): a short root is explicitly malformed.
+        check("merkle: malformed short root rejected",
+                !MerkleVerify.verify(l1, root4.substring(0, 63),
+                        new String[]{l0, s4b}, 1));
+        // Hex decode is case-insensitive, so an uppercase root still verifies.
+        check("merkle: uppercase root accepted",
+                MerkleVerify.verify(l1, root4.toUpperCase(Locale.US),
+                        new String[]{l0, s4b}, 1));
+
+        // LIVE vector: block 41433 first tx, proof fetched from the deployed
+        // public indexer 2026-11-19 (6 sibling levels, pos 0).
+        String rt = "7886923497cd13ed6c038a345fd4ba5d0b4dcd70b510a529bf560435dade7dad";
+        String rr = "4735ec543cda0657d923076f9fa480de8236034554780b89f4abc219515e6c81";
+        String[] rb = {
+            "c5c627bb793e87aa90c3f08fe1baae890e4f6083bc18cecde3778a116232ddac",
+            "e865d7c83801871b307f61bf62f6c4ed6f8b9fac348707d5d1b714e696c147de",
+            "2069e740b4a9ee3efdbfbfbf0ae582e241efa69d627a5f6b9ddae10d5cd8a4f8",
+            "3cae34b41dc9b96296a0eaa05e128194dece1116111b077c241c40b4782af99e",
+            "d037433c4b7347206f7b56e30fa79da4ff831ad2f4c763ab56934114b5a4954d",
+            "dd47cb7e2bd00ed3e0a3884c92b4bc87bffa0d54392e42deea761134a1261515",
+        };
+        check("merkle: LIVE indexer proof verifies (block 41433, pos 0)",
+                MerkleVerify.verify(rt, rr, rb, 0));
+        check("merkle: LIVE tampered sibling rejected",
+                !MerkleVerify.verify(rt, rr,
+                        new String[]{"d" + rb[0].substring(1), rb[1], rb[2],
+                                rb[3], rb[4], rb[5]}, 0));
+        check("merkle: LIVE wrong pos rejected",
+                !MerkleVerify.verify(rt, rr, rb, 1));
+        check("merkle: LIVE wrong root rejected",
+                !MerkleVerify.verify(rt, "0" + rr.substring(1), rb, 0));
+
+        // LIVE odd-pos vector: block 41430 tx at index 1 (right climb).
+        String ot = "d54a471f9dcbb787dcc282ce6c80b04fe2b18b6ce37d4c8f99ca219f6f6ff600";
+        String or = "bc0465175618a1984b37f5bd660dfd56bb5f3ca2beaafdc716321527a7d7e6ec";
+        String[] ob = {
+            "2af2ee20419ff5a192248ec25523f31c2b14f206b0f608b1035d61f38217d8df",
+            "d635baa44e56711a5fd925abb5938a1951482e29ad3f921f10bc1d467c40d4bb",
+            "a83ec64e8562f6daf0ab6e6799eb3c7f183d05696546ec2dc9a68e7d8aba259d",
+        };
+        check("merkle: LIVE odd-pos proof verifies (block 41430, pos 1)",
+                MerkleVerify.verify(ot, or, ob, 1));
     }
 
     /**

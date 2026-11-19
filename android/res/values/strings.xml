@@ -31,6 +31,10 @@
     <string name="explorer_unknown">Unknown query. Enter a valid address, 64-character transaction ID, or numeric block height.</string>
     <string name="explorer_no_indexer">No indexer configured. Save a valid wallet endpoint or set the indexer URL override.</string>
     <string name="explorer_bad_response">The indexer returned an unreadable response.</string>
+    <string name="explorer_proof_verified">Verified on-chain: merkle proof OK</string>
+    <string name="explorer_proof_failed">Proof check FAILED against the block merkle root</string>
+    <string name="explorer_proof_fetch_failed">Proof: not checked (indexer error)</string>
+    <string name="explorer_proof_unconfirmed">Proof: not available (unconfirmed)</string>
 
     <string name="autolock_minutes">%1$d min</string>
     <string name="theme_system">System</string>

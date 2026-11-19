@@ -60,6 +60,11 @@ public final class IndexerClient {
         return get("/api/v0/block", "/api/v0/block/" + height);
     }
 
+    /** IDX-8: the merkle proof that txid is in the block at height. */
+    public Api.Resp proof(String height, String txid) throws IOException {
+        return get("/api/v0/proof", "/api/v0/proof/" + height + "/" + txid);
+    }
+
     private Api.Resp get(String retryPath, String requestPath) throws IOException {
         return Net.withRetry("GET", retryPath,
                 () -> Api.http(baseUrl, null, "GET", requestPath, null));

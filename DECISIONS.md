@@ -524,6 +524,43 @@ and bounded:
   official MazaCoin roundel stays the brand surface (launcher + QR
   cards) and is untouched.
 
+## D17 — Two-source verification mark (IDX-8, added 2026-11-19)
+
+The chain explorer marks transaction rows **"Verified on-chain: merkle
+proof OK"** when a client-side Merkle proof check agrees with the row:
+the app fetches `/api/v0/proof/<height>/<txid>` from the indexer,
+reverses the hashes into internal byte order, climbs the branch with
+double-SHA256 (Bitcoin Core pairing, odd node duplicated by the prover),
+and compares the recomputed root with the block's merkleroot. The math
+is a faithful Java port of the indexer's own shipped verifier
+(`maza_indexer/verify.py`), kept honest by
+`tests/test_explorer_merkle_crosscheck.py`, which re-derives a full
+vector set live with the indexer's own prover and asserts the Java
+verdict matches the Python verdict on every row; the desktop SelfTest
+additionally pins LIVE vectors fetched from the deployed public indexer
+(2026-11-19) plus tampered/wrong-pos/wrong-root/malformed negatives.
+
+- **Trust boundary, stated exactly:** the mark ties the indexer's two
+  surfaces (tx data and proof data) together with client-side math. It
+  does NOT independently verify block headers, proof of work, or the
+  merkleroot against a second chain source — a malicious indexer could
+  still lie consistently. Its value is detecting indexing corruption,
+  truncation, or serve-path tampering between the store and the phone.
+- **Surfaces:** a confirmed transaction view checks its proof
+  automatically and replaces its placeholder row with the verdict; an
+  address-history row is tap-to-verify (one proof fetch per tap, each
+  row verifiable once per screen render). Unconfirmed transactions have
+  no proof and say so. Block views carry no proof row.
+- **Fail-closed verdicts:** any malformed proof input (wrong length,
+  non-hex, position beyond the tree width `2**len(branch)`) answers
+  false and renders "Proof check FAILED" — mirroring the indexer CLI's
+  rule that malformed input is a usage error, never a silent true. A
+  fetch failure renders the neutral "Proof: not checked (indexer
+  error)"; it never renders as verified.
+- **Network policy:** the proof read rides the S-5 retry table as
+  `GET /api/v0/proof` with 3 attempts, non-spend — reads retry, spends
+  never do.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

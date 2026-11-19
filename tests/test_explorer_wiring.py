@@ -42,7 +42,12 @@ class ExplorerWiring(unittest.TestCase):
         self.assertNotRegex(parser, r"(?m)^import\s+android\.")
         self.assertIn("movePointLeft(8).toPlainString()", parser)
         self.assertIn('SimpleDateFormat("yyyy-MM-dd HH:mm"', parser)
-        self.assertIn('"Proof: not available"', parser)
+        # IDX-8: the dead "not available" proof row is gone; the tx view now
+        # carries a live placeholder the activity replaces with the verdict,
+        # and unconfirmed txs say why they have no proof.
+        self.assertNotIn('"Proof: not available"', parser)
+        self.assertIn('"Proof: checking..."', parser)
+        self.assertIn('"Proof: not available (unconfirmed)"', parser)
 
     def test_strings_present_and_ascii(self):
         with open(os.path.join(REPO, "android", "res", "values", "strings.xml"),

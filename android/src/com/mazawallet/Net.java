@@ -104,6 +104,7 @@ public final class Net {
             new Route("GET", "/api/v0/address", 3, false),    // indexer address read
             new Route("GET", "/api/v0/tx", 3, false),         // indexer transaction read
             new Route("GET", "/api/v0/block", 3, false),      // indexer block read
+            new Route("GET", "/api/v0/proof", 3, false),      // indexer merkle proof read (IDX-8)
     };
 
     /** A copy of the table, in order (tests and probes enumerate it). */
