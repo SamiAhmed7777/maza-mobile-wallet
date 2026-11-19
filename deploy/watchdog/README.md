@@ -11,14 +11,20 @@ only after a confirmed Telegram delivery).
 | Role | Host | Guards | Heal | Alert-only classes |
 |---|---|---|---|---|
 | `bench` | samihost | `maza-wallet-bench.service` API probe (`/api/state` = 401/200 = healthy) | bounded restart + readiness poll | `DISK-HIGH`, `STATE-FILE-MISSING` |
-| `tunnel` | DNS2 | full-chain probe of the local tunnel bind (`/api/state` through the ssh -L forward) | restart ONLY when the tunnel unit is not active | `BACKEND-DOWN` (tunnel active, chain dead — a restart cannot fix a remote backend), `DISK-HIGH`, `CONFIG` |
+| `tunnel` | DNS2 | full-chain probe of the local tunnel bind (`/api/state` through the ssh -L forward) + listener check on the bind port | bounded restart when the unit is inactive OR active with NO bound listener (dead/wedged channel — the ssh -L listener binds only after auth); alert-only when active WITH a bound listener | `BACKEND-DOWN` (tunnel active, listener bound, chain dead — a restart cannot fix a remote backend), `DISK-HIGH`, `CONFIG` |
 
 ### Failure-class inventory (history-based, not hypothetical)
 
 - **Tunnel ssh blackhole** — an `ssh -N -L` forward can die or hang; the
   unit carries `Restart=always`, but a hung transport looks active while
-  the chain is dead, hence the full-chain probe and the active-vs-inactive
-  classification.
+  the chain is dead, hence the full-chain probe plus the listener check.
+  WITNESSED 2026-11-18 (M16-b): a pre-auth ssh wedged on a starved remote
+  sat "active" for 51 minutes holding its TCP connection, binding nothing,
+  while the remote backend was healthy — the old active-vs-inactive
+  classification alert-onlyed it as BACKEND-DOWN and only a manual restart
+  healed it. The listener check distinguishes a dead channel (no bound
+  listener → heal by restart) from a genuinely down remote backend
+  (listener bound → alert-only).
 - **walletbench wedge/crash** — `Restart=always RestartSec=3` covers clean
   exits; the watchdog covers the alive-but-not-answering case and verifies
   recovery by polling, never assuming.
@@ -36,7 +42,8 @@ only after a confirmed Telegram delivery).
 | `HEALED` | probe failed twice, restart recovered | 15 min |
 | `HEAL-FAILED` | restart did not recover within the readiness window | 15 min |
 | `ESCALATE` | MAX_CONSEC_HEALS (3) consecutive failed heals — manual help needed | 15 min |
-| `BACKEND-DOWN` | tunnel unit active but full-chain probe failing (remote problem). Note: a MISCONFIGURED `MAZA_TUNNEL_PROBE_URL` (pointed at something other than the local tunnel bind) presents as this same class by design — the watchdog cannot distinguish it locally, so verify the URL first when this alert fires. | 15 min |
+| `TUNNEL-DOWN` | tunnel unit active but its forward is NOT bound — dead/wedged ssh channel; the watchdog heals by bounded restart (backend reachability unknown while the channel is down) | 15 min |
+| `BACKEND-DOWN` | tunnel unit active with the listener BOUND but the full-chain probe failing (remote problem). When the listener check itself is unavailable (no `ss`, an `ss` that exits non-zero, unparsable probe URL) the watchdog treats the listener as bound and stays in this class — the log line then reads `listener check UNAVAILABLE`. Note: a MISCONFIGURED `MAZA_TUNNEL_PROBE_URL` (pointed at something other than the local tunnel bind) presents as this same class by design — the watchdog cannot distinguish it locally, so verify the URL first when this alert fires. | 15 min |
 | `CONFIG` | required role config missing (e.g. `MAZA_TUNNEL_PROBE_URL` unset) | 6 h |
 | `DISK-HIGH` | filesystem usage >= threshold (default 90%) | 6 h |
 | `STATE-FILE-MISSING` | bench address book missing/empty | 6 h |
@@ -81,7 +88,7 @@ the script never logs or prints it.
 systemctl list-timers --all | grep maza-.*-watchdog     # timer armed
 systemctl start maza-bench-watchdog.service && journalctl -u maza-bench-watchdog -n 5   # healthy cycle is silent, exit 0
 cat /var/log/maza-bench-watchdog.log                     # no HEAL/GUARD lines on a healthy cycle
-bash deploy/watchdog/maza-bench-watchdog-selftest.sh     # 21 offline assertions, exit 0
+bash deploy/watchdog/maza-bench-watchdog-selftest.sh     # 37 offline assertions, exit 0
 ```
 
 ## Kill-test (the M16 acceptance criterion)

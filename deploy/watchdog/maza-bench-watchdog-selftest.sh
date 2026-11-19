@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # maza-bench-watchdog-selftest — offline classification tests for
-# maza-bench-watchdog.sh. Stubs systemctl/curl/df via PATH; every scenario
+# maza-bench-watchdog.sh. Stubs systemctl/curl/df/ss via PATH; every scenario
 # runs in throwaway state/log dirs; no network is touched (no token is
 # provided, so notify() logs ALERT-NO-TOKEN and returns before any curl).
 #
@@ -44,7 +44,22 @@ cat > "$STUB/df" <<'EOF'
 echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
 echo "/dev/sda1 1 1 1 $(cat "$CTRL/disk-pct" 2>/dev/null || echo 10)% $MAZA_WATCHDOG_DISK_PATH"
 EOF
-chmod +x "$STUB/curl" "$STUB/systemctl" "$STUB/df"
+cat > "$STUB/ss" <<'EOF'
+#!/bin/bash
+# Listener stub: $CTRL/listen selects the shape —
+#   up (default)  one IPv4 LISTEN row for 127.0.0.1:18701
+#   v6            one IPv6 LISTEN row for [::]:18701
+#   short         a LISTEN row for port 1870 ONLY (port-suffix trap:
+#                 must NOT satisfy a probe URL port of 18701)
+#   down          no LISTEN row at all (wedged channel shape)
+echo "State  Recv-Q  Send-Q  LocalAddress:Port  PeerAddress:Port"
+case "$(cat "$CTRL/listen" 2>/dev/null || echo up)" in
+  up)    printf 'LISTEN  0  128  127.0.0.1:18701  0.0.0.0:*\n' ;;
+  v6)    printf 'LISTEN  0  128  [::]:18701  [::]:*\n' ;;
+  short) printf 'LISTEN  0  128  127.0.0.1:1870  0.0.0.0:*\n' ;;
+esac
+EOF
+chmod +x "$STUB/curl" "$STUB/systemctl" "$STUB/df" "$STUB/ss"
 
 run_role() { # run_role <role> <scenario-tag> <codes>
   local role="$1" tag="$2" codes="$3"
@@ -52,6 +67,8 @@ run_role() { # run_role <role> <scenario-tag> <codes>
   mkdir -p "$sd" "$WORK/$tag"
   : > "$lg"; : > "$CTRL/calls.log"; echo 0 > "$d_curln" 2>/dev/null
   echo "$codes" > "$CTRL/codes"
+  # Listener shape for the ss stub (S11 down / S13a short / S13b v6; default up).
+  echo "${LISTEN:-up}" > "$CTRL/listen"
   # Stubs read CTRL files (codes/disk-pct/unit-state) and write calls.log —
   # export it so the child stub processes see the same control dir.
   export CTRL
@@ -65,6 +82,7 @@ run_role() { # run_role <role> <scenario-tag> <codes>
   fi
   PATH="$STUB:$PATH" MAZA_SELFTEST_CODES="$CTRL/codes" \
     MAZA_WATCHDOG_SELFTEST=1 MAZA_WATCHDOG_STATE_DIR="$sd" MAZA_WATCHDOG_LOG="$lg" \
+    MAZA_WATCHDOG_ENV="$WORK/no-env-file" \
     MAZA_WATCHDOG_READINESS_POLLS="${RP:-1}" MAZA_WATCHDOG_DOUBLE_PROBE_SECS=0 \
     MAZA_HERMES_ENV_FILE="$WORK/absent-env" MAZA_WATCHDOG_TOKEN_FILE="$WORK/absent-token" \
     MAZA_BENCH_ENV_FILE="$CTRL/bench.env" MAZA_BENCH_STATE_FILE="$bsf" \
@@ -99,7 +117,7 @@ assert_log_contains "$LG" "ALERT-NO-TOKEN" "S2 missing token logs ALERT-NO-TOKEN
 sd="$WORK/s3/state"; lg="$WORK/s3/log"; mkdir -p "$sd" "$WORK/s3"; : > "$lg"
 echo 2 > "$sd/heal-streak"; : > "$CTRL/calls.log"; echo "401" > "$CTRL/codes"; echo 0 > "$d_curln"
 PATH="$STUB:$PATH" MAZA_SELFTEST_CODES="$CTRL/codes" MAZA_WATCHDOG_SELFTEST=1 \
-  MAZA_WATCHDOG_STATE_DIR="$sd" MAZA_WATCHDOG_LOG="$lg" MAZA_WATCHDOG_READINESS_POLLS=1 \
+  MAZA_WATCHDOG_STATE_DIR="$sd" MAZA_WATCHDOG_LOG="$lg" MAZA_WATCHDOG_ENV="$WORK/no-env-file" MAZA_WATCHDOG_READINESS_POLLS=1 \
   MAZA_WATCHDOG_DOUBLE_PROBE_SECS=0 MAZA_HERMES_ENV_FILE="$WORK/absent-env" \
   MAZA_WATCHDOG_TOKEN_FILE="$WORK/absent-token" MAZA_BENCH_ENV_FILE="$CTRL/bench.env" \
   MAZA_BENCH_STATE_FILE="$WORK/s3/state.json" MAZA_WATCHDOG_DISK_PATH="$WORK/s3" \
@@ -111,7 +129,7 @@ assert_log_not_contains "$lg" "HEAL-START" "S3 recovery cycle takes no action"
 sd="$WORK/s4/state"; lg="$WORK/s4/log"; mkdir -p "$sd" "$WORK/s4"; : > "$lg"
 echo 3 > "$sd/heal-streak"; : > "$CTRL/calls.log"; echo "000|000|000" > "$CTRL/codes"; echo 0 > "$d_curln"; export CTRL
 PATH="$STUB:$PATH" MAZA_SELFTEST_CODES="$CTRL/codes" MAZA_WATCHDOG_SELFTEST=1 \
-  MAZA_WATCHDOG_STATE_DIR="$sd" MAZA_WATCHDOG_LOG="$lg" MAZA_WATCHDOG_READINESS_POLLS=1 \
+  MAZA_WATCHDOG_STATE_DIR="$sd" MAZA_WATCHDOG_LOG="$lg" MAZA_WATCHDOG_ENV="$WORK/no-env-file" MAZA_WATCHDOG_READINESS_POLLS=1 \
   MAZA_WATCHDOG_DOUBLE_PROBE_SECS=0 MAZA_HERMES_ENV_FILE="$WORK/absent-env" \
   MAZA_WATCHDOG_TOKEN_FILE="$WORK/absent-token" MAZA_BENCH_ENV_FILE="$CTRL/bench.env" \
   MAZA_BENCH_STATE_FILE="$WORK/s4/state.json" MAZA_WATCHDOG_DISK_PATH="$WORK/s4" \
@@ -143,7 +161,7 @@ echo 0 > "$sd/heal-streak"; date +%s > "$sd/alert-HEALED"
 : > "$CTRL/calls.log"; echo "000|000|401" > "$CTRL/codes"; echo 0 > "$d_curln"; export CTRL
 echo failed > "$CTRL/unit-state"
 PATH="$STUB:$PATH" MAZA_SELFTEST_CODES="$CTRL/codes" MAZA_WATCHDOG_SELFTEST=1 \
-  MAZA_WATCHDOG_STATE_DIR="$sd" MAZA_WATCHDOG_LOG="$lg" MAZA_WATCHDOG_READINESS_POLLS=2 \
+  MAZA_WATCHDOG_STATE_DIR="$sd" MAZA_WATCHDOG_LOG="$lg" MAZA_WATCHDOG_ENV="$WORK/no-env-file" MAZA_WATCHDOG_READINESS_POLLS=2 \
   MAZA_WATCHDOG_DOUBLE_PROBE_SECS=0 MAZA_HERMES_ENV_FILE="$WORK/absent-env" \
   MAZA_WATCHDOG_TOKEN_FILE="$WORK/absent-token" MAZA_TUNNEL_PROBE_URL="$TPU" \
   MAZA_WATCHDOG_DISK_PATH="$WORK/s8" \
@@ -159,6 +177,65 @@ assert_log_not_contains "$LG" "GUARD-DISK" "S9 disk 87% < 90% stays silent"
 # --- S10: bench state-file guard (the vanished address-book class) -----------
 BSF="$WORK/s10/missing.json" SKIP_STATE=1 RP=1 run_role bench s10 401
 assert_log_contains "$LG" "GUARD-STATE" "S10 missing bench state file fires GUARD-STATE"
+
+# --- S11: tunnel ACTIVE + NO listener (wedged channel) -> TUNNEL-DOWN + heal --
+# M16-b: the ssh -L listener binds only after auth; a unit reading active with
+# no listener is a dead/wedged ssh (witnessed live 2026-11-18: 51 min wedged
+# pre-auth, TCP held, nothing bound, backend healthy). Restart is the fix.
+TPU="http://127.0.0.1:18701/api/state"; echo active > "$CTRL/unit-state"
+LISTEN=down RP=2 run_role tunnel s11 '000|000|401'
+grep -qF "restart maza-bench-tunnel.service" "$WORK/ctrl/calls.log" \
+  && ok "S11 wedged-channel (no listener) triggers the tunnel restart" || bad "S11 restart missing"
+assert_log_contains "$LG" "TUNNEL-DEAD" "S11 TUNNEL-DEAD classification logged"
+assert_log_contains "$LG" "reason=channel-dead" "S11 heal reason carries channel-dead"
+assert_log_contains "$LG" "class=TUNNEL-DOWN" "S11 TUNNEL-DOWN alert class fired"
+assert_log_not_contains "$LG" "BACKEND-DOWN" "S11 does NOT misclassify as BACKEND-DOWN"
+assert_log_contains "$LG" "HEAL-OK" "S11 HEAL-OK when readiness passes"
+
+# --- S12: fail-safe — listener check unavailable -> alert-only (no restart) --
+# An ss-tooling failure must never make the watchdog MORE aggressive: with
+# the listener check unavailable the active-unit branch falls through to the
+# pre-M16-b BACKEND-DOWN alert-only behavior.
+sd="$WORK/s12/state"; lg="$WORK/s12/log"; mkdir -p "$sd" "$WORK/s12"; : > "$lg"
+echo 0 > "$sd/heal-streak"; : > "$CTRL/calls.log"; echo "000|000" > "$CTRL/codes"; echo 0 > "$d_curln"; export CTRL
+echo active > "$CTRL/unit-state"
+PATH="$STUB:$PATH" MAZA_SELFTEST_CODES="$CTRL/codes" MAZA_WATCHDOG_SELFTEST=1 \
+  MAZA_WATCHDOG_STATE_DIR="$sd" MAZA_WATCHDOG_LOG="$lg" MAZA_WATCHDOG_ENV="$WORK/no-env-file" MAZA_WATCHDOG_READINESS_POLLS=1 \
+  MAZA_WATCHDOG_DOUBLE_PROBE_SECS=0 MAZA_HERMES_ENV_FILE="$WORK/absent-env" \
+  MAZA_WATCHDOG_TOKEN_FILE="$WORK/absent-token" MAZA_TUNNEL_PROBE_URL="$TPU" \
+  MAZA_WATCHDOG_SS="/nonexistent/ss-binary" MAZA_WATCHDOG_DISK_PATH="$WORK/s12" \
+  bash "$WATCHDOG" tunnel
+grep -qF "restart" "$WORK/ctrl/calls.log" 2>/dev/null && bad "S12 fail-safe must NOT restart" || ok "S12 unavailable ss falls back to alert-only"
+assert_log_contains "$lg" "BACKEND-DOWN" "S12 fail-safe keeps the BACKEND-DOWN alert-only class"
+assert_log_contains "$lg" "listener check UNAVAILABLE" "S12 fail-safe log states the check was unavailable, not 'bound'"
+
+# --- S13a: port-suffix trap — a listener on 1870 does NOT satisfy 18701 ------
+LISTEN=short RP=1 run_role tunnel s13a '000|000'
+grep -qF "restart maza-bench-tunnel.service" "$WORK/ctrl/calls.log" \
+  && ok "S13a port 1870 row does not satisfy probe port 18701 (treated as dead)" || bad "S13a suffix trap missed"
+assert_log_not_contains "$LG" "BACKEND-DOWN" "S13a no BACKEND-DOWN on a port mismatch"
+
+# --- S13b: IPv6 listener row satisfies the bind check ------------------------
+LISTEN=v6 RP=1 run_role tunnel s13b '000|000'
+grep -qF "restart" "$WORK/ctrl/calls.log" 2>/dev/null && bad "S13b bound v6 listener must not restart" || ok "S13b IPv6 listener row recognized as bound"
+assert_log_contains "$LG" "BACKEND-DOWN" "S13b bound v6 listener keeps BACKEND-DOWN alert-only"
+
+# --- S14: unparsable probe URL (no port) -> rc=2 unavailable -> alert-only ---
+# The other half of the fail-safe contract: a probe URL from which no bind
+# port can be extracted makes the listener check UNAVAILABLE, so the active
+# branch must assume bound and stay alert-only (never restart).
+sd="$WORK/s14/state"; lg="$WORK/s14/log"; mkdir -p "$sd" "$WORK/s14"; : > "$lg"
+echo 0 > "$sd/heal-streak"; : > "$CTRL/calls.log"; echo "000|000" > "$CTRL/codes"; echo 0 > "$d_curln"; export CTRL
+echo active > "$CTRL/unit-state"
+PATH="$STUB:$PATH" MAZA_SELFTEST_CODES="$CTRL/codes" MAZA_WATCHDOG_SELFTEST=1 \
+  MAZA_WATCHDOG_STATE_DIR="$sd" MAZA_WATCHDOG_LOG="$lg" MAZA_WATCHDOG_ENV="$WORK/no-env-file" MAZA_WATCHDOG_READINESS_POLLS=1 \
+  MAZA_WATCHDOG_DOUBLE_PROBE_SECS=0 MAZA_HERMES_ENV_FILE="$WORK/absent-env" \
+  MAZA_WATCHDOG_TOKEN_FILE="$WORK/absent-token" MAZA_TUNNEL_PROBE_URL="http://no-port-hostname/api/state" \
+  MAZA_WATCHDOG_DISK_PATH="$WORK/s14" \
+  bash "$WATCHDOG" tunnel
+grep -qF "restart" "$WORK/ctrl/calls.log" 2>/dev/null && bad "S14 unparsable URL must NOT restart" || ok "S14 unparsable probe URL falls back to alert-only"
+assert_log_contains "$lg" "listener check UNAVAILABLE" "S14 unparsable URL logs the check as UNAVAILABLE"
+assert_log_contains "$lg" "BACKEND-DOWN" "S14 unparsable URL keeps the BACKEND-DOWN alert-only class"
 
 echo "----------------------------------------"
 echo "SELFTEST: $PASS passed, $FAIL failed"

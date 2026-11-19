@@ -6,10 +6,22 @@
 #          twice in a row means the service is down or wedged -> bounded
 #          restart of maza-wallet-bench.service with a readiness poll.
 #   tunnel (DNS2)     — probe the tunnel endpoint (full chain: ssh -L ->
-#          remote walletbench). Restart maza-bench-tunnel.service ONLY when
-#          the tunnel unit itself is not active. A failing probe with an
-#          ACTIVE tunnel is a backend problem on the remote host; restarting
-#          the tunnel cannot fix it, so that class alerts without healing.
+#          remote walletbench). Three-way classification:
+#            unit not active        -> bounded restart (channel is gone).
+#            unit active, probe OK  -> healthy, silent.
+#            unit active, probe failing:
+#              local listener BOUND -> the failure is behind the tunnel
+#                 (remote backend) -> BACKEND-DOWN alert-only: restarting
+#                 cannot fix a remote backend.
+#              local listener ABSENT -> dead/wedged channel (an ssh -L
+#                 listener binds only after successful auth, so a unit
+#                 that reads active with no listener is a hung ssh —
+#                 e.g. a pre-auth wedge) -> TUNNEL-DOWN alert + bounded
+#                 restart, which heals it.
+#          Witnessed live 2026-11-18: a pre-auth ssh wedged on a starved
+#          remote sat "active" for 51 min holding its TCP connection,
+#          binding nothing, while the remote backend was healthy — only
+#          a restart healed it (M16-b).
 #
 # Both roles: disk-guard and (bench only) bench-state-file guards — alert
 # only, a restart cannot restore deleted content.
@@ -68,6 +80,8 @@ DOUBLE_PROBE_SECS="${MAZA_WATCHDOG_DOUBLE_PROBE_SECS:-5}"
 MAX_CONSEC_HEALS="${MAZA_WATCHDOG_MAX_CONSEC_HEALS:-3}"
 READINESS_POLLS="${MAZA_WATCHDOG_READINESS_POLLS:-30}"
 LOG_MAX="${MAZA_WATCHDOG_LOG_MAX:-1048576}"                   # 1 MiB
+# Listener-check binary (overridable for the selftest fail-safe scenario).
+SS_BIN="${MAZA_WATCHDOG_SS:-ss}"
 
 # --- Role-dependent paths ---------------------------------------------------
 case "$ROLE" in
@@ -176,6 +190,35 @@ bench_probe_url() {
 
 unit_active() { systemctl is-active "$1" 2>/dev/null; }
 
+# True (0) when SOMETHING is listening on the tunnel bind port; 1 when
+# ss ran and measured NO listener; 2 when the check itself is unavailable
+# (port unparsable / binary missing) and LISTENING is ASSUMED. The ssh -L
+# listener binds only AFTER successful auth, so a unit reading "active"
+# with no listener is a dead/wedged channel, not a live forward.
+# Fail-safe direction: an unavailable CHECK must never make the watchdog
+# MORE aggressive, so unknown (2) is treated as bound — the branch then
+# falls through to the alert-only BACKEND-DOWN class (pre-M16-b behavior).
+# A PRESENT-but-unparsable ss output is a measurement, not an outage:
+# it returns 1 (not listening) and the restart path is bounded by
+# MAX_CONSEC_HEALS like every other heal.
+bind_listening() {
+  local port out rc
+  port=$(printf '%s' "$TUNNEL_PROBE_URL" | sed -n 's#.*:\([0-9][0-9]*\)/.*#\1#p')
+  [ -n "$port" ] || return 2
+  command -v "$SS_BIN" >/dev/null 2>&1 || return 2
+  # Capture output + exit status: an ss that RUNS but FAILS (non-zero) is an
+  # unavailable check (rc 2), not a measurement; an ss that SUCCEEDS and
+  # prints no matching row IS a measurement of "no listener" (rc 1).
+  out=$("$SS_BIN" -tln 2>/dev/null)
+  rc=$?
+  [ "$rc" -eq 0 ] || return 2
+  # Extract the port from the LOCAL-ADDRESS column ($4) only — split on the
+  # last colon within that column (covers IPv4 a.b.c.d:p and IPv6 [::]:p
+  # rows); exact match, so port 1870 never matches 18701.
+  printf '%s\n' "$out" | awk '{n=split($4, a, ":"); print a[n]}' | grep -qx "$port" && return 0
+  return 1
+}
+
 # Wait for readiness by polling, never a fixed sleep. Returns 0 when the
 # probe passes within READINESS_POLLS one-second attempts.
 wait_ready() { # wait_ready <url>
@@ -259,7 +302,31 @@ do_bench() {
   fi
 }
 
+tunnel_heal() { # tunnel_heal <reason> — bounded restart + readiness poll
+  local reason="$1"
+  if [ "$(heal_streak get)" -ge "$MAX_CONSEC_HEALS" ]; then
+    notify "ESCALATE" "$ALERT_COOLDOWN_SECS" \
+      "tunnel probe down; ${MAX_CONSEC_HEALS} consecutive restarts did not recover ${TUNNEL_SERVICE} — check ssh key/sshd on the remote host"
+    log "HEAL-BOUNDED class=ESCALATE streak=$(heal_streak get)"
+    return 0
+  fi
+  log "HEAL-START restart=${TUNNEL_SERVICE} reason=${reason} streak=$(heal_streak get)"
+  systemctl restart "$TUNNEL_SERVICE" >/dev/null 2>&1
+  if wait_ready "$TUNNEL_PROBE_URL"; then
+    heal_streak reset
+    notify "HEALED" "$ALERT_COOLDOWN_SECS" \
+      "tunnel probe was down twice (${reason}); restarted ${TUNNEL_SERVICE} — recovered, full chain answering"
+    log "HEAL-OK"
+  else
+    heal_streak inc
+    notify "HEAL-FAILED" "$ALERT_COOLDOWN_SECS" \
+      "restarted ${TUNNEL_SERVICE} (${reason}) but the probe STILL fails — remote backend or ssh auth problem"
+    log "HEAL-FAILED streak=$(heal_streak get)"
+  fi
+}
+
 do_tunnel() {
+  local state listening
   if [ -z "$TUNNEL_PROBE_URL" ]; then
     notify "CONFIG" "$SLOW_COOLDOWN_SECS" \
       "MAZA_TUNNEL_PROBE_URL is not set in ${ENV_FILE} — tunnel watchdog cannot probe; set it to the local tunnel bind URL"
@@ -276,33 +343,35 @@ do_tunnel() {
     heal_streak reset
     return 0
   fi
-  if [ "$(unit_active "$TUNNEL_SERVICE")" = "active" ]; then
-    # Tunnel alive, full chain dead: the remote backend is the problem.
-    # Restarting the tunnel cannot fix a remote backend — alert only.
-    notify "BACKEND-DOWN" "$ALERT_COOLDOWN_SECS" \
-      "tunnel unit active but the full-chain probe fails (${TUNNEL_PROBE_URL}) — remote walletbench likely down; its own watchdog should heal it"
-    log "BACKEND-DOWN (tunnel active, probe failing — no restart)"
+  state=$(unit_active "$TUNNEL_SERVICE")
+  if [ "$state" = "active" ]; then
+    bind_listening
+    listening=$?
+    if [ "$listening" -ne 1 ]; then
+      # Tunnel unit alive AND its forward is bound (or the listener check
+      # is unavailable and bound is ASSUMED): the failure is behind the
+      # tunnel — the remote backend. Restarting cannot fix a remote
+      # backend — alert only.
+      if [ "$listening" -eq 2 ]; then
+        log "BACKEND-DOWN (tunnel active, listener check UNAVAILABLE — assumed bound, probe failing — no restart)"
+        notify "BACKEND-DOWN" "$ALERT_COOLDOWN_SECS" \
+          "tunnel unit active, listener check unavailable (assumed bound), full-chain probe fails (${TUNNEL_PROBE_URL}) — remote walletbench likely down; its own watchdog should heal it"
+      else
+        log "BACKEND-DOWN (tunnel active, listener bound, probe failing — no restart)"
+        notify "BACKEND-DOWN" "$ALERT_COOLDOWN_SECS" \
+          "tunnel unit active with the listener bound but the full-chain probe fails (${TUNNEL_PROBE_URL}) — remote walletbench likely down; its own watchdog should heal it"
+      fi
+      return 0
+    fi
+    # Active unit, NO listener on the bind: a dead/wedged ssh channel
+    # (the -L listener binds only after auth). A restart heals it.
+    notify "TUNNEL-DOWN" "$ALERT_COOLDOWN_SECS" \
+      "tunnel channel down — backend reachability unknown; healing by restart"
+    log "TUNNEL-DEAD (unit active, no listener on the bind — healing by restart)"
+    tunnel_heal "channel-dead"
     return 0
   fi
-  if [ "$(heal_streak get)" -ge "$MAX_CONSEC_HEALS" ]; then
-    notify "ESCALATE" "$ALERT_COOLDOWN_SECS" \
-      "tunnel probe down; ${MAX_CONSEC_HEALS} consecutive restarts did not recover ${TUNNEL_SERVICE} — check ssh key/sshd on the remote host"
-    log "HEAL-BOUNDED class=ESCALATE streak=$(heal_streak get)"
-    return 0
-  fi
-  log "HEAL-START restart=${TUNNEL_SERVICE} streak=$(heal_streak get)"
-  systemctl restart "$TUNNEL_SERVICE" >/dev/null 2>&1
-  if wait_ready "$TUNNEL_PROBE_URL"; then
-    heal_streak reset
-    notify "HEALED" "$ALERT_COOLDOWN_SECS" \
-      "tunnel probe was down twice and the unit was inactive; restarted ${TUNNEL_SERVICE} — recovered, full chain answering"
-    log "HEAL-OK"
-  else
-    heal_streak inc
-    notify "HEAL-FAILED" "$ALERT_COOLDOWN_SECS" \
-      "restarted ${TUNNEL_SERVICE} but the probe STILL fails — remote backend or ssh auth problem"
-    log "HEAL-FAILED streak=$(heal_streak get)"
-  fi
+  tunnel_heal "unit-inactive"
 }
 
 # --- Entry --------------------------------------------------------------------
