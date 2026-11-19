@@ -12,14 +12,16 @@ in this API (`difficulty` is the one float, and it is not money).
 GET /health                -> {"ok":true,"height":<int>,"chain":"main","txs_indexed":<int>}
 GET /api/v0/address/<addr> -> {"address":<str>,"balance_sats":<int>,"tx_count":<int>,"truncated":true|false,"txs":[{"txid":<str>,"height":<int>,"time":<int>,"value_sats":<int>,"direction":"in"|"out"}]}
 # address history: newest first, cap 100 entries, truncated=true when more exist; time = block time of the confirmed block
-GET /api/v0/tx/<txid>      -> {"txid":<str>,"height":<int>|null,"confirmations":<int>,"blockhash":<str>|null,"size":<int>,"hex":<str>,"vin":[{"txid":<str>|null,"vout":<int>|null,"addresses":[<str>],"value_sats":<int>|null,"coinbase":true|false}],"vout":[{"n":<int>,"addresses":[<str>],"value_sats":<int>,"script_type":"p2pkh"|"p2sh"|"data"|"other"}]}
+GET /api/v0/tx/<txid>      -> {"txid":<str>,"height":<int>,"confirmations":<int>,"blockhash":<str>|null,"size":<int>,"hex":<str>,"vin":[{"txid":<str>|null,"vout":<int>|null,"addresses":[<str>],"value_sats":<int>|null,"coinbase":true|false}],"vout":[{"n":<int>,"addresses":[<str>],"value_sats":<int>,"script_type":"p2pkh"|"p2sh"|"data"|"other"}]}
+# the store indexes CONFIRMED txs only; an unknown or not-yet-confirmed txid answers 404 {"error":<str>}
 GET /api/v0/block/<h>      -> {"height":<int>,"hash":<str>,"merkleroot":<str>,"ntx":<int>,"time":<int>,"difficulty":<float>,"txids_truncated":true|false,"txids":[<str>]}
 # <h> = block height OR block hash; txids capped at 500 entries, txids_truncated=true when more exist
 GET /api/v0/proof/<height>/<txid> -> {"height":<int>,"blockhash":<str>,"txid":<str>,"merkleroot":<str>,"merkle":[<str>],"pos":<int>}
 # 404 JSON {"error":<str>} when the txid is not in that block
 GET /api/v0/search?q=      -> {"type":"address"|"tx"|"block"|"unknown","query":<str>}
 GET /api/v0/stats          -> {"height":<int>,"total_txs":<int>,"address_count":<int>}
-Errors are ALWAYS JSON {"error":<str>} with status 404|413|429|500; a handler never drops a connection.
+HEAD on any GET route     -> same status and headers as GET, empty body
+Errors are ALWAYS JSON {"error":<str>} with status 404|405|413|429|500; a handler never drops a connection.
 ```
 
 Plain-English reading of the same contract:
@@ -32,8 +34,10 @@ Plain-English reading of the same contract:
   narrow the query rather than to assume it has seen everything).
   `time` is the **block time** of the confirmed block the transaction is in.
 - **`/api/v0/tx/<txid>`** - one transaction, in full: raw `hex`, every
-  input and output. `height` is `null` for a transaction that is not
-  confirmed yet; `confirmations` is the count.
+  input and output. The store indexes **confirmed** transactions only: a
+  `200` always carries the confirming `height`, and an unknown or
+  not-yet-confirmed txid answers `404` with a JSON error body.
+  `confirmations` is the count of blocks on top.
 - **`/api/v0/block/<h>`** - `<h>` is a block **height or block hash**.
   `txids` is capped at **500** entries and `txids_truncated` says whether
   the list was cut.
@@ -41,21 +45,32 @@ Plain-English reading of the same contract:
   is in a given block: the sibling hashes and the position of the
   transaction in the tree. A wallet can verify this against the block
   header's merkle root without trusting the indexer. If the txid is not in
-  that block, the answer is a `404` with a JSON error body.
+  that block, the answer is a `404` with a JSON error body. Re-verify
+  offline without the indexer at all:
+  `python3 -m maza_indexer.verify <txid_hex> <merkleroot_hex> '<merkle-json>' <pos>`
+  prints `true`/`false` (exit `0`/`1`) -- pure stdlib, no network, the same
+  math as this route. Malformed inputs are a usage error, never a `false`:
+  `txid` and `merkleroot` must each be exactly 64 hex chars, every branch
+  element exactly 64 hex chars, and `pos` an integer `>= 0` and
+  `< 2**len(branch)` (a branch of L levels proves a tree of width 2^L, so a
+  position at or beyond that width is unprovable); any violation prints a
+  one-line error naming the offending argument to STDERR and exits `2`.
 - **`/api/v0/search?q=`** - a best guess at what the query string is:
   an address, a transaction, a block, or `unknown`.
 - **`/api/v0/stats`** - how far the index has got: height, total
   transactions indexed, and how many distinct addresses are indexed.
 
 Errors are **always** JSON `{"error":<str>}` with a status of
-**404**, **413** (payload too large), **429** (rate limited) or **500**. A
+**404**, **405** (method not allowed: this surface is GET/HEAD only),
+**413** (payload too large), **429** (rate limited) or **500**. A
 handler never drops a connection without answering.
 
 ## Try each route
 
 The examples below use `indexer.example.org` as the host - replace it with
 your own. On the box itself the indexer listens on `127.0.0.1:18711`
-unless you changed `MAZA_INDEXER_BIND_HOST` / `MAZA_INDEXER_BIND_PORT`.
+unless you changed `MAZA_INDEXER_BIND` (host:port form, e.g.
+`127.0.0.1:18711`; bracketed IPv6 such as `[::1]:18711` is supported).
 
 ```sh
 # GET /health
@@ -73,6 +88,10 @@ curl -s "https://indexer.example.org/indexer/api/v0/block/<blockhash>"
 
 # GET /api/v0/proof/<height>/<txid>
 curl -s "https://indexer.example.org/indexer/api/v0/proof/1000/<txid>"
+
+# offline re-verify a returned proof (exit 0 true / 1 false / 2 usage error,
+# e.g. a branch element not exactly 64 hex chars, or pos >= 2**len(branch))
+python3 -m maza_indexer.verify <txid_hex> <merkleroot_hex> '<merkle-json>' <pos>
 
 # GET /api/v0/search?q=
 curl -s "https://indexer.example.org/indexer/api/v0/search?q=<address-or-txid>"

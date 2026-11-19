@@ -1,4 +1,4 @@
-"""HTTP surface: ThreadingHTTPServer, GET-only, JSON everywhere.
+"""HTTP surface: ThreadingHTTPServer, GET/HEAD-only, JSON everywhere.
 
 Contract (byte-identical across PLAN-IDX.md and the lane briefs; ints are
 sats, no floats for money).  House patterns: ANY handler exception = log
@@ -10,6 +10,7 @@ surface has no auth -- the Caddy front door is the TLS/hosts layer
 """
 
 import http.server
+import ipaddress
 import json
 import re
 import socketserver
@@ -33,6 +34,13 @@ _RX_TX = re.compile(r"^/api/v0/tx/([^/?]+)$")
 _RX_BLOCK = re.compile(r"^/api/v0/block/([^/?]+)$")
 _RX_PROOF = re.compile(r"^/api/v0/proof/([^/]+)/([^/?]+)$")
 
+# Trust model (F1): X-Forwarded-For is honored ONLY from TCP peers in this
+# set.  Default = the loopback addresses: on the documented loopback-only
+# bind the only direct peer is the local Caddy front door (handle_path
+# /indexer/* -> 127.0.0.1:18711).  Membership is tested on the PARSED peer
+# ("0:0:0:0:0:0:0:1" normalizes to "::1").
+TRUSTED_PROXIES = frozenset({"127.0.0.1", "::1"})
+
 
 def parse_tx_prevouts(tx_hex: str) -> List[dict]:
     """Minimal legacy-tx INPUT parser.
@@ -45,7 +53,18 @@ def parse_tx_prevouts(tx_hex: str) -> List[dict]:
     raw = bytes.fromhex(tx_hex)
     if len(raw) < 10:
         raise ValueError("tx hex too short")
-    return _parse_inputs(raw, 4)  # after the 4-byte version
+    pos = 4  # after the 4-byte version
+    # CHAIN FACT (node-probed 2026-11-19): the live mazad's getblockchaininfo
+    # softforks list bip34 (active), bip66, bip65 -- NO segwit entry -- so
+    # witness-serialized txs cannot reach this parser on this chain today.
+    # This marker/flag skip is future-proofing for a post-segwit world: a
+    # witness tx serializes 0x00 (marker) + 0x01 (flag) right after the
+    # version, and without the skip the marker reads as n_in=0 and the vin
+    # list would come back empty.  (Witness ITEM data sits after the vouts,
+    # so a real witness tx's vout section still parses legacy-aligned.)
+    if len(raw) >= 6 and raw[4] == 0x00 and raw[5] != 0x00:
+        pos += 2
+    return _parse_inputs(raw, pos)
 
 
 def decode_varint(raw: bytes, pos: int) -> Tuple[int, int]:
@@ -80,6 +99,53 @@ def _parse_inputs(raw: bytes, pos: int) -> List[dict]:
     return vins
 
 
+def _parse_ip(value: str) -> Optional[ipaddress._BaseAddress]:
+    try:
+        return ipaddress.ip_address(value)
+    except ValueError:
+        return None
+
+
+def derive_client_ip(peer: str, xff: Optional[str]) -> str:
+    """Rate-limiter client identity (F1).
+
+    Trust model: the bind is LOOPBACK-ONLY, so every direct TCP peer is a
+    local process -- today that means the Caddy front door (handle_path
+    /indexer/* -> 127.0.0.1:18711).  Caddy APPENDS the client IP it
+    observed to any client-supplied X-Forwarded-For, so the client controls
+    every entry EXCEPT the last one: an attacker sending "XFF: 1.2.3.4"
+    lands 1.2.3.4 in the LEFTMOST slot once the real IP is appended, which
+    made the old leftmost rule attacker-rotatable.  The entry the trusted
+    proxy itself observed -- the one the client cannot override -- is
+    therefore the RIGHTMOST one: from a peer in TRUSTED_PROXIES we take the
+    rightmost entry that parses as an IP, skipping junk to its left, and
+    fall back to the peer when no entry parses.  From a peer NOT in
+    TRUSTED_PROXIES the header is ignored entirely -- anti-spoof: a direct
+    client must not rotate buckets by header.
+    """
+    peer_ip = _parse_ip(peer)
+    if peer_ip is not None and str(peer_ip) in TRUSTED_PROXIES and xff:
+        for entry in reversed(xff.split(",")):
+            candidate = _parse_ip(entry.strip())
+            if candidate is not None:
+                return str(candidate)
+    return peer
+
+
+def bucket_key(ip: str) -> str:
+    """Rate-limiter bucket key (F5): IPv6 collapses to its /64 network
+    address so a /64-rotating attacker keeps one bucket; IPv4 stays a /32
+    host key.  Applied inside RateLimiter.allow so every key path
+    (XFF-derived or peer) normalizes identically."""
+    parsed = _parse_ip(ip)
+    if parsed is None:
+        return ip  # unparseable identity: key on the raw string (defensive)
+    if parsed.version == 6:
+        return str(ipaddress.ip_network(str(parsed) + "/64",
+                                        strict=False).network_address)
+    return str(parsed)
+
+
 class RateLimiter:
     """Per-IP token bucket; capacity = the configured rate, refill at
     rate-per-second fractions."""
@@ -96,6 +162,7 @@ class RateLimiter:
         self._lock = threading.Lock()
 
     def allow(self, ip: str) -> bool:
+        ip = bucket_key(ip)
         now = time.monotonic()
         with self._lock:
             if len(self._buckets) > self._max_buckets:
@@ -130,7 +197,7 @@ class IndexerApp:
         """Catch-all dispatch: ANY route exception = JSON 500 (the handler
         never drops the connection)."""
         if method != "GET":
-            return 405, {"error": "GET only"}
+            return 405, {"error": "method not allowed"}
         if content_length > MAX_BODY:
             return 413, {"error": "payload too large"}
         if not self.rate.allow(ip):
@@ -286,30 +353,74 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # count-only, no addresses/tokens
         sys.stderr.write("API %s\n" % (fmt % args if args else fmt))
 
-    def _send(self, status: int, obj: dict) -> None:
-        body = json.dumps(obj).encode("utf-8")
+    def _send(self, status: int, obj: dict, body: bool = True) -> None:
+        payload = json.dumps(obj).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(body)
+        if body:
+            self.wfile.write(payload)
 
-    def do_GET(self):
-        length = int(self.headers.get("Content-Length") or 0)
+    def client_ip(self) -> str:
+        peer = self.client_address[0] if self.client_address else "?"
+        return derive_client_ip(peer, self.headers.get("X-Forwarded-For"))
+
+    def _handle(self, method: str, body_allowed: bool):
+        # F3: the Content-Length parse lives INSIDE the try -- a malformed
+        # header once raised an uncaught ValueError that killed the handler
+        # thread and dropped the connection with no answer.  413 keeps one
+        # meaning: your request body claims are unacceptable.
         try:
-            status, obj = self.app.handle(
-                "GET", self.path, length,
-                self.client_address[0] if self.client_address else "?")
+            raw_length = self.headers.get("Content-Length")
+            length = int(raw_length) if raw_length else 0
+            if length < 0:
+                raise ValueError("negative content-length")
+        except ValueError:
+            self._send(413, {"error": "invalid content-length"},
+                       body=body_allowed)
+            return
+        try:
+            status, obj = self.app.handle(method, self.path, length,
+                                          self.client_ip())
         except Exception:
             traceback.print_exc(file=sys.stderr)
             status, obj = 500, {"error": "internal error"}
-        self._send(status, obj)
+        self._send(status, obj, body=body_allowed)
+
+    def do_GET(self):
+        self._handle("GET", body_allowed=True)
+
+    def do_HEAD(self):
+        # F2: HEAD is the GET route with the body suppressed -- status line
+        # and headers (incl. Content-Length) are identical to GET.
+        self._handle("GET", body_allowed=False)
+
+    def _method_not_allowed(self):
+        payload = json.dumps({"error": "method not allowed"}).encode("utf-8")
+        self.send_response(405)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Allow", "GET, HEAD")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
     def do_POST(self):
-        self._send(405, {"error": "GET only"})
+        self._method_not_allowed()
 
     do_PUT = do_POST
     do_DELETE = do_POST
+    do_OPTIONS = do_POST
+
+    def __getattr__(self, name):
+        # Catch-all 405 (F2 completion): any HTTP verb WITHOUT an explicit
+        # do_<VERB> above -- TRACE, a made-up token like "FOO", tomorrow's
+        # new verb -- resolves here and gets the 405 JSON answer, never
+        # http.server's default 501 HTML page.  Non-do_* misses keep normal
+        # attribute semantics (AttributeError).
+        if name.startswith("do_"):
+            return self._method_not_allowed
+        raise AttributeError(name)
 
 
 class _Server(socketserver.ThreadingMixIn, http.server.HTTPServer):

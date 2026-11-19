@@ -11,6 +11,7 @@ import importlib.util
 import json
 import os
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -715,6 +716,180 @@ class TestRestartAndReorg(unittest.TestCase):
         self.assertEqual(parsed["merkleroot_display"], blk["merkleroot"])
         self.assertEqual(parsed["prevhash_display"],
                          build_chain()[4]["hash"])
+
+
+class Test5bF7(unittest.TestCase):
+    """F7: the legacy vin parser (maza_indexer.api.parse_tx_prevouts) skips
+    the segwit marker+flag bytes (0x00 0x01 after the version) so a
+    witness-shaped tx parses to the same vin list as its legacy-stripped
+    equivalent.  (Future-proofing only today: the live chain has no segwit
+    softfork entry -- node-probed 2026-11-19.)"""
+
+    def test_witness_shaped_tx_matches_legacy_parse(self):
+        from maza_indexer.api import parse_tx_prevouts
+        legacy = make_tx([(b"\x11" * 32, 1, b"\x51\x21")],
+                         [(SAT, script_p2pkh(H_A)),
+                          (2 * SAT, script_p2pkh(H_B))])
+        raw = bytes.fromhex(legacy["hex"])
+        self.assertEqual(raw[4], 1)  # sanity: legacy input-count varint
+        witness_hex = (raw[:4] + b"\x00\x01" + raw[4:]).hex()
+        expected = [{"txid": (b"\x11" * 32)[::-1].hex(), "prev_vout": 1,
+                     "coinbase": False}]
+        self.assertEqual(parse_tx_prevouts(witness_hex), expected)
+        self.assertEqual(parse_tx_prevouts(legacy["hex"]), expected)
+
+    def test_zero_flag_is_not_a_witness_marker(self):
+        # raw[4] == 0x00 with raw[5] == 0x00 is NOT marker+flag (the flag
+        # must be non-zero): parsed as n_in == 0, no skip.
+        from maza_indexer.api import parse_tx_prevouts
+        raw = struct.pack("<I", 1) + b"\x00\x00" + b"\xff" * 20
+        self.assertEqual(parse_tx_prevouts(raw.hex()), [])
+
+
+class Test5bF8(unittest.TestCase):
+    """F8: MAZA_INDEXER_BIND strict parsing (host:port, bracketed IPv6,
+    integer port 1-65535; every violation a one-line ValueError naming
+    the env key)."""
+
+    def test_valid_forms_accepted(self):
+        cfg = IndexerConfig.from_env({"MAZA_INDEXER_BIND": "127.0.0.1:18711"})
+        self.assertEqual((cfg.host, cfg.port), ("127.0.0.1", 18711))
+        cfg = IndexerConfig.from_env({"MAZA_INDEXER_BIND": "[::1]:18711"})
+        self.assertEqual((cfg.host, cfg.port), ("::1", 18711))
+        cfg = IndexerConfig.from_env({"MAZA_INDEXER_BIND": "0.0.0.0:1"})
+        self.assertEqual((cfg.host, cfg.port), ("0.0.0.0", 1))
+
+    def test_default_bind_untouched(self):
+        cfg = IndexerConfig.from_env({})
+        self.assertEqual((cfg.host, cfg.port), ("127.0.0.1", 18711))
+
+    def test_invalid_forms_raise_valueerror_naming_the_key(self):
+        for bad in (":18711", "127.0.0.1:notaport", "127.0.0.1:0",
+                    "127.0.0.1:99999", "127.0.0.1:", "127.0.0.1",
+                    "[::1]", "[::1]18711", "::1:18711"):
+            with self.assertRaises(ValueError) as cm:
+                IndexerConfig.from_env({"MAZA_INDEXER_BIND": bad})
+            self.assertIn("MAZA_INDEXER_BIND", str(cm.exception), bad)
+
+
+class Test5bF10(unittest.TestCase):
+    """F10: python3 -m maza_indexer.verify CLI -- true/false on stdout,
+    exit 0/1, exit 2 on usage/parse errors.  Vector from the same
+    synthesized chain the proof route serves."""
+
+    def _vector(self):
+        from maza_indexer.proofs import merkle_branch_hex
+        chain = build_chain()
+        # Height 1 holds TWO txs (coinbase + t1): a non-trivial branch.
+        txids = [t["txid"] for t in chain[1]["txs"]]
+        index = 1  # t1
+        merkle, pos = merkle_branch_hex(txids, index)
+        self.assertEqual(len(merkle), 1)
+        return txids[index], chain[1]["merkleroot"], merkle, pos
+
+    def _run(self, args):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return subprocess.run(
+            [sys.executable, "-m", "maza_indexer.verify"] + args,
+            capture_output=True, text=True, cwd=root)
+
+    def test_true_vector_exit_0_stdout_true(self):
+        txid, root, merkle, pos = self._vector()
+        r = self._run([txid, root, json.dumps(merkle), str(pos)])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "true")
+
+    def test_branch_json_via_at_file(self):
+        txid, root, merkle, pos = self._vector()
+        fd, path = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w") as fh:
+                json.dump(merkle, fh)
+            r = self._run([txid, root, "@" + path, str(pos)])
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout.strip(), "true")
+        finally:
+            os.unlink(path)
+
+    def test_corrupted_branch_exit_1_stdout_false(self):
+        txid, root, merkle, pos = self._vector()
+        bad = list(merkle)
+        bad[0] = "ff" * 32
+        r = self._run([txid, root, json.dumps(bad), str(pos)])
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.stdout.strip(), "false")
+
+    def test_bad_usage_and_parse_errors_exit_2(self):
+        txid, root, merkle, pos = self._vector()
+        cases = [
+            [],                       # no args at all
+            [txid],                   # too few
+            [txid, root, json.dumps(merkle)],          # missing pos
+            [txid, root, json.dumps(merkle), "notanint"],  # bad pos
+            [txid, root, "{not json", str(pos)],        # bad branch JSON
+            [txid, root, "{}", str(pos)],              # branch not a list
+        ]
+        for args in cases:
+            r = self._run(args)
+            self.assertEqual(r.returncode, 2, args)
+            self.assertNotEqual(r.stdout.strip(), "true", args)
+
+    def test_malformed_proof_inputs_are_usage_errors_exit_2(self):
+        # A malformed proof is a USAGE error (exit 2, one-line stderr naming
+        # the offending argument) -- it can never be answered "false".
+        txid, root, merkle, pos = self._vector()
+        cases = [
+            (["zz" * 32, root, json.dumps(merkle), str(pos)], "txid"),
+            ([txid, "ab" * 31 + "a", json.dumps(merkle), str(pos)],
+             "merkleroot"),  # 63 hex chars: wrong length
+            ([txid, root, '{"a": 1}', str(pos)], "branch"),  # not a list
+            ([txid, root, json.dumps(merkle), "-1"], "pos"),  # negative
+        ]
+        for args, name in cases:
+            r = self._run(args)
+            self.assertEqual(r.returncode, 2, args)
+            self.assertEqual(r.stdout.strip(), "", args)  # never true/false
+            self.assertEqual(r.stderr.strip().count("\n"), 0, args)
+            self.assertIn(name, r.stderr, args)
+
+    def test_branch_element_not_exactly_64_hex_exit_2(self):
+        # F10 hardening: a branch element that parses as hex but is not
+        # EXACTLY 64 chars (one 32-byte sibling hash) is malformed.
+        txid, root, merkle, pos = self._vector()
+        cases = [
+            ["ab" * 32 + "a"],   # 65 hex chars: parses, wrong length
+            ["ab" * 33],         # 66 hex chars: parses, wrong length
+            ["zz" * 32],         # 64 chars but not hex
+        ]
+        for bad in cases:
+            r = self._run([txid, root, json.dumps(bad), str(pos)])
+            self.assertEqual(r.returncode, 2, bad)
+            self.assertEqual(r.stdout.strip(), "", bad)  # never true/false
+            self.assertEqual(r.stderr.strip().count("\n"), 0, bad)
+            self.assertIn("branch", r.stderr, bad)
+
+    def test_pos_at_tree_width_exit_2(self):
+        # F10 hardening: the 1-level branch proves a tree of width 2**1=2,
+        # so pos == 2 has nonzero residual bits past the branch levels and
+        # is unprovable -- usage error, never "false".
+        txid, root, merkle, pos = self._vector()
+        self.assertEqual(len(merkle), 1)
+        r = self._run([txid, root, json.dumps(merkle), "2"])
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(r.stdout.strip(), "")
+        self.assertEqual(r.stderr.strip().count("\n"), 0)
+        self.assertIn("pos", r.stderr)
+
+    def test_valid_shaped_wrong_proof_exit_1_stdout_false(self):
+        # Well-formed inputs (64-char hex elements, in-range pos) that do
+        # not climb to the root are "false" with exit 1 -- NOT exit 2.
+        txid, root, merkle, pos = self._vector()
+        bad = list(merkle)
+        bad[0] = "ab" * 32
+        self.assertNotEqual(bad[0], merkle[0])
+        r = self._run([txid, root, json.dumps(bad), str(pos)])
+        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.stdout.strip(), "false")
 
 
 if __name__ == "__main__":
