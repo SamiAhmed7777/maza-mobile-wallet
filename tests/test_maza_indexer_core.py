@@ -273,6 +273,58 @@ def ingest_chain(datadir, max_blocks=12, tip=11):
     return cfg, store, ing
 
 
+class TestGetblockheaderFallback(unittest.TestCase):
+    """LIVE-DAEMON REGRESSION (witnessed 2026-11-19, first real deployment on
+    the samihost mazad): MazaCore 0.16.3 getblockheader takes a BOOLEAN
+    verbosity - called with 2 it rejects code -1 "JSON value is not a boolean
+    as expected". The REAL node never returns a "hex" field on getblock
+    verbosity 2, so every block takes the fallback and a wrong fallback shape
+    crash-loops the service on block 0. This test replays the REAL node shape:
+    getblock answers WITHOUT hex, getblockheader [hash, False] returns the raw
+    80-byte header hex STRING, and a non-False verbosity is rejected like the
+    node rejects it."""
+
+    def test_ingests_without_block_hex_via_boolean_getblockheader(self):
+        blocks = build_chain()
+        by_hash = {blk["hash"]: blk for blk in blocks}
+        calls = []
+
+        def _getblock_no_hex(params):
+            blk = by_hash.get(params[0])
+            if blk is None:
+                raise KeyError(f"no fixture block {params[0]}")
+            b = _rpc_block(blk)
+            b.pop("hex", None)  # the real node shape at verbosity 2
+            return b
+
+        def _getblockheader(p):
+            calls.append(tuple(p))
+            if p[1] is not False:
+                raise RuntimeError(
+                    "rpc getblockheader error: {'code': -1, 'message': "
+                    "'JSON value is not a boolean as expected'}")
+            return by_hash[p[0]]["block_hex"][:160]
+
+        cfg = make_config(self.enterContext(tempfile.TemporaryDirectory()))
+        store = Store(cfg.db_path)
+        rpc = MockRpc({
+            "getblockhash": lambda p: blocks[p[0]]["hash"],
+            "getblock": _getblock_no_hex,
+            "getblockheader": _getblockheader,
+            "getblockchaininfo": lambda p: {"blocks": 11, "headers": 11,
+                                            "initialblockdownload": False},
+        })
+        ing = Ingestor(store, rpc, cfg, poll_seconds=0.001,
+                       sleep_fn=lambda s: (_ for _ in ()).throw(
+                           AssertionError("poll must not run in tests")))
+        ing.run(max_blocks=12)
+        self.assertTrue(calls, "fallback path must have been exercised")
+        self.assertTrue(all(p[1] is False for p in calls),
+                        "getblockheader must be called with boolean False")
+        self.assertEqual(ing.load_cursor()["height"], 11)
+        self.assertEqual(store.counts()["blocks"], 12)
+
+
 class TestHandComputedTableDoc:
     """HAND-COMPUTED FIXTURE TABLE (the binding expectations; heights 0-11):
 

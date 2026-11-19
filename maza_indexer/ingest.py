@@ -193,8 +193,22 @@ class Ingestor:
         if len(raw_hex) >= 160:
             header_hex = raw_hex[:160]
         else:
-            header = self.rpc.call("getblockheader", [block["hash"], 2])
-            header_hex = header["rawheader"]
+            # LIVE-DAEMON WITNESS 2026-11-19 (first real deployment, samihost
+            # mazad 0.16.3): getblockheader takes a BOOLEAN verbosity - called
+            # with 2 it rejects code -1 "JSON value is not a boolean as
+            # expected", and getblock verbosity-2 on this build never returns
+            # a "hex" field, so every block took this path and the service
+            # crash-looped on block 0. False returns the raw 80-byte header
+            # as a hex STRING (node-probed, len 160 at height 1000).
+            header_hex = self.rpc.call("getblockheader", [block["hash"], False])
+            if not isinstance(header_hex, str) or len(header_hex) < 160:
+                got = (type(header_hex).__name__ if not isinstance(header_hex, str)
+                       else f"len {len(header_hex)}")
+                raise ValueError(
+                    f"getblockheader [hash, False] returned {got}, expected "
+                    "a >=160-char hex string - node shape mismatch, refusing "
+                    "to store an unverifiable header")
+            header_hex = header_hex[:160]
         self.check_headers(height, block, header_hex)
         txs = parse_txs(block)
         parsed = parse_header(header_hex)
