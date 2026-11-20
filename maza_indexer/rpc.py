@@ -19,7 +19,16 @@ DEFAULT_ATTEMPTS = 3
 
 
 class RpcError(Exception):
-    """A JSON-RPC level error reported by the daemon (not retried)."""
+    """A JSON-RPC level error reported by the daemon (not retried).
+
+    daemon_code carries the daemon's JSON-RPC error code as an int when
+    one was parsed out of the error body, so callers can classify
+    structurally instead of string-matching; it stays None for
+    transport/parse failures and for string-built stand-ins (tests)."""
+
+    def __init__(self, message, daemon_code=None):
+        super().__init__(message)
+        self.daemon_code = daemon_code
 
 
 class JsonRpcClient:
@@ -71,7 +80,11 @@ class JsonRpcClient:
                 except Exception:
                     node_err = f"http {exc.code}"
                 # Daemon-level error: deterministic, no retry.
-                raise RpcError(f"rpc {method} error: {node_err}") from exc
+                code = node_err.get("code") if isinstance(node_err, dict) \
+                    else None
+                raise RpcError(f"rpc {method} error: {node_err}",
+                               daemon_code=code if isinstance(code, int)
+                               else None) from exc
             except OSError as exc:
                 last = exc
                 continue
@@ -82,7 +95,11 @@ class JsonRpcClient:
                 f"rpc {method} transport error after {self.attempts} "
                 f"attempts: {last}")
         if body.get("error"):
-            raise RpcError(f"rpc {method} error: {body['error']}")
+            err = body["error"]
+            code = err.get("code") if isinstance(err, dict) else None
+            raise RpcError(f"rpc {method} error: {err}",
+                           daemon_code=code if isinstance(code, int)
+                           else None)
         return body.get("result")
 
 

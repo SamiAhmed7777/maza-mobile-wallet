@@ -368,12 +368,21 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _send(self, status: int, obj: dict, body: bool = True) -> None:
         payload = json.dumps(obj).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        if body:
-            self.wfile.write(payload)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            if body:
+                self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError):
+            # The client disconnected mid-response (health-probe timeouts
+            # under ingest churn produce exactly this shape).  The answer
+            # was already computed; drop it and close quietly instead of
+            # letting socketserver print a full traceback per probe --
+            # that noise polluted every journal error grep during the
+            # IDX-9d incident triage.
+            self.close_connection = True
 
     def client_ip(self) -> str:
         peer = self.client_address[0] if self.client_address else "?"

@@ -27,6 +27,7 @@ Decimal (exact), never float arithmetic -- money is int sats everywhere.
 
 import json
 import os
+import re
 import struct
 import sys
 import time
@@ -35,7 +36,7 @@ from typing import Callable, Dict, Optional
 
 from . import config as config_mod
 from .hashutil import base58check_encode, double_sha256, hash160
-from .rpc import JsonRpcClient
+from .rpc import JsonRpcClient, RpcError
 from .store import Store
 
 # Version bytes FETCHED from the repo's ElectrumX coin profile, never from
@@ -48,6 +49,45 @@ _SATS = Decimal(100000000)
 
 class ReorgAbort(Exception):
     """Header identity/prevhash mismatch -- loud stop, operator decision."""
+
+
+# --- Transient-RPC tolerance (IDX-9d, live-defect round) --------------------
+# mazad's IBD run restarts roughly every 30-45 min; for seconds-to-minutes
+# after each restart the daemon answers JSON-RPC -28 ("Loading wallet...")
+# or refuses connections outright.  Treating that as fatal turned every
+# restart window into a systemd 5s crash-loop burst AND took the read API
+# down with it (samihost 2026-11-20 ~02:2x-02:46 PST: NRestarts 17->33,
+# public /indexer/health 2x 000).  The crawl now PAUSES through transient
+# states with capped backoff and resumes when the daemon answers; the
+# already-ingested chain keeps serving via the API thread.  PERMANENT
+# daemon errors (bad param, wrong verbosity -- the IDX-7 class) still exit
+# loud: a loud crash is how that defect surfaced in minutes, and an
+# indefinite pause must never mask one.
+RPC_WARMUP_CODES = frozenset({-28})
+RPC_PAUSE_BASE_S = 5.0
+RPC_PAUSE_CAP_S = 60.0
+_NODE_CODE_RE = re.compile(r"['\"]code['\"]\s*:\s*(-?\d+)")
+_TRANSPORT_MARK = "transport error after"
+
+
+def rpc_error_is_transient(exc: Exception) -> bool:
+    """True for the two shapes a node-restart window produces: daemon
+    warm-up codes (-28 "Loading wallet...") and transport exhaustion
+    after the client's own short retry budget.  Classification is
+    STRUCTURAL first: RpcError.daemon_code (parsed by the RPC client out
+    of the daemon's error body) decides when present.  The formatted-text
+    scan is only the fallback for string-built errors (tests / older
+    paths).  Everything else is permanent -- including a daemon error
+    whose MESSAGE happens to contain the transport marker but whose
+    structured code is not a warm-up code."""
+    code = getattr(exc, "daemon_code", None)
+    if isinstance(code, int):
+        return code in RPC_WARMUP_CODES
+    text = str(exc)
+    if _TRANSPORT_MARK in text:
+        return True
+    m = _NODE_CODE_RE.search(text)
+    return bool(m) and int(m.group(1)) in RPC_WARMUP_CODES
 
 
 def parse_header(header_hex: str) -> Dict[str, object]:
@@ -145,6 +185,26 @@ class Ingestor:
         self.poll_seconds = poll_seconds
         self.sleep_fn = sleep_fn
 
+    def rpc_paused(self, method: str, params=None):
+        """rpc.call with transient tolerance (see rpc_error_is_transient):
+        on a daemon warm-up (-28) or transport-exhaustion error, log the
+        pause loudly, sleep with capped exponential backoff, and retry
+        INDEFINITELY -- the crawl waits out the node's restart window
+        instead of crash-looping, and the API thread keeps serving the
+        stored chain meanwhile.  Non-transient RpcErrors re-raise
+        unchanged (fail loud -- the IDX-7 verbosity defect class)."""
+        delay = RPC_PAUSE_BASE_S
+        while True:
+            try:
+                return self.rpc.call(method, params)
+            except RpcError as exc:
+                if not rpc_error_is_transient(exc):
+                    raise
+                print(f"RPC-PAUSE {method}: {exc}; retry in {delay:.0f}s",
+                      file=sys.stderr)
+                self.sleep_fn(delay)
+                delay = min(delay * 2.0, RPC_PAUSE_CAP_S)
+
     # -- cursor ----------------------------------------------------------
     def load_cursor(self) -> Dict[str, object]:
         path = self.cfg.cursor_path
@@ -200,7 +260,8 @@ class Ingestor:
             # a "hex" field, so every block took this path and the service
             # crash-looped on block 0. False returns the raw 80-byte header
             # as a hex STRING (node-probed, len 160 at height 1000).
-            header_hex = self.rpc.call("getblockheader", [block["hash"], False])
+            header_hex = self.rpc_paused("getblockheader",
+                                         [block["hash"], False])
             if not isinstance(header_hex, str) or len(header_hex) < 160:
                 got = (type(header_hex).__name__ if not isinstance(header_hex, str)
                        else f"len {len(header_hex)}")
@@ -237,7 +298,7 @@ class Ingestor:
         max_blocks bounds the crawl (tests / operational slices)."""
         crawled = 0
         while True:
-            info = self.rpc.call("getblockchaininfo", [])
+            info = self.rpc_paused("getblockchaininfo", [])
             tip = int(info.get("blocks", 0))
             cur = self.load_cursor()
             height = int(cur["height"]) + 1
@@ -254,10 +315,10 @@ class Ingestor:
                 heights = heights[: max_blocks - crawled]
             hashes = {}
             for h in heights:
-                hashes[h] = self.rpc.call("getblockhash", [h])
+                hashes[h] = self.rpc_paused("getblockhash", [h])
             bounded = False
             for h in heights:
-                block = self.rpc.call("getblock", [hashes[h], 2])
+                block = self.rpc_paused("getblock", [hashes[h], 2])
                 rec = self.ingest_block(h, block)
                 crawled += 1
                 print(f"INGEST height={rec['height']} hash={rec['hash']}"
