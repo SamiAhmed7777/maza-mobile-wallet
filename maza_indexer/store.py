@@ -125,6 +125,18 @@ CREATE TABLE IF NOT EXISTS addr_tx(
                           block_time: int, difficulty: float,
                           txs: List[dict]) -> None:
         c = self.conn
+        # Duplicate-txid guard (smoke-suite finding): name the collision and
+        # BOTH heights instead of a raw sqlite IntegrityError. The txs table
+        # is unique on txid (BIP30-conservative treatment): a re-appearing
+        # txid is refused loudly and the whole add_block transaction (below)
+        # rolls back atomically - nothing is half-applied.
+        for t in txs:
+            row = c.execute("SELECT height FROM txs WHERE txid = ?",
+                            (t["txid"],)).fetchone()
+            if row is not None:
+                raise ValueError(
+                    f"duplicate txid {t['txid']}: already indexed at height "
+                    f"{row[0]}; refusing to double-index at height {height}")
         c.execute("BEGIN IMMEDIATE")
         try:
             c.execute(

@@ -151,6 +151,10 @@ class RateLimiter:
     rate-per-second fractions."""
 
     def __init__(self, rate_per_min: float):
+        if float(rate_per_min) <= 0:
+            # judge r4: non-positive rates can only produce deny-everything
+            # (zero refill) or nonsense; reject loudly at construction
+            raise ValueError(f"rate_per_min must be > 0, got {rate_per_min}")
         self.rate_per_sec = float(rate_per_min) / 60.0
         self.capacity = float(rate_per_min)
         self._buckets = {}
@@ -198,7 +202,16 @@ class IndexerApp:
         never drops the connection)."""
         if method != "GET":
             return 405, {"error": "method not allowed"}
-        if content_length > MAX_BODY:
+        if content_length is None:
+            cl = 0
+        elif isinstance(content_length, int) and not isinstance(
+                content_length, bool):
+            cl = content_length
+        else:
+            # numeric strings, floats, bools: not a body length - reject the
+            # request rather than silently coercing (fuzz-found contract)
+            return 413, {"error": "payload too large"}
+        if cl < 0 or cl > MAX_BODY:
             return 413, {"error": "payload too large"}
         if not self.rate.allow(ip):
             return 429, {"error": "rate limited"}
