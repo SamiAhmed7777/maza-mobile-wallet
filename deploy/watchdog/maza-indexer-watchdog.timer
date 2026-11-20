@@ -1,0 +1,16 @@
+[Unit]
+Description=Run the MAZA indexer watchdog every 60 seconds
+
+[Timer]
+# OnBootSec gives a freshly enabled timer an initial trigger: OnUnitActiveSec
+# alone only elapses relative to a prior service activation, so on a host
+# where the service has never run yet the first cycle would never fire.
+# On an already-booted host boot+60s is in the past, so `enable --now`
+# elapses immediately and the first cycle runs right away.
+OnBootSec=60s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=maza-indexer-watchdog.service
+
+[Install]
+WantedBy=timers.target

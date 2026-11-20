@@ -161,7 +161,8 @@ class TestRouteMethodMatrix(unittest.TestCase):
 
     def test_get_happy_paths_contract_keys(self):
         checks = [
-            ("/health", {"ok", "height", "chain", "txs_indexed"}),
+            ("/health", {"ok", "height", "chain", "txs_indexed",
+                         "crawler_progress_age_s"}),
             ("/api/v0/stats", {"height", "total_txs", "address_count"}),
             (self._real_path("/api/v0/address/PENDING"),
              {"address", "balance_sats", "tx_count", "truncated", "txs"}),

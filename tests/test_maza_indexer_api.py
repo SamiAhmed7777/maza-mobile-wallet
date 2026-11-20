@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from maza_indexer.api import (IndexerApp, RateLimiter, _Handler, bucket_key,
                               derive_client_ip, serve)
 from maza_indexer.config import IndexerConfig
+from maza_indexer.ingest import reset_loop_progress_for_tests
 from maza_indexer.verify import verify_merkle_proof
 
 from test_maza_indexer_core import (ADDR_A, ADDR_B, ADDR_C, ADDR_D,
@@ -34,6 +35,13 @@ def _json_body(resp):
 
 
 class TestAPI(unittest.TestCase):
+    def setUp(self):
+        # The crawler-liveness registry is module-global (the real process
+        # runs one crawler); another test class in the same run may have
+        # marked it. Pin the never-ran state so the exact /health equality
+        # below tests THIS class's app, not discovery-order side effects.
+        reset_loop_progress_for_tests()
+
     @classmethod
     def setUpClass(cls):
         cls._tmp = tempfile.TemporaryDirectory(prefix="idx-api")
@@ -65,8 +73,13 @@ class TestAPI(unittest.TestCase):
     def test_health(self):
         status, obj = self._get("/health")
         self.assertEqual(status, 200)
+        # crawler_progress_age_s is the IDX-9c-ii stall-watchdog liveness
+        # field; the test app never runs a crawler, so it is None (null on
+        # the wire) here -- the value contract is pinned in
+        # test_maza_indexer_liveness.py.
         self.assertEqual(obj, {"ok": True, "height": 11, "chain": "main",
-                               "txs_indexed": 13})
+                               "txs_indexed": 13,
+                               "crawler_progress_age_s": None})
 
     def test_address_full_payload(self):
         status, obj = self._get(f"/api/v0/address/{ADDR_A}")

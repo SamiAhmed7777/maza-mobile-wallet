@@ -22,6 +22,7 @@ import traceback
 from typing import List, Optional, Tuple
 
 from . import config as config_mod
+from . import ingest as ingest_mod
 from . import proofs as proofs_mod
 from .store import Store
 
@@ -248,7 +249,8 @@ class IndexerApp:
         tip = self.store.tip_height()
         txs = self.store.counts()["txs"]
         return 200, {"ok": True, "height": tip if tip is not None else 0,
-                     "chain": config_mod.CHAIN_NAME, "txs_indexed": txs}
+                     "chain": config_mod.CHAIN_NAME, "txs_indexed": txs,
+                     "crawler_progress_age_s": ingest_mod.loop_progress_age()}
 
     def address(self, addr: str) -> Tuple[int, dict]:
         summary = self.store.address_summary(addr)

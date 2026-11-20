@@ -1,0 +1,12 @@
+[Unit]
+Description=MAZA indexer watchdog cycle (down/stall probe + heal + p95 log)
+After=network-online.target maza-indexer.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/maza-indexer-watchdog.env
+ExecStart=/usr/local/bin/maza-indexer-watchdog
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

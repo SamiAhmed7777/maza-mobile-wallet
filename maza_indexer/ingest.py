@@ -66,6 +66,41 @@ class ReorgAbort(Exception):
 RPC_WARMUP_CODES = frozenset({-28})
 RPC_PAUSE_BASE_S = 5.0
 RPC_PAUSE_CAP_S = 60.0
+
+
+# --- Crawler liveness (IDX-9c-ii) -------------------------------------------
+# The crawl loop's last scheduling point, as time.monotonic(); 0.0 = the loop
+# has never run in this process.  Exposed by /health as
+# crawler_progress_age_s so the samihost stall watchdog can distinguish a
+# WEDGED crawler (age grows past the stall threshold) from normal shapes:
+#   tip rest        -- height frozen, age fresh (poll every poll_seconds)
+#   RPC pause       -- height frozen, age fresh (retry wakes mark progress)
+#   catch-up ingest -- height advancing, age fresh (loop iterations mark)
+# A restart cannot be triggered from in-band data on "height frozen" alone
+# (tip rest is normal), so the stall class is AGE-based, not height-based;
+# height stays an observability field in the watchdog's log line.
+_loop_progress_monotonic = 0.0
+
+
+def mark_loop_progress() -> None:
+    """Record a crawl-loop scheduling point (monotonic clock)."""
+    global _loop_progress_monotonic
+    _loop_progress_monotonic = time.monotonic()
+
+
+def loop_progress_age() -> Optional[float]:
+    """Seconds since the crawl loop last made scheduling progress, or None
+    when the loop has never run in this process (startup -- callers must
+    treat None as no-data, never as a stall)."""
+    if _loop_progress_monotonic <= 0.0:
+        return None
+    return round(time.monotonic() - _loop_progress_monotonic, 3)
+
+
+def reset_loop_progress_for_tests() -> None:
+    """Reset the registry to the never-ran state (test isolation only)."""
+    global _loop_progress_monotonic
+    _loop_progress_monotonic = 0.0
 _NODE_CODE_RE = re.compile(r"['\"]code['\"]\s*:\s*(-?\d+)")
 _TRANSPORT_MARK = "transport error after"
 
@@ -192,7 +227,13 @@ class Ingestor:
         INDEFINITELY -- the crawl waits out the node's restart window
         instead of crash-looping, and the API thread keeps serving the
         stored chain meanwhile.  Non-transient RpcErrors re-raise
-        unchanged (fail loud -- the IDX-7 verbosity defect class)."""
+        unchanged (fail loud -- the IDX-7 verbosity defect class).
+
+        Each retry wake marks crawl-loop progress (IDX-9c-ii): a long
+        RPC outage keeps the liveness age fresh because the CRAWL THREAD
+        is still making scheduling progress -- the outage belongs to the
+        node and is loud in the journal (RPC-PAUSE lines), so the stall
+        watchdog must not misread it as a wedged crawler."""
         delay = RPC_PAUSE_BASE_S
         while True:
             try:
@@ -203,6 +244,7 @@ class Ingestor:
                 print(f"RPC-PAUSE {method}: {exc}; retry in {delay:.0f}s",
                       file=sys.stderr)
                 self.sleep_fn(delay)
+                mark_loop_progress()
                 delay = min(delay * 2.0, RPC_PAUSE_CAP_S)
 
     # -- cursor ----------------------------------------------------------
@@ -298,6 +340,7 @@ class Ingestor:
         max_blocks bounds the crawl (tests / operational slices)."""
         crawled = 0
         while True:
+            mark_loop_progress()
             info = self.rpc_paused("getblockchaininfo", [])
             tip = int(info.get("blocks", 0))
             cur = self.load_cursor()

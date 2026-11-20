@@ -9,7 +9,7 @@ in this API (`difficulty` is the one float, and it is not money).
 ## The contract (verbatim)
 
 ```
-GET /health                -> {"ok":true,"height":<int>,"chain":"main","txs_indexed":<int>}
+GET /health                -> {"ok":true,"height":<int>,"chain":"main","txs_indexed":<int>,"crawler_progress_age_s":<float>|null}
 GET /api/v0/address/<addr> -> {"address":<str>,"balance_sats":<int>,"tx_count":<int>,"truncated":true|false,"txs":[{"txid":<str>,"height":<int>,"time":<int>,"value_sats":<int>,"direction":"in"|"out"}]}
 # address history: newest first, cap 100 entries, truncated=true when more exist; time = block time of the confirmed block
 GET /api/v0/tx/<txid>      -> {"txid":<str>,"height":<int>,"confirmations":<int>,"blockhash":<str>|null,"size":<int>,"hex":<str>,"vin":[{"txid":<str>|null,"vout":<int>|null,"addresses":[<str>],"value_sats":<int>|null,"coinbase":true|false}],"vout":[{"n":<int>,"addresses":[<str>],"value_sats":<int>,"script_type":"p2pkh"|"p2sh"|"data"|"other"}]}
@@ -28,6 +28,12 @@ Plain-English reading of the same contract:
 
 - **`/health`** - a liveness probe. It answers `200` with `ok:true` once the
   service is up. The installer's health gate polls this.
+  `crawler_progress_age_s` is the crawl thread's loop-progress age in
+  seconds (`null` until the crawler's first loop pass; refreshed at every
+  crawl iteration and every RPC-pause retry wake). The samihost stall
+  watchdog (`deploy/watchdog/maza-indexer-watchdog.sh`) heals on a sustained
+  age over its threshold; tip rest and RPC pauses keep the age fresh, so a
+  frozen height alone is never a stall signal.
 - **`/api/v0/address/<addr>`** - the balance and the history of one
   address. History is **newest first**, capped at **100** entries; when
   more exist, `truncated` is `true` (so a client knows to keep paging or to
