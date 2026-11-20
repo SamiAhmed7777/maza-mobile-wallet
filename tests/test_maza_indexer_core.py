@@ -22,7 +22,7 @@ from maza_indexer.config import IndexerConfig
 from maza_indexer.hashutil import (base58check_decode, base58check_encode,
                                    double_sha256, hash160, ripemd160_pure)
 from maza_indexer.ingest import Ingestor, ReorgAbort, parse_header, value_to_sats
-from maza_indexer.rpc import MockRpc
+from maza_indexer.rpc import JsonRpcClient, MockRpc, RpcError
 from maza_indexer.store import Store, StoreIntegrityError
 
 # ---------------------------------------------------------------------------
@@ -324,6 +324,186 @@ class TestGetblockheaderFallback(unittest.TestCase):
                         "getblockheader must be called with boolean False")
         self.assertEqual(ing.load_cursor()["height"], 11)
         self.assertEqual(store.counts()["blocks"], 12)
+
+
+class TestBatchCrawl(unittest.TestCase):
+    """IDX-10 batched crawl (2026-11-20): live samihost measured ~209
+    blocks/min because each block cost 3 SERIAL rpc round trips.  mazad
+    0.16.3 accepts JSON-RPC ARRAY requests (live-probed: 3-item batch in
+    0.157s, getblockheader [hash, False] returns the 160-char hex string).
+    The crawl window now costs 3 round trips TOTAL instead of 3 per block.
+    These tests pin the batching contract without a live node."""
+
+    def test_window_costs_two_batches_when_blocks_carry_hex(self):
+        cfg, store, ing = ingest_chain(
+            self.enterContext(tempfile.TemporaryDirectory()), max_blocks=6)
+        kinds = [[m for m, _ in batch]
+                 for batch in ing.rpc.batch_calls]
+        self.assertEqual(kinds, [["getblockhash"] * 6, ["getblock"] * 6],
+                         "one hash window + one block window, "
+                         "no getblockheader needed when hex is present")
+
+    def test_header_window_only_for_blocks_lacking_hex(self):
+        blocks = build_chain()
+        by_hash = {blk["hash"]: blk for blk in blocks}
+
+        def _getblock_no_hex(params):
+            b = _rpc_block(by_hash[params[0]])
+            b.pop("hex", None)  # the real node shape at verbosity 2
+            return b
+
+        cfg = make_config(self.enterContext(tempfile.TemporaryDirectory()))
+        store = Store(cfg.db_path)
+        rpc = MockRpc({
+            "getblockhash": lambda p: blocks[p[0]]["hash"],
+            "getblock": _getblock_no_hex,
+            "getblockheader": lambda p: by_hash[p[0]]["block_hex"][:160],
+            "getblockchaininfo": lambda p: {"blocks": 11, "headers": 11,
+                                            "initialblockdownload": False},
+        })
+        ing = Ingestor(store, rpc, cfg, poll_seconds=0.001,
+                       sleep_fn=lambda s: (_ for _ in ()).throw(
+                           AssertionError("poll must not run in tests")))
+        ing.run(max_blocks=4)
+        kinds = [[m for m, _ in batch] for batch in rpc.batch_calls]
+        self.assertEqual(kinds, [["getblockhash"] * 4, ["getblock"] * 4,
+                                 ["getblockheader"] * 4],
+                         "header window covers exactly the hex-less blocks")
+        self.assertTrue(all(p[1] is False for _, p in rpc.batch_calls[2]),
+                        "batched getblockheader must keep boolean False")
+        self.assertEqual(ing.load_cursor()["height"], 3)
+        self.assertEqual(store.counts()["blocks"], 4)
+        # ingest only completes when each header hashes to the daemon's
+        # block hash (check_headers), so stored-at-all == headers verified.
+        for h in range(4):
+            self.assertEqual(store.block_hash_at(h), blocks[h]["hash"])
+
+    def test_cursor_advances_per_window_not_per_block_crash_safety(self):
+        # crash safety contract: cursor saves are per WINDOW; a mid-window
+        # crash replays from the last saved cursor and the store's
+        # idempotent same-hash skip absorbs the stored prefix (IDX-9b).
+        cfg, store, ing = ingest_chain(
+            self.enterContext(tempfile.TemporaryDirectory()), max_blocks=5)
+        self.assertEqual(ing.load_cursor()["height"], 4)
+        # re-crawl the SAME range with a fresh cursor file: the store's
+        # duplicate guard must not double-index (blocks 0..4 already there).
+        cur_path = cfg.cursor_path
+        saved = json.loads(open(cur_path).read())
+        saved["height"] = -1
+        saved["hash"] = ""
+        with open(cur_path, "w") as fh:
+            fh.write(json.dumps(saved))
+        ing.run(max_blocks=5)
+        self.assertEqual(store.counts()["blocks"], 5,
+                         "replay must skip, not double-index")
+
+    def test_batch_transient_error_retries_whole_window(self):
+        blocks = build_chain()
+        cfg = make_config(self.enterContext(tempfile.TemporaryDirectory()))
+        store = Store(cfg.db_path)
+        rpc = make_mock_rpc(blocks, tip=11)
+        real_call_batch = rpc.call_batch
+        attempts = {"n": 0}
+        sleeps = []
+
+        def flaky_then_ok(items):
+            if attempts["n"] == 0:
+                attempts["n"] = 1
+                raise RpcError("rpc batch[24] error: {'code': -28, "
+                               "'message': 'Loading blocks...'}",
+                               daemon_code=-28)
+            return real_call_batch(items)
+
+        rpc.call_batch = flaky_then_ok
+        ing = Ingestor(store, rpc, cfg, poll_seconds=0.001,
+                       sleep_fn=sleeps.append)
+        ing.run(max_blocks=3)
+        self.assertEqual(attempts["n"], 1, "one transient pause before OK")
+        self.assertEqual(len(sleeps), 1, "capped backoff slept once")
+        self.assertEqual(store.counts()["blocks"], 3)
+
+    def test_max_blocks_zero_is_an_immediate_noop(self):
+        blocks = build_chain()
+        cfg = make_config(self.enterContext(tempfile.TemporaryDirectory()))
+        store = Store(cfg.db_path)
+        rpc = make_mock_rpc(blocks, tip=11)
+        ing = Ingestor(store, rpc, cfg, poll_seconds=0.001,
+                       sleep_fn=lambda s: (_ for _ in ()).throw(
+                           AssertionError("noop must not sleep")))
+        summary = ing.run(max_blocks=0)
+        self.assertEqual(summary, {"synced_to": -1, "crawled": 0})
+        self.assertEqual(rpc.batch_calls, [], "no window fetch on a no-op")
+        self.assertEqual(store.counts()["blocks"], 0)
+
+    def test_batch_permanent_error_fails_loud(self):
+        blocks = build_chain()
+        cfg = make_config(self.enterContext(tempfile.TemporaryDirectory()))
+        store = Store(cfg.db_path)
+        rpc = make_mock_rpc(blocks, tip=11)
+        rpc.call_batch = lambda items: (_ for _ in ()).throw(
+            RpcError("rpc batch[24] item 2 getblock error: bad block",
+                     daemon_code=-5))
+        ing = Ingestor(store, rpc, cfg, poll_seconds=0.001,
+                       sleep_fn=lambda s: (_ for _ in ()).throw(
+                           AssertionError("permanent errors must not sleep")))
+        with self.assertRaises(RpcError):
+            ing.run(max_blocks=3)
+
+
+class TestJsonRpcClientBatchShape(unittest.TestCase):
+    """call_batch must validate the daemon's array reply shape loudly
+    (IDX-7 defect class: never accept a malformed shape silently)."""
+
+    def _client(self, body):
+        c = JsonRpcClient("http://127.0.0.1:1", "u", "p")
+        c._post = lambda payload, method, timeout: body
+        return c
+
+    def test_happy_path_returns_results_in_item_order(self):
+        c = self._client([{"id": 0, "result": "h1", "error": None},
+                          {"id": 1, "result": 2, "error": None}])
+        self.assertEqual(c.call_batch([("getblockhash", [1]),
+                                       ("getblockcount", [])]),
+                         ["h1", 2])
+
+    def test_empty_batch_is_local_no_op(self):
+        self.assertEqual(self._client(None).call_batch([]), [])
+
+    def test_non_list_reply_fails_loud(self):
+        with self.assertRaises(RpcError):
+            self._client({"id": 0, "result": None}).call_batch(
+                [("getblockcount", [])])
+
+    def test_length_mismatch_fails_loud(self):
+        with self.assertRaises(RpcError):
+            self._client([{"id": 0, "result": None}]).call_batch(
+                [("getblockcount", []), ("getblockcount", [])])
+
+    def test_entry_without_id_fails_loud(self):
+        with self.assertRaises(RpcError):
+            self._client([{"result": "x"}]).call_batch(
+                [("getblockcount", [])])
+
+    def test_out_of_order_ids_fail_loud(self):
+        body = [{"id": 1, "result": None, "error": None},
+                {"id": 0, "result": None, "error": None}]
+        with self.assertRaises(RpcError):
+            self._client(body).call_batch([("a", []), ("b", [])])
+
+    def test_id_out_of_range_fails_loud(self):
+        with self.assertRaises(RpcError):
+            self._client([{"id": 7, "result": None, "error": None}]).call_batch(
+                [("getblockcount", [])])
+
+    def test_per_item_error_names_method_and_carries_code(self):
+        body = [{"id": 0, "result": None, "error": None},
+                {"id": 1, "result": None,
+                 "error": {"code": -5, "message": "block not found"}}]
+        with self.assertRaises(RpcError) as ctx:
+            self._client(body).call_batch([("getblockhash", [1]),
+                                           ("getblock", ["zz", 2])])
+        self.assertIn("getblock", str(ctx.exception))
+        self.assertEqual(ctx.exception.daemon_code, -5)
 
 
 class TestHandComputedTableDoc:

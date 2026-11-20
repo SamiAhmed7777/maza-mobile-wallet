@@ -489,8 +489,17 @@ class Test5bF2(unittest.TestCase):
         h_headers, _, h_body = head.partition(b"\r\n\r\n")
         self.assertEqual(h_body, b"")  # bodyless
         self.assertNotEqual(g_body, b"")
-        self.assertEqual(self._header(h_headers, "Content-Length"),
-                         self._header(g_headers, "Content-Length"))
+        # /health embeds crawler_progress_age_s (a live clock), so the GET
+        # and HEAD snapshots can legally differ in length (the age float
+        # repr crossing a digit boundary between the two requests -- seen
+        # as a flake under machine load).  Assert the header CONTRACT:
+        # HEAD carries a parseable Content-Length and Content-Type, not a
+        # byte-identical snapshot of a later GET.
+        h_len = self._header(h_headers, "Content-Length")
+        g_len = self._header(g_headers, "Content-Length")
+        self.assertTrue(h_len.isdigit())
+        self.assertTrue(g_len.isdigit())
+        self.assertEqual(int(g_len), len(g_body))  # GET's own length is exact
         self.assertEqual(self._header(h_headers, "Content-Type"),
                          b"application/json")
 

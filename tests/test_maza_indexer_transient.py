@@ -76,6 +76,21 @@ class ScriptedRpc(MockRpc):
                 raise exc
         return super().call(method, params)
 
+    def call_batch(self, items):
+        """Batched window: the SAME fault script, applied per item.  Each
+        item counts against its method's call counter exactly like a
+        single call did, so a fault keyed to (getblock, nth=3) still
+        lands on the 3rd block of the crawl -- it now surfaces as the
+        whole batch raising (the window is all-or-nothing)."""
+        for method, _params in items:
+            self._counts[method] = self._counts.get(method, 0) + 1
+            for i, (m, exc, nth) in enumerate(self.faults):
+                if m == method and nth == self._counts[method]:
+                    del self.faults[i]
+                    self.fired.append((method, exc))
+                    raise exc
+        return super().call_batch(items)
+
 
 class _PauseRecorder:
     """Stands in for time.sleep: records every pause and never blocks."""
@@ -205,15 +220,19 @@ class TestCrawlPausesThroughTransients(unittest.TestCase):
         # The availability point of the fix: while the crawl sits INSIDE a
         # pause (inside the injected sleep callback -- the production
         # process stays up and its API thread reads the store), a SEPARATE
-        # reader connection can open the same db and serve queries.  Two
-        # getblock faults -> two pauses; the first fault hits height 0's
-        # first attempt, the second hits height 1's first call (call 3 =
-        # after the h0 retry succeeded and stored it).  At the second
-        # pause exactly one block is already stored, and the independent
-        # reader must see it.
+        # reader connection can open the same db and serve queries.
+        # IDX-10 batching: a window's blocks are all fetched before any is
+        # stored (all-or-nothing window), so "blocks visible during a
+        # pause" needs pauses in TWO DIFFERENT windows.  With batch=2:
+        # pause 1 = h0's item of window [h0,h1] (nothing stored yet);
+        # pause 2 = h2's item (count 5) of window [h2,h3] -- window
+        # [h0,h1] is already stored and cursor-saved, so the independent
+        # reader must see tip 1 / 2 blocks.  Each pause opens a fresh
+        # rpc_paused_batch loop, so both delays restart at base.
         faults = [("getblock", RpcError(WARMUP_WALLET), 1),
-                  ("getblock", RpcError(WARMUP_WALLET), 3)]
+                  ("getblock", RpcError(WARMUP_WALLET), 5)]
         tmp, store, rpc, rec, ing = _ingestor_with_faults(faults)
+        ing.cfg.batch = 2  # two-block windows so the chain has 6 windows
         seen_during_pause = []
 
         def sleep_and_read(seconds):
@@ -227,15 +246,19 @@ class TestCrawlPausesThroughTransients(unittest.TestCase):
 
         ing.sleep_fn = sleep_and_read
         try:
-            summary = ing.run(max_blocks=2)
-            self.assertEqual(int(summary["synced_to"]), 1)
-            self.assertEqual(summary["crawled"], 2)
+            # max_blocks=4 so the crawl continues past window [h0,h1] into
+            # window [h2,h3] -- the second pause must land in a NEW window
+            # (a bounded stop inside window 1 would never open window 2).
+            summary = ing.run(max_blocks=4)
+            self.assertEqual(int(summary["synced_to"]), 3)
+            self.assertEqual(summary["crawled"], 4)
             self.assertEqual(len(rpc.fired), 2)
             self.assertEqual(rec.delays, [RPC_PAUSE_BASE_S,
                                           RPC_PAUSE_BASE_S])
-            # Pause 1 (before height 0 committed): nothing stored yet.
-            # Pause 2 (before height 1 committed): height 0 is served.
-            self.assertEqual(seen_during_pause, [(None, 0), (0, 1)])
+            # Pause 1 (window [h0,h1] fetch): nothing stored yet.
+            # Pause 2 (window [h2,h3] fetch): window [h0,h1] is stored
+            # and cursor-saved -- the reader sees tip 1 / 2 blocks.
+            self.assertEqual(seen_during_pause, [(None, 0), (1, 2)])
         finally:
             store.close()
 

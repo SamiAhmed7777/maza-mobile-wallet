@@ -106,6 +106,17 @@ class TestLivenessRegistry(unittest.TestCase):
                                 "{'code': -28, 'message': 'Loading wallet...'}")
                         return base.call(method, params)
 
+                    def call_batch(self, items):
+                        # IDX-10: the crawl window goes through call_batch;
+                        # delegate to the same fixture the single-call path
+                        # uses so this mock covers both call styles.
+                        if not getattr(self, "_fired", False):
+                            self._fired = True
+                            raise RpcError(
+                                "rpc getblockchaininfo error: "
+                                "{'code': -28, 'message': 'Loading wallet...'}")
+                        return base.call_batch(items)
+
                 recorder = _SleepRecorder()
                 ing = Ingestor(store, TransientOnce(), cfg,
                                sleep_fn=recorder.sleep)
