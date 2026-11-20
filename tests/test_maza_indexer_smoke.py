@@ -5,9 +5,11 @@ cases (coinbase-only block, duplicate txid, OP_RETURN-only tx)."""
 import http.client
 import json
 import os
+import struct
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -361,6 +363,67 @@ class TestRateLimitDefault(unittest.TestCase):
         self.assertEqual(body, {"error": "rate limited"})
         status, body = self.app.handle("GET", "/health", 0, "5.6.7.8")
         self.assertEqual(status, 200, "a different client must still pass")
+
+
+class TestReadWriteSplit(unittest.TestCase):
+    """IDX-9 live finding (2026-11-20): API readers starved behind the
+    writer's per-block RLock once ingest hit busy blocks - /health timed out
+    for whole seconds on the live service. The fix serves reads from a
+    dedicated RO connection; this test PROVES a read answers while the
+    writer lock is held by someone else."""
+
+    def test_reads_answer_while_writer_lock_held(self):
+        # A SEPARATE thread holds the writer lock AND an uncommitted writer
+        # transaction (the real starvation shape - same-thread acquisition
+        # would pass vacuously because RLock is reentrant). The main thread
+        # then performs API reads: they must answer within 1s WITHOUT the
+        # writer lock, via the dedicated RO connection.
+        tmp = tempfile.mkdtemp(prefix="idx-rwsplit")
+        cfg = make_config(tmp)
+        store = Store(cfg.db_path)
+        app = IndexerApp(store, cfg)
+        lock_held = threading.Event()
+        release = threading.Event()
+        hold_err = []
+
+        def hold_writer():
+            try:
+                with store._lock:
+                    store.conn.execute("BEGIN IMMEDIATE")
+                    store.conn.execute(
+                        "CREATE TABLE IF NOT EXISTS _rwsplit_probe (x)")
+                    store.conn.execute(
+                        "INSERT INTO _rwsplit_probe VALUES (1)")  # UNCOMMITTED
+                    lock_held.set()
+                    release.wait(10)
+                    store.conn.execute("ROLLBACK")
+            except Exception as e:
+                hold_err.append(f"{type(e).__name__}: {e}")
+                lock_held.set()
+
+        holder = threading.Thread(target=hold_writer, daemon=True)
+        holder.start()
+        try:
+            self.assertTrue(lock_held.wait(5), "holder thread failed to lock")
+            t0 = time.monotonic()
+            status, body = app.handle("GET", "/health", 0, "127.0.0.1")
+            dt = time.monotonic() - t0
+            self.assertEqual(status, 200)
+            self.assertTrue(body["ok"])
+            self.assertLess(dt, 1.0,
+                            f"/health blocked on the writer lock: {dt:.2f}s")
+            t0 = time.monotonic()
+            status, body = app.handle("GET", "/api/v0/stats", 0, "127.0.0.1")
+            dt = time.monotonic() - t0
+            self.assertEqual(status, 200)
+            self.assertLess(dt, 1.0,
+                            f"/stats blocked on the writer lock: {dt:.2f}s")
+        finally:
+            release.set()
+            holder.join(timeout=5)
+            self.assertFalse(holder.is_alive(), "holder thread wedged")
+            self.assertEqual(hold_err, [], f"holder thread errored: {hold_err}")
+            store.close()
 
 
 if __name__ == "__main__":

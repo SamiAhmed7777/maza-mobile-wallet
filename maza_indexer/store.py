@@ -53,6 +53,16 @@ class Store:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=FULL")
+        # IDX-9 live finding: API readers starved behind the writer's
+        # per-block RLock under heavy ingest. WAL allows concurrent readers:
+        # serve reads from a dedicated TRUE read-only connection (mode=ro
+        # URI - the writer connection has already created the schema) so the
+        # API never queues behind the crawl. The RLock keeps guarding the
+        # WRITE path.
+        self._ro = sqlite3.connect(f"file:{path}?mode=ro", uri=True,
+                                   check_same_thread=False)
+        self._ro.execute("PRAGMA busy_timeout=5000")
+        self._ro_lock = threading.Lock()
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -101,6 +111,7 @@ CREATE TABLE IF NOT EXISTS addr_tx(
 
     def close(self) -> None:
         self.conn.close()
+        self._ro.close()
 
     # ------------------------------------------------------------------
     # ingest path
@@ -292,28 +303,28 @@ CREATE TABLE IF NOT EXISTS addr_tx(
     # serve paths
     # ------------------------------------------------------------------
     def tip_height(self) -> Optional[int]:
-        with self._lock:
-            row = self.conn.execute(
+        with self._ro_lock:
+            row = self._ro.execute(
                 "SELECT MAX(height) FROM blocks").fetchone()
             return None if row is None or row[0] is None else int(row[0])
 
     def block_by_height(self, height: int) -> Optional[dict]:
-        with self._lock:
-            row = self.conn.execute(
+        with self._ro_lock:
+            row = self._ro.execute(
                 "SELECT height, hash, merkleroot, ntx, time, difficulty"
                 " FROM blocks WHERE height=?", (height,)).fetchone()
             return self._block_dict(row)
 
     def block_by_hash(self, block_hash: str) -> Optional[dict]:
-        with self._lock:
-            row = self.conn.execute(
+        with self._ro_lock:
+            row = self._ro.execute(
                 "SELECT height, hash, merkleroot, ntx, time, difficulty"
                 " FROM blocks WHERE hash=?", (block_hash,)).fetchone()
             return self._block_dict(row)
 
     def block_hash_at(self, height: int) -> Optional[str]:
-        with self._lock:
-            row = self.conn.execute(
+        with self._ro_lock:
+            row = self._ro.execute(
                 "SELECT hash FROM blocks WHERE height=?",
                 (height,)).fetchone()
             return None if row is None else str(row[0])
@@ -328,8 +339,8 @@ CREATE TABLE IF NOT EXISTS addr_tx(
     def block_txids(self, height: int, cap: Optional[int] = None
                     ) -> Tuple[List[str], bool]:
         """txids of a block in index order; (list, truncated flag)."""
-        with self._lock:
-            rows = self.conn.execute(
+        with self._ro_lock:
+            rows = self._ro.execute(
                 "SELECT txid FROM txs WHERE height=? ORDER BY idx",
                 (height,)).fetchall()
         txids = [r[0] for r in rows]
@@ -338,8 +349,8 @@ CREATE TABLE IF NOT EXISTS addr_tx(
         return txids, False
 
     def get_tx_row(self, txid: str) -> Optional[Tuple[int, int, str]]:
-        with self._lock:
-            row = self.conn.execute(
+        with self._ro_lock:
+            row = self._ro.execute(
                 "SELECT height, idx, hex FROM txs WHERE txid=?",
                 (txid,)).fetchone()
         if row is None:
@@ -347,8 +358,8 @@ CREATE TABLE IF NOT EXISTS addr_tx(
         return int(row[0]), int(row[1]), str(row[2])
 
     def get_outputs_for_tx(self, txid: str) -> List[dict]:
-        with self._lock:
-            rows = self.conn.execute(
+        with self._ro_lock:
+            rows = self._ro.execute(
                 "SELECT vout, addresses_json, value_sats, script_type"
                 " FROM outputs WHERE txid=? ORDER BY vout",
                 (txid,)).fetchall()
@@ -357,8 +368,8 @@ CREATE TABLE IF NOT EXISTS addr_tx(
 
     def get_output(self, txid: str,
                    vout: int) -> Optional[Tuple[list, Optional[int]]]:
-        with self._lock:
-            row = self.conn.execute(
+        with self._ro_lock:
+            row = self._ro.execute(
                 "SELECT addresses_json, value_sats FROM outputs"
                 " WHERE txid=? AND vout=?", (txid, vout)).fetchone()
         if row is None:
@@ -366,8 +377,8 @@ CREATE TABLE IF NOT EXISTS addr_tx(
         return json.loads(row[0]), row[1]
 
     def address_summary(self, address: str) -> Optional[dict]:
-        with self._lock:
-            row = self.conn.execute(
+        with self._ro_lock:
+            row = self._ro.execute(
                 "SELECT balance_sats, tx_count FROM addresses WHERE"
                 " address=?", (address,)).fetchone()
             if row is None:
@@ -377,8 +388,8 @@ CREATE TABLE IF NOT EXISTS addr_tx(
     def address_history(self, address: str, cap: int = 100
                         ) -> Tuple[List[dict], bool]:
         """Newest first; (rows, truncated).  time = block time."""
-        with self._lock:
-            rows = self.conn.execute(
+        with self._ro_lock:
+            rows = self._ro.execute(
                 "SELECT at.txid, at.height, b.time, at.value_sats,"
                 " at.direction"
                 " FROM addr_tx at LEFT JOIN blocks b ON b.height = at.height"
@@ -392,15 +403,15 @@ CREATE TABLE IF NOT EXISTS addr_tx(
         return out, truncated
 
     def has_address(self, address: str) -> bool:
-        with self._lock:
-            return self.conn.execute(
+        with self._ro_lock:
+            return self._ro.execute(
                 "SELECT 1 FROM addresses WHERE address=?",
                 (address,)).fetchone() is not None
 
     def counts(self) -> dict:
-        with self._lock:
+        with self._ro_lock:
             def one(sql: str) -> int:
-                row = self.conn.execute(sql).fetchone()
+                row = self._ro.execute(sql).fetchone()
                 return int(row[0]) if row and row[0] is not None else 0
             return {
                 "blocks": one("SELECT COUNT(*) FROM blocks"),
