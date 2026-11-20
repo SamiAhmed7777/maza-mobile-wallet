@@ -251,6 +251,33 @@ def _rpc_block(blk):
                    for t, t_src in zip(blk["rpc_txs"], blk["txs"])]}
 
 
+def build_block_like(blocks, height, txs):
+    """Extend the fixture chain by one block (smoke-suite helper)."""
+    last = blocks[-1]
+    # block N+1's prevhash = block N's HASH (display hex) reversed to internal
+    prev_internal = bytes.fromhex(last["hash"])[::-1]
+    mtime = (last["time"] or 0) + 600
+    root_input = [t["internal"] for t in txs] or [double_sha256(
+        struct.pack("<I", height))]
+    # reuse the core test's own independent merkle loop via make_block
+    from test_maza_indexer_core import make_block, indep_merkle_root
+    root = indep_merkle_root(root_input)
+    header = (struct.pack("<I", 1) + prev_internal + root
+              + struct.pack("<III", mtime, 0x207FFFFF, height))
+    block_hash = double_sha256(header)[::-1].hex()
+    block_hex = header.hex() + "".join(t["hex"] for t in txs)
+    rpc_txs = [{"txid": t["txid"], "hex": t["hex"],
+                "vout": [{"value": 50 * SAT / 1e8,
+                          "scriptPubKey": {"hex": script_p2pkh(
+                              b"\x11" * 20).hex()}}]}
+               for t in txs]
+    return {"height": height, "hash": block_hash,
+            "prev_internal": prev_internal,
+            "merkleroot": root[::-1].hex(), "header_hex": header.hex(),
+            "block_hex": block_hex, "time": mtime, "txs": txs,
+            "rpc_txs": rpc_txs}
+
+
 def make_config(datadir):
     return IndexerConfig.from_env({
         "MAZA_INDEXER_RPC_URL": "http://127.0.0.1:1",
@@ -434,6 +461,83 @@ class TestBatchCrawl(unittest.TestCase):
         self.assertEqual(summary, {"synced_to": -1, "crawled": 0})
         self.assertEqual(rpc.batch_calls, [], "no window fetch on a no-op")
         self.assertEqual(store.counts()["blocks"], 0)
+
+    def test_window_is_all_or_nothing_on_midwindow_duplicate(self):
+        # IDX-11: a duplicate txid on block 1 of 2 in a window rolls the
+        # WHOLE window back - nothing stored, cursor untouched.
+        blocks = build_chain()
+        cfg = make_config(self.enterContext(tempfile.TemporaryDirectory()))
+        store = Store(cfg.db_path)
+        # Pre-store height 11's tx is reused by a fake window [11', 12']:
+        # build two custom blocks where the FIRST duplicates an indexed tx.
+        twin = blocks[5]["txs"][0]  # same bytes as an indexed tx
+        b_last = build_block_like(blocks, height=11, txs=[twin])
+        nxt = build_block_like(blocks[:11] + [b_last], height=12,
+                               txs=[blocks[6]["txs"][0]])
+        rpc = MockRpc({
+            "getblockchaininfo": {"chain": "main", "blocks": 12,
+                                  "headers": 12,
+                                  "initialblockdownload": False},
+            "getblockhash": lambda p: (blocks + [b_last, nxt])[p[0]]["hash"],
+            "getblock": lambda p: _rpc_block(
+                (blocks + [b_last, nxt])[[b["hash"]
+                                          for b in blocks + [b_last, nxt]]
+                                         .index(p[0])]),
+        })
+        ing = Ingestor(store, rpc, cfg, poll_seconds=0.001,
+                       sleep_fn=lambda s: (_ for _ in ()).throw(
+                           AssertionError("permanent errors must not sleep")))
+        # max_blocks=13 so the window covers heights 0..12: b_last (height
+        # 12) carries the twin txid and duplicates committed block 5's tx
+        # INSIDE the same window transaction.
+        with self.assertRaises(ValueError) as ctx:
+            ing.run(max_blocks=13)
+        self.assertIn("duplicate txid", str(ctx.exception))
+        self.assertEqual(store.counts()["blocks"], 0,
+                         "the poisoned window must roll back whole")
+        self.assertEqual(ing.load_cursor()["height"], -1,
+                         "cursor must not move past a rolled-back window")
+
+    def test_replay_skips_stored_prefix_inside_one_window(self):
+        # IDX-11 + IDX-9b: a replayed window whose first blocks are already
+        # stored (same hash) SKIPS them and stores the rest in the SAME
+        # single transaction.
+        blocks = build_chain()
+        cfg = make_config(self.enterContext(tempfile.TemporaryDirectory()))
+        store = Store(cfg.db_path)
+        rpc = make_mock_rpc(blocks, tip=11)
+        ing = Ingestor(store, rpc, cfg, poll_seconds=0.001,
+                       sleep_fn=lambda s: (_ for _ in ()).throw(
+                           AssertionError("no poll")))
+        ing.run(max_blocks=4)          # store 0..3
+        ing.save_cursor(-1, "")        # simulate a crash rewind to genesis
+        ing.run(max_blocks=4)          # re-crawl 0..3: skip + re-store window
+        self.assertEqual(store.counts()["blocks"], 4, "no double-index")
+        self.assertEqual(ing.load_cursor()["height"], 3)
+        self.assertEqual(store.block_hash_at(3), blocks[3]["hash"])
+
+    def test_intra_window_prevhash_is_checked_against_local_parent(self):
+        # IDX-11: block k+1 of a window must be prevhash-checked against
+        # block k even though k is NOT yet committed when k+1 parses.
+        blocks = build_chain()
+        # Tamper block 3's prevhash to point at a garbage parent; block 3
+        # is INSIDE the window (heights 0..11 with batch 24), so only the
+        # local in-window hint can catch this.
+        tampered = bytearray(bytes.fromhex(blocks[3]["header_hex"]))
+        tampered[10] ^= 0xFF
+        blocks[3]["header_hex"] = bytes(tampered).hex()
+        blocks[3]["block_hex"] = blocks[3]["header_hex"] \
+            + blocks[3]["block_hex"][160:]
+        cfg = make_config(self.enterContext(tempfile.TemporaryDirectory()))
+        store = Store(cfg.db_path)
+        rpc = make_mock_rpc(blocks, tip=11)
+        ing = Ingestor(store, rpc, cfg, poll_seconds=0.001,
+                       sleep_fn=lambda s: (_ for _ in ()).throw(
+                           AssertionError("no poll")))
+        with self.assertRaises(ReorgAbort):
+            ing.run(max_blocks=12)
+        self.assertEqual(store.counts()["blocks"], 0)
+        self.assertEqual(ing.load_cursor()["height"], -1)
 
     def test_batch_permanent_error_fails_loud(self):
         blocks = build_chain()
@@ -645,8 +749,14 @@ class TestIngest(unittest.TestCase):
         with self.assertRaises(ReorgAbort):
             ing.run(max_blocks=12)
         try:
-            self.assertEqual(store.counts()["blocks"], 6)  # 0..5 survive
-            self.assertEqual(ing.load_cursor()["height"], 5)
+            # IDX-11 contract: windows are ALL-OR-NOTHING.  The tampered
+            # block sits inside the single [0..11] window, so the abort
+            # fires during the parse phase BEFORE any store write - nothing
+            # is stored, the cursor stays untouched.  (The pre-IDX-11
+            # behavior stored the 0..5 prefix; the window-atomic store is
+            # strictly stronger: never a partial window.)
+            self.assertEqual(store.counts()["blocks"], 0)
+            self.assertEqual(ing.load_cursor()["height"], -1)
         finally:
             store.close()
 
@@ -661,7 +771,9 @@ class TestIngest(unittest.TestCase):
         with self.assertRaises(ReorgAbort):
             ing.run(max_blocks=12)
         try:
-            self.assertEqual(store.counts()["blocks"], 4)
+            # IDX-11: same all-or-nothing contract as prevhash mismatch.
+            self.assertEqual(store.counts()["blocks"], 0)
+            self.assertEqual(ing.load_cursor()["height"], -1)
         finally:
             store.close()
 

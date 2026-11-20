@@ -290,7 +290,8 @@ class Ingestor:
         return self.store.block_hash_at(height)
 
     def check_headers(self, height: int, block: Dict,
-                      header_hex: str) -> None:
+                      header_hex: str, local_prev_hash: Optional[str] = None
+                      ) -> None:
         parsed = parse_header(header_hex)
         got = double_sha256(bytes.fromhex(header_hex))[::-1].hex()
         want = block.get("hash")
@@ -300,7 +301,11 @@ class Ingestor:
                 f"(computed {got}, daemon says {want}) -- the chain the node "
                 f"serves no longer matches what we stored; a reorg or manual "
                 f"step is needed.  Run --reorg-delete <height> or investigate.")
-        prev = self.previous_stored_hash(height - 1)
+        # IDX-11: within one window the parent is an in-memory record (not
+        # yet committed), so the local hint wins; the store lookup covers
+        # the window's first block and any committed ancestor.
+        prev = (local_prev_hash if local_prev_hash is not None
+                else self.previous_stored_hash(height - 1))
         if height == 0:
             if bytes.fromhex(header_hex)[4:36] != b"\x00" * 32:
                 raise ReorgAbort(
@@ -311,9 +316,16 @@ class Ingestor:
                 f"!= stored block {height - 1} hash {prev} -- reorg or "
                 f"manual step needed (--reorg-delete <height>).")
 
-    def ingest_block(self, height: int, block: Dict,
+    def build_record(self, height: int, block: Dict,
                      header_hex: Optional[str] = None,
-                     save_cursor: bool = True) -> Dict:
+                     local_prev_hash: Optional[str] = None) -> Dict:
+        """IDX-11: verify + parse one block WITHOUT touching the store.
+
+        Raises the same loud shapes as before (ValueError on a bad header
+        shape, ReorgAbort on header identity / prevhash mismatch).  The
+        caller collects records for the whole window and stores them with
+        ONE add_blocks_window call - all-or-nothing per window.
+        """
         raw_hex = block.get("hex") or ""
         if len(raw_hex) >= 160:
             header_hex = raw_hex[:160]
@@ -335,10 +347,11 @@ class Ingestor:
                 "a >=160-char hex string - node shape mismatch, refusing "
                 "to store an unverifiable header")
         header_hex = header_hex[:160]
-        self.check_headers(height, block, header_hex)
+        self.check_headers(height, block, header_hex,
+                           local_prev_hash=local_prev_hash)
         txs = parse_txs(block)
         parsed = parse_header(header_hex)
-        record = {
+        return {
             "height": height,
             "hash": block["hash"],
             "header_hex": header_hex,
@@ -351,13 +364,18 @@ class Ingestor:
             "difficulty": float(block.get("difficulty", 0.0)),
             "txs": txs,
         }
+
+    def ingest_block(self, height: int, block: Dict,
+                     header_hex: Optional[str] = None,
+                     save_cursor: bool = True) -> Dict:
+        rec = self.build_record(height, block, header_hex=header_hex)
         self.store.add_block(
-            record["height"], record["hash"], record["header_hex"],
-            record["merkleroot"], record["ntx"], record["time"],
-            record["difficulty"], txs)
+            rec["height"], rec["hash"], rec["header_hex"],
+            rec["merkleroot"], rec["ntx"], rec["time"],
+            rec["difficulty"], rec["txs"])
         if save_cursor:
-            self.save_cursor(height, record["hash"])
-        return record
+            self.save_cursor(height, rec["hash"])
+        return rec
 
     def run(self, max_blocks: Optional[int] = None) -> Dict[str, object]:
         """Crawl from the cursor to the tip; then poll for new blocks.
@@ -413,29 +431,33 @@ class Ingestor:
                      for i in missing_hex])
                 header_by_idx = dict(zip(missing_hex, got))
             bounded = False
-            last_stored = None  # (height, hash) of the last INGESTED block
-            try:
-                for i, h in enumerate(heights):
-                    rec = self.ingest_block(h, blocks[i],
-                                            header_hex=header_by_idx.get(i),
-                                            save_cursor=False)
-                    last_stored = (rec["height"], rec["hash"])
-                    crawled += 1
-                    print(f"INGEST height={rec['height']} hash={rec['hash']}"
-                          f" txs={rec['ntx']}", file=sys.stderr)
-                    if max_blocks is not None and crawled >= max_blocks:
-                        bounded = True
-                        break
-            finally:
-                # One fsync round per WINDOW, not per block -- but ALWAYS
-                # through the last INGESTED block, including on a mid-window
-                # permanent abort (reorg guard): the cursor contract stays
-                # "points at the last stored block".  Crash-mid-window (no
-                # finally on a kill) replays from the previous window end
-                # and the store's idempotent same-hash skip absorbs the
-                # stored prefix (IDX-9b).
-                if last_stored is not None:
-                    self.save_cursor(*last_stored)
+            # IDX-11: parse + verify the whole window FIRST (nothing stored
+            # on a parse/verify failure), then write it in ONE transaction,
+            # then advance the cursor once.  A mid-window guard hit
+            # (divergence / duplicate txid inside add_blocks_window) rolls
+            # the whole window back and re-raises -- the cursor stays at
+            # the previous window end and the replay re-raises
+            # deterministically.
+            records = []
+            local_prev = None  # hash of the previous record IN THIS WINDOW
+            for i, h in enumerate(heights):
+                rec = self.build_record(h, blocks[i],
+                                        header_hex=header_by_idx.get(i),
+                                        local_prev_hash=local_prev)
+                local_prev = rec["hash"]
+                records.append(rec)
+            self.store.add_blocks_window(records)
+            last_stored = None
+            for rec in records:
+                last_stored = (rec["height"], rec["hash"])
+                crawled += 1
+                print(f"INGEST height={rec['height']} hash={rec['hash']}"
+                      f" txs={rec['ntx']}", file=sys.stderr)
+                if max_blocks is not None and crawled >= max_blocks:
+                    bounded = True
+                    break
+            if last_stored is not None:
+                self.save_cursor(*last_stored)
             if bounded:
                 break
             if int(self.load_cursor()["height"]) >= tip:

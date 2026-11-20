@@ -21,38 +21,13 @@ from maza_indexer.rpc import MockRpc
 from maza_indexer.store import Store
 from maza_indexer.hashutil import double_sha256
 
-from test_maza_indexer_core import (ADDR_A, ADDR_B, build_chain, make_config,
+from test_maza_indexer_core import (ADDR_A, ADDR_B, build_block_like,
+                                   build_chain, make_config,
                                     make_tx, script_p2pkh, _varint, _rpc_block,
                                     ingest_chain)
 
 SAT = 100000000
 
-
-def build_block_like(blocks, height, txs):
-    """Extend the fixture chain by one block (smoke-suite helper)."""
-    last = blocks[-1]
-    # block N+1's prevhash = block N's HASH (display hex) reversed to internal
-    prev_internal = bytes.fromhex(last["hash"])[::-1]
-    mtime = (last["time"] or 0) + 600
-    root_input = [t["internal"] for t in txs] or [double_sha256(
-        struct.pack("<I", height))]
-    # reuse the core test's own independent merkle loop via make_block
-    from test_maza_indexer_core import make_block, indep_merkle_root
-    root = indep_merkle_root(root_input)
-    header = (struct.pack("<I", 1) + prev_internal + root
-              + struct.pack("<III", mtime, 0x207FFFFF, height))
-    block_hash = double_sha256(header)[::-1].hex()
-    block_hex = header.hex() + "".join(t["hex"] for t in txs)
-    rpc_txs = [{"txid": t["txid"], "hex": t["hex"],
-                "vout": [{"value": 50 * SAT / 1e8,
-                          "scriptPubKey": {"hex": script_p2pkh(
-                              b"\x11" * 20).hex()}}]}
-               for t in txs]
-    return {"height": height, "hash": block_hash,
-            "prev_internal": prev_internal,
-            "merkleroot": root[::-1].hex(), "header_hex": header.hex(),
-            "block_hex": block_hex, "time": mtime, "txs": txs,
-            "rpc_txs": rpc_txs}
 
 
 def _coinbase(height):
@@ -339,22 +314,24 @@ class TestIngestEdges(unittest.TestCase):
         #     double-credited, or
         # (b) REJECTED LOUDLY at the EXPECTED block (height 12, where the
         #     twin first re-appears) BY THE UNIQUENESS GUARD - the error must
-        #     name the collision and balances must be provably unchanged vs
-        #     a plain 12-block ingest (atomic add_block: nothing applied).
+        #     name the collision.  IDX-11: windows are all-or-nothing, so
+        #     the rejection branch now rolls the WHOLE [0..13] window back -
+        #     the strongest possible "not corrupting" proof: nothing applied
+        #     at all (blocks == 0, cursor == -1).
         # SILENT corruption (a completed run with double-credited balances)
         # is the only forbidden outcome.
-        base_cfg, base_store, _ = ingest_chain(
-            tempfile.mkdtemp(prefix="idx-smoke-base2"))
-        base_app = IndexerApp(base_store, base_cfg)
-        for addr in (ADDR_A, ADDR_B):
-            base_bal = base_app.handle("GET", f"/api/v0/address/{addr}", 0,
-                                       "127.0.0.1")[1]["balance_sats"]
-            got = self.app_addr(store, cfg, addr)
-            self.assertEqual(got, base_bal,
-                             f"{addr}: duplicate corrupted balance "
-                             f"({got} != baseline {base_bal})")
-        base_store.close()
         if error is None:
+            base_cfg, base_store, _ = ingest_chain(
+                tempfile.mkdtemp(prefix="idx-smoke-base2"))
+            base_app = IndexerApp(base_store, base_cfg)
+            for addr in (ADDR_A, ADDR_B):
+                base_bal = base_app.handle("GET", f"/api/v0/address/{addr}", 0,
+                                           "127.0.0.1")[1]["balance_sats"]
+                got = self.app_addr(store, cfg, addr)
+                self.assertEqual(got, base_bal,
+                                 f"{addr}: duplicate corrupted balance "
+                                 f"({got} != baseline {base_bal})")
+            base_store.close()
             cursor = ing.load_cursor()
             self.assertEqual(cursor["height"], 13, "both heights must record")
             app = IndexerApp(store, cfg)
@@ -370,6 +347,10 @@ class TestIngestEdges(unittest.TestCase):
             self.assertIn("11", error, f"error must name the existing height: {error}")
             self.assertIn("12", error, f"error must name the refused height: {error}")
             self.assertRegex(error.lower(), r"duplicate")
+            # all-or-nothing: the poisoned window left NOTHING behind
+            self.assertEqual(store.counts()["blocks"], 0,
+                             "IDX-11: rejected window must roll back whole")
+            self.assertEqual(ing.load_cursor()["height"], -1)
 
     def app_addr(self, store, cfg, addr):
         app = IndexerApp(store, cfg)
