@@ -136,6 +136,21 @@ CREATE TABLE IF NOT EXISTS addr_tx(
                           block_time: int, difficulty: float,
                           txs: List[dict]) -> None:
         c = self.conn
+        # CRASH-WINDOW IDEMPOTENCE (live finding 2026-11-20: the DB commits a
+        # block, then the process dies before the cursor write - every
+        # restart re-ingests that height and a raw UNIQUE error crash-loops
+        # the service). Same hash at the same height = skip cleanly (the
+        # cursor advances past it; committed data is already correct).
+        # Different hash at the same height = true divergence - refuse loud.
+        existing = c.execute("SELECT hash FROM blocks WHERE height = ?",
+                             (height,)).fetchone()
+        if existing is not None:
+            if existing[0] == block_hash:
+                return  # idempotent skip; caller advances the cursor
+            raise ValueError(
+                f"height {height} divergence: stored block {existing[0]} != "
+                f"new block {block_hash} - reorg or DB damage; manual step "
+                "needed (--reorg-delete)")
         # Duplicate-txid guard (smoke-suite finding): name the collision and
         # BOTH heights instead of a raw sqlite IntegrityError. The txs table
         # is unique on txid (BIP30-conservative treatment): a re-appearing

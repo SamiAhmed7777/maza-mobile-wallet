@@ -16,6 +16,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
 
 from maza_indexer.api import IndexerApp, RateLimiter, serve
+from maza_indexer.ingest import Ingestor
+from maza_indexer.rpc import MockRpc
 from maza_indexer.store import Store
 from maza_indexer.hashutil import double_sha256
 
@@ -283,6 +285,39 @@ class TestIngestEdges(unittest.TestCase):
         self.assertEqual(cursor["height"], 12)
         stats = store.counts()
         self.assertGreaterEqual(stats["blocks"], 13)
+
+    def test_crash_window_reingest_is_idempotent(self):
+        """LIVE finding (2026-11-20): the store commits a block, then the
+        process dies before the cursor write - the next start re-ingests that
+        height and hit a raw UNIQUE(blocks.height) error, crash-looping the
+        service. The fix: same-hash re-ingest is an idempotent skip."""
+        holder = {}
+
+        def builder(blocks, by_hash):
+            holder["blocks"] = blocks
+            return [], {}
+        cfg, store, ing, error = self._run_custom(builder, 0)
+        self.assertIsNone(error)
+        self.assertEqual(ing.load_cursor()["height"], 11)
+        blocks = holder["blocks"]
+        # SIMULATE the crash window: rewind the cursor 2 blocks (the DB
+        # already holds heights 0-11 - exactly the witnessed state)
+        ing.save_cursor(10, blocks[10]["hash"])
+        from maza_indexer.rpc import MockRpc
+        rpc = MockRpc({
+            "getblockchaininfo": {"chain": "main", "blocks": 11,
+                                  "headers": 11, "initialblockdownload": False},
+            "getblockhash": lambda p: blocks[p[0]]["hash"],
+            "getblock": lambda p: _rpc_block(blocks[[b["hash"] for b in blocks]
+                                                   .index(p[0])]),
+        })
+        ing2 = Ingestor(store, rpc, cfg, poll_seconds=0.001,
+                        sleep_fn=lambda s: (_ for _ in ()).throw(
+                            AssertionError("no poll")))
+        ing2.run(max_blocks=12)
+        self.assertEqual(ing2.load_cursor()["height"], 11,
+                         "re-ingest must complete over the crash window")
+        self.assertEqual(store.counts()["blocks"], 12, "no double-counting")
 
     def test_duplicate_txid_across_blocks_recorded_not_corrupting(self):
         holder = {}
