@@ -28,6 +28,16 @@ CREATE TABLE IF NOT EXISTS addresses(
   tx_count INTEGER NOT NULL)
 """
 
+# Counter names tracked in the `counters` table (IDX-9c-i cheap read path).
+# Each name equals its backing table; counts() serves from these rows so
+# /health and /api/v0/stats never pay full COUNT(*) table scans, which at
+# full-chain scale are the slow-serve shape (measured: /health 000 under
+# catch-up ingest before this change). Maintained transactionally inside
+# add_block (+) and reorg_delete (-); backfilled once at open for DBs that
+# predate the table. The read is one scan of this four-row table - not four
+# point lookups, but four rows total either way.
+_COUNT_NAMES = ("blocks", "txs", "outputs", "addresses")
+
 
 class StoreError(Exception):
     pass
@@ -107,6 +117,22 @@ CREATE TABLE IF NOT EXISTS addr_tx(
         c.execute("CREATE INDEX IF NOT EXISTS addr_tx_height"
                   " ON addr_tx(height)")
         c.execute(_ADDR_TABLE)
+        c.execute("""
+CREATE TABLE IF NOT EXISTS counters(
+  name TEXT PRIMARY KEY,
+  value INTEGER NOT NULL)""")
+        # ONE-TIME backfill for pre-counter DBs (legacy live DBs upgrade in
+        # place): each counter is computed once from a real table scan at
+        # open, then maintained transactionally by add_block/reorg_delete.
+        # Every open AFTER the first pays 4 point lookups, not 4 scans.
+        for name in _COUNT_NAMES:
+            row = c.execute("SELECT value FROM counters WHERE name=?",
+                            (name,)).fetchone()
+            if row is None:
+                real = c.execute(
+                    "SELECT COUNT(*) FROM %s" % name).fetchone()[0]
+                c.execute("INSERT INTO counters(name, value) VALUES(?,?)",
+                          (name, int(real)))
         c.commit()
 
     def close(self) -> None:
@@ -227,11 +253,13 @@ CREATE TABLE IF NOT EXISTS addr_tx(
                     " height, idx, value_sats, direction)"
                     " VALUES(?,?,?,?,?,?)",
                     (addr, txid, row_height, row_idx, abs(net), direction))
+            n_new_addresses = 0
             for addr in touched:
-                c.execute(
+                cur = c.execute(
                     "INSERT INTO addresses(address, balance_sats, tx_count)"
                     " VALUES(?,0,0)"
                     " ON CONFLICT(address) DO NOTHING", (addr,))
+                n_new_addresses += cur.rowcount
                 added_rows = sum(1 for (a, _t) in nets if a == addr)
                 added_net = sum(net for (a, _t), (net, _h, _i)
                                 in nets.items() if a == addr)
@@ -244,6 +272,19 @@ CREATE TABLE IF NOT EXISTS addr_tx(
                     (added_net, added_rows, addr))
             for addr in sorted(touched):
                 self._assert_address_integrity(addr)
+            # Counter maintenance (IDX-9c-i): same transaction as the data,
+            # so a crash or rollback can never leave counters drifted from
+            # the tables they describe.
+            c.execute("UPDATE counters SET value = value + 1"
+                      " WHERE name='blocks'")
+            c.execute("UPDATE counters SET value = value + ?"
+                      " WHERE name='txs'", (len(txs),))
+            c.execute(
+                "UPDATE counters SET value = value + ? WHERE name='outputs'",
+                (sum(len(tx["vouts"]) for tx in txs),))
+            c.execute(
+                "UPDATE counters SET value = value + ?"
+                " WHERE name='addresses'", (n_new_addresses,))
             c.execute("COMMIT")
         except Exception:
             c.execute("ROLLBACK")
@@ -285,9 +326,10 @@ CREATE TABLE IF NOT EXISTS addr_tx(
             c.execute(
                 "UPDATE outputs SET spent_by=NULL, spent_height=NULL"
                 " WHERE spent_height >= ?", (height,))
-            c.execute(
+            n_outputs = c.execute(
                 "DELETE FROM outputs WHERE txid IN"
-                " (SELECT txid FROM txs WHERE height >= ?)", (height,))
+                " (SELECT txid FROM txs WHERE height >= ?)",
+                (height,)).rowcount
             n_addr_tx = c.execute(
                 "DELETE FROM addr_tx WHERE height >= ?",
                 (height,)).rowcount
@@ -307,6 +349,15 @@ CREATE TABLE IF NOT EXISTS addr_tx(
                     " WHERE address=?", (addr, addr, addr))
             for addr in affected:
                 self._assert_address_integrity(addr)
+            # Counter maintenance (IDX-9c-i): mirror the deletions. Address
+            # rows are only RECOMPUTED here, never deleted - the addresses
+            # counter is unchanged by a reorg.
+            c.execute("UPDATE counters SET value = value - ?"
+                      " WHERE name='outputs'", (n_outputs,))
+            c.execute("UPDATE counters SET value = value - ?"
+                      " WHERE name='txs'", (n_txs,))
+            c.execute("UPDATE counters SET value = value - ?"
+                      " WHERE name='blocks'", (n_blocks,))
             c.execute("COMMIT")
         except Exception:
             c.execute("ROLLBACK")
@@ -424,13 +475,20 @@ CREATE TABLE IF NOT EXISTS addr_tx(
                 (address,)).fetchone() is not None
 
     def counts(self) -> dict:
+        """IDX-9c-i cheap read path: serve from the `counters` table (one
+        scan of a four-row table, maintained transactionally by the write
+        paths), never full COUNT(*) scans - /health and /api/v0/stats stay
+        fast under catch-up ingest. A missing counter row at read time
+        means the DB was damaged out-of-band: fail loud
+        (StoreIntegrityError), never serve a silent 0."""
         with self._ro_lock:
-            def one(sql: str) -> int:
-                row = self._ro.execute(sql).fetchone()
-                return int(row[0]) if row and row[0] is not None else 0
-            return {
-                "blocks": one("SELECT COUNT(*) FROM blocks"),
-                "txs": one("SELECT COUNT(*) FROM txs"),
-                "outputs": one("SELECT COUNT(*) FROM outputs"),
-                "addresses": one("SELECT COUNT(*) FROM addresses"),
-            }
+            rows = self._ro.execute(
+                "SELECT name, value FROM counters").fetchall()
+        got = {str(n): int(v) for n, v in rows}
+        missing = [n for n in _COUNT_NAMES if n not in got]
+        if missing:
+            raise StoreIntegrityError(
+                "counter rows missing for %s - DB damaged or modified "
+                "out-of-band; reopen the store to re-backfill"
+                % ", ".join(missing))
+        return {name: got[name] for name in _COUNT_NAMES}
