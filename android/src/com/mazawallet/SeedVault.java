@@ -84,6 +84,7 @@ public final class SeedVault {
             // from memory this session and RETRY the migration on every
             // future read. Count-only log; never the seed itself.
             Log.w(TAG, "seed migration deferred; will retry on next read");
+            AppLog.w("seed migration deferred; will retry on next read");
         }
         return seed;
     }

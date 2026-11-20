@@ -27,6 +27,39 @@ public final class SelfTest {
             wordlist = Bip39.loadWordlist(in);
         }
 
+        section("LogRing (M24 console ring: scrub + eviction)");
+        check("logring: plain status line passes through",
+                !LogRing.scrub("unlock rejected http=401").contains("***"));
+        check("logring: token=VALUE masked to keyword + ***",
+                LogRing.scrub("token=abc123def456").equals("token ***"));
+        check("logring: Authorization header line masked",
+                LogRing.scrub("Authorization: Bearer abc123").equals("Authorization ***"));
+        check("logring: PIN line masked",
+                LogRing.scrub("pin entered, 4 digits").equals("pin ***"));
+        check("logring: mnemonic line masked",
+                LogRing.scrub("mnemonic: abandon abandon about").equals("mnemonic ***"));
+        check("logring: keyword inside a word is not a hit (spinner)",
+                !LogRing.scrub("spinner shown").contains("***"));
+        check("logring: public txid survives scrub",
+                LogRing.scrub("broadcast ok txid=ce514b..cd4e")
+                        .equals("broadcast ok txid=ce514b..cd4e"));
+        LogRing ring = new LogRing(4);
+        for (int i = 1; i <= 6; i++) {
+            ring.add("evt " + i);
+        }
+        check("logring: eviction keeps capacity + total count",
+                ring.size() == 4 && ring.totalAdded() == 6);
+        boolean oldestGone = true;
+        for (String s : ring.snapshot()) {
+            oldestGone &= !s.contains("evt 1") && !s.contains("evt 2");
+        }
+        check("logring: oldest entries evicted first", oldestGone);
+        check("logring: snapshot oldest->newest with monotonic seq",
+                ring.snapshot().get(0).contains("evt 3")
+                        && ring.snapshot().get(3).contains("evt 6")
+                        && ring.snapshot().get(0).compareTo(
+                                ring.snapshot().get(3)) < 0);
+
         section("BIP39 (official Trezor vectors)");
         String mnZero = "abandon abandon abandon abandon abandon abandon"
                 + " abandon abandon abandon abandon abandon about";

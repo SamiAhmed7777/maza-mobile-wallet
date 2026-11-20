@@ -902,7 +902,10 @@ public final class SelfCustody {
                 () -> Api.http(host.baseUrl(), host.token(), "POST",
                         "/api/broadcast", body));
         if (b.code == 401) throw new Unauthorized();
-        if (b.code != 200) throw new IllegalArgumentException(b.errorText());
+        if (b.code != 200) {
+            AppLog.w("broadcast rejected http=" + b.code);
+            throw new IllegalArgumentException(b.errorText());
+        }
         String txid = b.json().optString("txid", "");
         if (changeAddress != null) {
             changeIndex++;
@@ -911,6 +914,7 @@ public final class SelfCustody {
         String shortId = txid.length() > 12
                 ? txid.substring(0, 6) + ".." + txid.substring(txid.length() - 4)
                 : txid;
+        AppLog.i("broadcast ok txid=" + shortId);
         ui.post(() -> {
             sendResult("Sent: " + shortId, pal.success());
             refresh();
@@ -931,8 +935,10 @@ public final class SelfCustody {
                 unauthorized();
                 return false;
             }
+            AppLog.i("watch import http=" + r.code + " count=" + addresses.size());
             return r.code == 200;
         } catch (IOException | JSONException e) {
+            AppLog.w("watch import transport error");
             return false;
         }
     }

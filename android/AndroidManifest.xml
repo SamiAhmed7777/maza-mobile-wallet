@@ -48,6 +48,12 @@
             android:exported="false"
             android:theme="@android:style/Theme.Material.NoActionBar"
             android:configChanges="orientation|screenSize|uiMode|keyboardHidden" />
+        <!-- M24: in-app console (AppLog ring). Not exported - reachable
+             only from the PIN-gated Settings screen. -->
+        <activity
+            android:name=".DiagnosticsActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|uiMode|keyboardHidden" />
     </application>
 
 </manifest>

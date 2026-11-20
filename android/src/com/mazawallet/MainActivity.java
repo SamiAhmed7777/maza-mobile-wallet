@@ -200,6 +200,7 @@ public class MainActivity extends Activity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        AppLog.i("app start");
         // S-4: saved theme mode through lane S-3's ThemeController, BEFORE the
         // first setContentView (showConnect() below). The manifest's inline
         // platform theme stays the pre-attach fallback.
@@ -954,6 +955,7 @@ public class MainActivity extends Activity
                 Api.Resp r = Net.withRetry("POST", "/api/unlock",
                         () -> Api.http(baseUrl, token, "POST", "/api/unlock", body));
                 if (r.code == 200) {
+                    AppLog.i("unlock ok");
                     prefs.edit().putString(KEY_URL, url).apply();
                     ui.post(() -> {
                         connecting = false;
@@ -962,10 +964,12 @@ public class MainActivity extends Activity
                     });
                     return;
                 }
+                AppLog.w("unlock rejected http=" + r.code);
                 err = r.code == 401
                         ? getString(R.string.net_invalid_token)
                         : getString(R.string.net_error_server, r.code);
             } catch (IOException e) {
+                AppLog.w("unlock transport: " + e.getClass().getSimpleName());
                 err = netCopy(e);
             } catch (JSONException e) {
                 err = getString(R.string.net_bad_response);

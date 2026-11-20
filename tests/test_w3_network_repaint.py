@@ -544,9 +544,9 @@ class OsDayNightFoldWiring(unittest.TestCase):
 
     def test_manifest_handles_uimode_without_recreate(self):
         manifest = read_text(os.path.join(REPO_ROOT, "android", "AndroidManifest.xml"))
-        self.assertEqual(manifest.count("android:configChanges="), 3,
-                         "all three activities (Main, Settings, Explorer) "
-                         "declare configChanges")
+        self.assertEqual(manifest.count("android:configChanges="), 4,
+                         "all four activities (Main, Settings, Explorer, "
+                         "Diagnostics) declare configChanges")
         self.assertNotIn('keyboardHidden">', manifest,
                          "an activity without uiMode would be recreated on a "
                          "day/night flip and drop the session")

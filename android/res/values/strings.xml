@@ -132,4 +132,17 @@
     <string name="notify_title">MAZA received</string>
     <string name="notify_src_bench">bench account</string>
     <string name="notify_src_wallet">self-custody wallet</string>
+
+    <!-- M24: app console (diagnostics). Status-only lines by contract;
+         LogRing.scrub truncates secret-shaped lines as defense-in-depth.
+         Additions only; pure ASCII. -->
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_diagnostics_note">App console: recent status events. Secrets are never logged; secret-shaped text is scrubbed.</string>
+    <string name="diag_open">View console</string>
+    <string name="diag_title">Console</string>
+    <string name="diag_note">Newest last. Status events only - tokens, seed and PIN are scrubbed.</string>
+    <string name="diag_empty">No events yet.</string>
+    <string name="diag_count">Showing %1$d of max %2$d events.</string>
+    <string name="diag_copy">Copy to clipboard</string>
+    <string name="diag_copied">Console copied</string>
 </resources>

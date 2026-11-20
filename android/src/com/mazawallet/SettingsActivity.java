@@ -226,6 +226,16 @@ public final class SettingsActivity extends Activity {
                 Typeface.NORMAL), mp(0, dp(8), 0, 0));
         renderTheme();
 
+        // ---- M24 diagnostics (app console) ----
+        LinearLayout diag = card();
+        root.addView(diag, mp(0, 0, 0, dp(12)));
+        diag.addView(label(getString(R.string.settings_diagnostics), 13, accent, Typeface.BOLD));
+        diag.addView(label(getString(R.string.settings_diagnostics_note), 12, muted,
+                Typeface.NORMAL), mp(0, dp(6), 0, dp(6)));
+        diag.addView(button(getString(R.string.diag_open), cardBg, text,
+                v -> startActivity(new Intent(this, DiagnosticsActivity.class))),
+                mp(0, dp(4), 0, 0));
+
         // ---- read-only chain explorer entry ----
         LinearLayout explorer = card();
         root.addView(explorer, mp(0, 0, 0, dp(12)));
