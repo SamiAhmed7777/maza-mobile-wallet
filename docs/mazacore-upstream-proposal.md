@@ -14,9 +14,12 @@ Audience: MazaCoin governance and MazaCore maintainers.
 Three independent findings from operating MazaCore 0.16.3 as the daemon
 behind a mobile wallet and its chain indexer:
 
-- **A — the `-reindex` transaction-index scan deadlocks** at the Hive-era
-  boundary (~height 2.07M) and restarts re-enter the stall (crash loop).
-  Consensus-neutral: the scan only rebuilds the optional txindex.
+- **A — a `-reindex` transaction-index scan stall at the Hive-era boundary**
+  (~height 2.07M) with a crash loop on restart. Consensus-neutral: the scan
+  only rebuilds the optional txindex. **2026-11-21 amendment:** further
+  evidence re-attributes the boundary failures to corrupt blk files on the
+  observation host — a fresh datadir crossed the boundary cleanly (see the
+  addendum in Finding A); the scan-bug attribution is now unproven.
 - **B — the shipped `libbitcoinconsensus` carries the pre-0.15 ABI** (no
   `amount` parameter in the main entry point; a separate `_with_amount`
   variant exists). Integrators following Bitcoin Core's 0.15+ ABI segfault
@@ -28,7 +31,8 @@ behind a mobile wallet and its chain indexer:
 Each finding lists what was observed, what works around it, and a concrete
 ask. None of the asks proposes a consensus-behavior change.
 
-## Finding A — txindex `-reindex` deadlock at the Hive-era boundary
+## Finding A — txindex `-reindex` stall / boundary failure at the Hive-era
+boundary (re-attributed — see the 2026-11-21 addendum)
 
 ### Observed behavior
 
@@ -41,8 +45,37 @@ stalls inside that boundary:
   a few minutes apart: growing = alive; parked + offset at EOF = stalled);
 - the daemon stays up but makes no index progress and never finishes;
 - restarting with `-reindex` still set and the FULL blk set present
-  re-enters the deadlocking scan: a crash loop was observed (12 restarts)
-  with the daemon refusing RPC over an inconsistent partial index.
+  re-enters the failing scan: a crash loop was observed (12 restarts)
+  with the daemon refusing RPC over an inconsistent partial index (see
+  the 2026-11-21 addendum).
+
+### Addendum 2026-11-21 — root cause re-attribution (evidence update)
+
+Additional controlled evidence from the same operator environment
+re-attributes the boundary failures:
+
+- The original host's boundary crashes were preceded by a
+  `ReadBlockFromDisk ... GetHash() doesn't match index (nFile=10)` fatal —
+  a directly-witnessed blk-file corruption signature, not a scan-state
+  symptom. Every restart re-entered it deterministically at the same
+  height because the same corrupt files were re-read every climb.
+- After a full datadir re-download (fresh blk files, same daemon version,
+  same host), plain initial block download crossed the boundary cleanly:
+  measured climb 1,620,889 -> 2,163,486 blocks between 18:56 and 19:33 PST
+  (~15-26k blocks/min across the window; boundary height 2,067,336 fell
+  inside it), ZERO fatal signatures in the bounded crossing journal window
+  (checked 04:05-04:30 CET 2026-11-21), the tip advancing through the
+  boundary heights, and ZERO daemon restarts through the crossing.
+
+Consequently: the "Hive-era boundary deadlock" is no longer claimed as a
+MazaCore bug. The boundary failures on this host are most consistent with
+corrupt blk files; the `-reindex` stall was never reproduced on a clean
+tree, so whether the txindex scan has an independent boundary defect is
+UNRESOLVED. The recovery recipe below remains validated as an operator
+procedure, and the asks (A1/A2) remain valid regardless of root cause:
+corrupt blk files currently manifest as a whole-daemon fatal that
+operators experience as a crash loop, and a silent scan stall still looks
+like progress.
 
 ### Recovery that works (validated)
 
@@ -55,7 +88,7 @@ stalls inside that boundary:
 3. `-reindex` the safe prefix (with `txindex=1` if that is the goal). The
    prefix scan completes in minutes-to-an-hour instead of hanging.
 4. Restore the held files (only AFTER the scan phase has ended — restoring
-   earlier re-enters the deadlock).
+   earlier re-enters the failure mode).
 5. Run `-reindex-chainstate` once (then remove the flag). Validation replay
    was observed at roughly 33k blocks/min and passes THROUGH the former
    stall zone, because chainstate replay does not use the txindex scanner.
@@ -70,13 +103,17 @@ runbook in the wallet project's ops notes; it should live upstream.
 
 ### Asks
 
-- **A1** — fix the txindex scan so it either completes past the Hive-era
-  boundary or fails LOUDLY with a named, actionable error. A silent stall
-  is the worst outcome for operators: it looks like progress and ends in
-  the crash loop above. (Consensus-neutral: index-only code.)
-- **A2** — document the boundary and the "do not restart with `-reindex`
-  while the full blk set is present" trap in release notes or docs, along
-  with the recovery recipe.
+- **A1** — IF the txindex scan defect is confirmed on a clean tree, fix
+  the scan so it either completes past the boundary or fails LOUDLY with
+  a named, actionable error. A silent stall is the worst outcome for
+  operators: it looks like progress and ends in the crash loop above.
+  Independent of that confirmation, corrupt blk files today manifest as a
+  whole-daemon fatal that operators experience as a crash loop — a named,
+  actionable read error with a recovery pointer is the minimum ask.
+  (Consensus-neutral: index-only code.)
+- **A2** — document the boundary failure mode and the "do not restart
+  with `-reindex` while the full blk set is present" trap in release
+  notes or docs, along with the recovery recipe.
 
 ## Finding B — `libbitcoinconsensus` ships the pre-0.15 ABI
 
@@ -146,8 +183,9 @@ depends on Finding A being fixed. `maza_indexer/` (stdlib-only, sqlite,
 merkle proofs, JSON API) provides balances/history/proofs/broadcast
 watch-support from a normally-synced non-txindex node, and is deployed.
 The community ElectrumX kit remains parked for operators who specifically
-want the Electrum wire protocol — THAT path requires txindex, so Finding A
-is the open blocker for Electrum-server operators on MazaCore 0.16.3.
+want the Electrum wire protocol — THAT path requires txindex, so the
+txindex-build question (Finding A, see the 2026-11-21 addendum) remains
+the open blocker for Electrum-server operators on MazaCore 0.16.3.
 
 ## Safety frame
 
@@ -177,11 +215,17 @@ the wallet project maintains vector-anchored instruments:
 
 ## Questions for governance
 
-1. A1 — is a txindex scan fix wanted upstream? If yes, should the fix
-   complete past the boundary or fail loudly (we recommend fail-loud as
-   the minimum, completion as the goal)?
-2. A2 — where should the deadlock + recovery documentation live (release
-   notes vs docs/), and may we submit it as a PR?
+1. A1 — given the 2026-11-21 re-attribution (Finding A addendum: boundary
+   failures consistent with corrupt blk files; scan bug unproven), is
+   txindex-scan hardening still wanted upstream? If the scan defect is
+   confirmed: should the fix complete past the boundary or fail loudly
+   (we recommend fail-loud as
+   the minimum, completion as the goal)? Independent of root cause,
+   corrupt blk files currently manifest as a whole-daemon crash loop — a
+   named, actionable read error with a recovery pointer would fix that
+   operator experience.
+2. A2 — where should the recovery + corruption documentation live
+   (release notes vs docs/), and may we submit it as a PR?
 3. B1 — add the ABI note to release notes/header? B2 — adopt the 0.15+
    entry point in a future release, or document both variants as-is?
 4. C1/C2/C3 — may we submit the documentation PRs (source text already
@@ -191,5 +235,6 @@ the wallet project maintains vector-anchored instruments:
    settles B2?
 
 ---
-*Prepared 2026-11-20 · MAZA mobile wallet project · decisions rest with
-MazaCoin governance (Payu) per the project's standing directive.*
+*Prepared 2026-11-20 · amended 2026-11-21 (Finding A evidence addendum —
+root cause re-attribution) · MAZA mobile wallet project · decisions rest
+with MazaCoin governance (Payu) per the project's standing directive.*
