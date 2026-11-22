@@ -3,7 +3,6 @@ package com.mazawallet;
 import android.content.Context;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
-import android.util.Log;
 import com.mazawallet.crypto.SeedCryptAes;
 import java.io.File;
 import java.io.FileInputStream;
@@ -21,7 +20,7 @@ import javax.crypto.SecretKey;
  * place on first read (atomic: temp file + fsync + rename; the plaintext
  * bytes are gone after the rename). A failed migration is DEFERRED, not
  * fatal: the seed keeps working from memory and every later read retries;
- * a count-only Log.w records the deferral (never the seed itself), so
+ * a count-only AppLog.w records the deferral (never the seed itself), so
  * plaintext-at-rest never continues silently.
  *
  * Failure contract:
@@ -35,7 +34,6 @@ import javax.crypto.SecretKey;
  */
 public final class SeedVault {
 
-    private static final String TAG = "SeedVault";
     public static final byte[] MAGIC = {'M', 'Z', 'A', 'E', '1'};
     static final String KEY_ALIAS = "maza_seed_wrap"; // package-visible: SettingsActivity wipe deletes the entry
     private static final String TMP_SUFFIX = ".tmp";
@@ -83,7 +81,6 @@ public final class SeedVault {
             // Keystore / encryption / disk failure: keep serving the seed
             // from memory this session and RETRY the migration on every
             // future read. Count-only log; never the seed itself.
-            Log.w(TAG, "seed migration deferred; will retry on next read");
             AppLog.w("seed migration deferred; will retry on next read");
         }
         return seed;

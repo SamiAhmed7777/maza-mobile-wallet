@@ -52,7 +52,7 @@ public final class Api {
         HttpURLConnection c =
                 (HttpURLConnection) new URL(baseUrl + path).openConnection();
         try {
-            long t0 = System.currentTimeMillis();
+            long t0 = System.nanoTime();
             c.setConnectTimeout(10000);
             c.setReadTimeout(15000);
             c.setRequestMethod(method);
@@ -70,12 +70,19 @@ public final class Api {
                     ? c.getErrorStream() : c.getInputStream();
             byte[] payload = readAll(in);
             // M24: one status line per request through this single choke
-            // point. Path only (query stripped); headers and bodies are
-            // never logged (the token rides the Authorization header).
-            // t0 covers body write + round trip (judge r1 polish).
-            AppLog.i(method + " " + pathOnly(path) + " -> " + code
-                    + " (" + (System.currentTimeMillis() - t0) + "ms)");
+            // point. Route identity via Net.normalizePath (the same rule
+            // the retry table keys on); headers/bodies never logged (the
+            // token rides the Authorization header).
+            AppLog.i(method + " " + Net.normalizePath(path) + " -> " + code
+                    + " (" + (System.nanoTime() - t0) / 1_000_000L + "ms)");
             return new Resp(code, payload);
+        } catch (IOException e) {
+            // M25 (simplify pass): transport failures used to produce NO
+            // console line - the most common failure mode was invisible.
+            // Exception class name only; never e.getMessage().
+            AppLog.w(method + " " + Net.normalizePath(path) + " -> FAIL "
+                    + e.getClass().getSimpleName());
+            throw e;
         } finally {
             c.disconnect();
         }
@@ -94,9 +101,6 @@ public final class Api {
         }
     }
 
-    /** M24: path without its query string - the only part ever logged. */
-    private static String pathOnly(String path) {
-        int q = path.indexOf('?');
-        return q < 0 ? path : path.substring(0, q);
-    }
+    /** M25: route identity for log lines comes from Net (the retry table's
+     *  own normalizer) - this class no longer keeps a second copy. */
 }

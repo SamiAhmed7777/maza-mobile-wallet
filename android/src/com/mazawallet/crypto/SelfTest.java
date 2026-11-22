@@ -33,7 +33,7 @@ public final class SelfTest {
         check("logring: token=VALUE masked to keyword + ***",
                 LogRing.scrub("token=abc123def456").equals("token ***"));
         check("logring: Authorization header line masked",
-                LogRing.scrub("Authorization: Bearer abc123").equals("Authorization ***"));
+                LogRing.scrub("Authorization: Bearer dJ5kQ2vX7nR4tW8yU1sZ3aM6").equals("Authorization ***"));
         check("logring: PIN line masked",
                 LogRing.scrub("pin entered, 4 digits").equals("pin ***"));
         check("logring: mnemonic line masked",

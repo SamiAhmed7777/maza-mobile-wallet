@@ -14,32 +14,36 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.mazawallet.crypto.LogRing;
+import java.util.List;
 
 /**
  * M24: in-app console - the AppLog ring (newest last) with copy-to-clipboard.
- * Reached only from Settings (itself behind the PIN-gated WALLET tab), so
- * the entry is not exported in the manifest. Lines are status-only by
- * contract; LogRing.scrub truncates anything secret-shaped as defense.
+ * Reached only through the app's own Settings screen (manifest
+ * exported=false); the protection is that flag plus the status-only
+ * logging contract (AppLog/LogRing scrub as defense-in-depth) - Settings'
+ * main page itself has no PIN gate, so no richer content may ever live in
+ * the ring. Re-created freely on day/night flips (no configChanges):
+ * onCreate re-themes; onResume re-reads the ring.
  */
 public final class DiagnosticsActivity extends Activity {
 
-    private SharedPreferences prefs;
-    private int bg, cardBg, text, muted, accent;
+    private TextView console;
+    private TextView count;
+    private String rendered = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        prefs = getSharedPreferences(MainActivity.PREFS, MODE_PRIVATE);
+        SharedPreferences prefs =
+                getSharedPreferences(MainActivity.PREFS, MODE_PRIVATE);
         // Contract (lane S-3): apply the saved mode BEFORE any view is built.
-        String mode = SettingsActivity.themeMode(prefs);
-        ThemeController.applyTheme(this, mode);
+        ThemeController.applyTheme(this, SettingsActivity.themeMode(prefs));
         UiTheme.Palette pal = UiTheme.palette(this);
-        bg = pal.background();
-        cardBg = pal.surface();
-        text = pal.textPrimary();
-        muted = pal.textSecondary();
-        accent = pal.accent();
+        int bg = pal.background();
+        int cardBg = pal.surface();
+        int text = pal.textPrimary();
+        int muted = pal.textSecondary();
+        int accent = pal.accent();
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -60,23 +64,19 @@ public final class DiagnosticsActivity extends Activity {
         note.setTextColor(muted);
         root.addView(note, margins(0, 0, dp(8)));
 
-        TextView console = new TextView(this);
+        console = new TextView(this);
         console.setTypeface(Typeface.MONOSPACE);
         console.setTextSize(11);
         console.setTextColor(text);
         // ScrollView is the single scroll mechanism (judge r1 polish: no
         // ScrollingMovementMethod nesting).
-        String dump = AppLog.dump();
-        console.setText(dump.length() == 0
-                ? getString(R.string.diag_empty) : dump);
         ScrollView scroller = new ScrollView(this);
         scroller.addView(console);
         LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
         root.addView(scroller, scrollLp);
 
-        TextView count = new TextView(this);
-        count.setText(getString(R.string.diag_count, AppLog.size(), LogRing.DEFAULT_CAPACITY));
+        count = new TextView(this);
         count.setTextSize(12);
         count.setTextColor(muted);
         root.addView(count, margins(0, dp(8), dp(8)));
@@ -87,15 +87,41 @@ public final class DiagnosticsActivity extends Activity {
         copy.setTextColor(text);
         copy.setOnClickListener(v -> copyConsole());
         root.addView(copy, margins(ViewGroup.LayoutParams.MATCH_PARENT, 0, 0));
+
+        renderConsole();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // The ring keeps filling while this screen is open (the 15s poll
+        // keeps running) - re-render so the body, the count line and the
+        // clipboard payload can never disagree (M25 simplify pass).
+        renderConsole();
+    }
+
+    /** One locked read of the ring feeds the body AND the count line. */
+    private void renderConsole() {
+        List<String> lines = AppLog.snapshot();
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(line);
+        }
+        rendered = sb.toString();
+        console.setText(rendered.isEmpty()
+                ? getString(R.string.diag_empty) : rendered);
+        count.setText(getString(R.string.diag_count, lines.size(),
+                AppLog.capacity()));
     }
 
     private void copyConsole() {
         ClipboardManager cm =
                 (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        String payload = AppLog.dump();
-        cm.setPrimaryClip(ClipData.newPlainText(
-                "maza-console", payload.length() == 0
-                        ? getString(R.string.diag_empty) : payload));
+        cm.setPrimaryClip(ClipData.newPlainText("maza-console",
+                rendered.isEmpty() ? getString(R.string.diag_empty) : rendered));
         Toast.makeText(this, R.string.diag_copied, Toast.LENGTH_SHORT).show();
     }
 

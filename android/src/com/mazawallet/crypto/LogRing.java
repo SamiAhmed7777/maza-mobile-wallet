@@ -25,14 +25,16 @@ public final class LogRing {
     public static final int DEFAULT_CAPACITY = 250;
 
     /** Lowercase; boundary-checked so "spinner" does not hit "pin". */
-    static final String[] KEYWORDS = {
+    private static final String[] KEYWORDS = {
         "token", "bearer", "authorization", "mnemonic", "password",
         "seed phrase", "pin",
     };
 
     private final String[] buf;
     private long added;   // total events ever added (1-based sequence ids)
-    private int count;    // events currently retained (<= buf.length)
+
+    // M25 (simplify pass): the retained count was redundant state - it is
+    // always min(added, buf.length) - so size()/snapshot() derive it.
 
     /** Shared per-process formatter (allocation polish, judge r1): add() is
      *  synchronized and stamp() locks the class, so the non-thread-safe
@@ -55,11 +57,14 @@ public final class LogRing {
      *  The shared formatter is safe here: add() is synchronized. */
     public synchronized String add(String event) {
         added++;
-        String line = stamp() + " #" + added + " " + scrub(String.valueOf(event));
-        buf[(int) ((added - 1) % buf.length)] = line;
-        if (count < buf.length) {
-            count++;
+        String text = scrub(String.valueOf(event));
+        // M25: bound the LINE as well as the entry count - status lines are
+        // short by contract, so 300 chars is generous headroom.
+        if (text.length() > 300) {
+            text = text.substring(0, 300) + "...";
         }
+        String line = stamp() + " #" + added + " " + text;
+        buf[(int) ((added - 1) % buf.length)] = line;
         return line;
     }
 
@@ -71,8 +76,8 @@ public final class LogRing {
 
     /** Retained lines, oldest first. */
     public synchronized List<String> snapshot() {
-        List<String> out = new ArrayList<String>(count);
-        long first = added - count + 1;
+        List<String> out = new ArrayList<String>(size());
+        long first = added - size() + 1;
         for (long s = first; s <= added; s++) {
             out.add(buf[(int) ((s - 1) % buf.length)]);
         }
@@ -80,7 +85,7 @@ public final class LogRing {
     }
 
     public synchronized int size() {
-        return count;
+        return (int) Math.min(added, buf.length);
     }
 
     public synchronized long totalAdded() {

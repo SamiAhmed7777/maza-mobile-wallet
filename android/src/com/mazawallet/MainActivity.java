@@ -964,14 +964,17 @@ public class MainActivity extends Activity
                     });
                     return;
                 }
-                AppLog.w("unlock rejected http=" + r.code);
                 err = r.code == 401
                         ? getString(R.string.net_invalid_token)
                         : getString(R.string.net_error_server, r.code);
             } catch (IOException e) {
-                AppLog.w("unlock transport: " + e.getClass().getSimpleName());
+                // Transport failures are logged at the Api.http choke point
+                // (M25); this site only adds the user-facing copy.
                 err = netCopy(e);
             } catch (JSONException e) {
+                // Body arrived but did not parse (never e.getMessage() -
+                // org.json messages can quote response bytes).
+                AppLog.w("unlock bad response");
                 err = getString(R.string.net_bad_response);
             }
             final String msg = err;

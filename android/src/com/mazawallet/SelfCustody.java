@@ -10,7 +10,6 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -869,7 +868,7 @@ public final class SelfCustody {
             if (actual == fee) {
                 // Count-only convergence note (judge polish fold, r1): no
                 // addresses, amounts or tokens ever reach the log.
-                Log.d("SelfCustody", "send fee stabilized after "
+                AppLog.d("send fee stabilized after "
                         + (attempt + 1) + " pass(es)");
                 break;
             }
@@ -902,10 +901,7 @@ public final class SelfCustody {
                 () -> Api.http(host.baseUrl(), host.token(), "POST",
                         "/api/broadcast", body));
         if (b.code == 401) throw new Unauthorized();
-        if (b.code != 200) {
-            AppLog.w("broadcast rejected http=" + b.code);
-            throw new IllegalArgumentException(b.errorText());
-        }
+        if (b.code != 200) throw new IllegalArgumentException(b.errorText());
         String txid = b.json().optString("txid", "");
         if (changeAddress != null) {
             changeIndex++;
@@ -935,10 +931,9 @@ public final class SelfCustody {
                 unauthorized();
                 return false;
             }
-            AppLog.i("watch import http=" + r.code + " count=" + addresses.size());
+            AppLog.i("watch import count=" + addresses.size());
             return r.code == 200;
         } catch (IOException | JSONException e) {
-            AppLog.w("watch import transport error");
             return false;
         }
     }
