@@ -561,6 +561,51 @@ additionally pins LIVE vectors fetched from the deployed public indexer
   `GET /api/v0/proof` with 3 attempts, non-spend — reads retry, spends
   never do.
 
+## D18 — MAZA network parameters (S-6 testnet code half, added 2026-11-23)
+
+Testnet support inherits MazaCore's OWN chain parameters — never invented,
+never adjusted to make code pass. Every value below was FETCHED from
+MazaCore v0.16.3 source (github.com/MazaCoin/maza tag v0.16.3,
+`src/chainparams.cpp`):
+
+| Network | PUBKEY_ADDRESS | SCRIPT_ADDRESS | SECRET_KEY (WIF) | bech32_hrp | strNetworkID | Cite |
+|---|---|---|---|---|---|---|
+| mainnet | 50 | 9 | 224 | maza | main | chainparams.cpp:171-173, :177 |
+| testnet | 88 | 188 | 239 | tmaza | test | CTestNetParams :211, :297-299, :303 |
+
+- **Shape:** `crypto/NetworkParams.java` — immutable singletons MAINNET /
+  TESTNET + a fail-loud `forId` (unknown persisted ids throw; no silent
+  mainnet fallback). `Bip44Maza` gains network-aware `address/wif/isNetworkAddress`
+  overloads; `ScanOrigin.parseForNetwork` runs the same origin-discipline
+  contract against a chosen network's version byte. The BIP44 derivation
+  PATH is unchanged (m/44'/13' on both networks — only the encoding
+  version bytes differ).
+- **Fail-safe default:** every UN-parameterized entry point
+  (`Bip44Maza.address(key)`, `Bip44Maza.wif(key)`, `ScanOrigin.parse`)
+  stays MAINNET-pinned. There is NO global mutable network mode in the
+  crypto layer; a caller must pass TESTNET explicitly. No existing call
+  path changes behavior in this changeset.
+- **Cross-network guard:** a mainnet address fails the TESTNET contract
+  and a testnet address fails the MAINNET contract — this is the
+  mechanism behind the spec Phase 7 rule "never broadcast an unintended
+  mainnet transaction" (a cross-network recipient can never pass the
+  SEND field's validation).
+- **Verification ladder (all three layers agree before the pins are
+  trusted):** (1) fetched source constants above; (2) independent oracle
+  derivation — `tools/oracle.py` functions at version 88/239, the same
+  code that reproduces every mainnet pin (mainnet WIF construction
+  sanity-checked against the pinned `aGpgV4…` value first); (3)
+  NODE-validated — samihost testnet mazad (`chain=test`) returns
+  `isvalid=true` for all three pinned testnet addresses and
+  `isvalid=false` for both pinned mainnet addresses (read-only
+  `validateaddress` probes; no key was ever imported). The full set is
+  pinned in the SelfTest section "MAZA testnet profile" (desktop selftest
+  328 checks) and the wiring in `tests/test_network_params.py`.
+- **Remainder (S-6 second half):** Settings network switch +
+  per-network endpoint + a controlled-env testnet backend, then the
+  device/controlled-env proof. Not started; no user-visible testnet
+  surface exists in this changeset.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation

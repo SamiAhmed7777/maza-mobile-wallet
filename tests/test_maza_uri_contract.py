@@ -91,7 +91,9 @@ class ScanSideRouting(unittest.TestCase):
         src = read(SCAN_ORIGIN)
         self.assertIn("MazaUri.Parsed p = MazaUri.parse(s);", src,
                       "maza: payloads go through the M9 parser")
-        self.assertIn("addressResult(p.address, p.amountSats)", src,
+        # S-6-i widened addressResult with a NetworkParams parameter; the
+        # delegation pin follows the shipped call shape
+        self.assertIn("addressResult(p.address, p.amountSats, params)", src,
                       "the parsed address re-validates through the "
                       "send-path base58check contract")
         self.assertNotIn("URI parameters are not supported yet", src,

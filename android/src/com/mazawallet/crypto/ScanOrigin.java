@@ -15,9 +15,13 @@ import java.util.Locale;
  *    rejected outright (base58 never contains ':', so any colon-carrying
  *    payload is URI-shaped and can never be a spendable address).
  *  - The address must decode as base58check with exactly 21 payload
- *    bytes and version 50 (Bip44Maza.ADDRESS_VERSION) - the SAME
- *    contract the SelfCustody send path enforces on typed addresses,
- *    so a scan can never insert anything the typed path would reject.
+ *    bytes and the version byte of the ACTIVE network (S-6: parse() pins
+ *    MAINNET - version 50 via Bip44Maza.ADDRESS_VERSION / NetworkParams
+ *    .MAINNET; parseForNetwork validates against the chosen
+ *    NetworkParams instead, so a testnet scan rejects mainnet addresses
+ *    and vice versa) - the SAME contract the SelfCustody send path
+ *    enforces on typed addresses, so a scan can never insert anything
+ *    the typed path would reject.
  *  - maza:/maza:// payloads go through MazaUri.parse (M9: the official
  *    payment-URI contract ported from MazaCoin guiutil.cpp) and the
  *    parsed address still re-validates through the SAME base58check
@@ -62,9 +66,21 @@ public final class ScanOrigin {
     /**
      * Classify scanned QR payload text. Never throws; never performs any
      * network or filesystem action; returns ok only for a well-formed
-     * MAZA mainnet P2PKH address (bare or after a maza: scheme prefix).
+     * MAZA MAINNET P2PKH address (bare or after a maza: scheme prefix).
      */
     public static Result parse(String scanned) {
+        return parseForNetwork(scanned, NetworkParams.MAINNET);
+    }
+
+    /**
+     * Network-aware variant (S-6): same origin discipline, but the
+     * address contract validates against params.pubkeyVersion instead of
+     * the mainnet pin. A TESTNET scan rejects every mainnet address and
+     * vice versa — a cross-network address can never enter the SEND
+     * field, which is the guard behind the spec's "never broadcast an
+     * unintended mainnet transaction" rule.
+     */
+    public static Result parseForNetwork(String scanned, NetworkParams params) {
         if (scanned == null) {
             return reject("Nothing scanned");
         }
@@ -89,7 +105,7 @@ public final class ScanOrigin {
             if (!p.ok) {
                 return reject(p.reason);
             }
-            return addressResult(p.address, p.amountSats);
+            return addressResult(p.address, p.amountSats, params);
         }
         if (lower.startsWith("http:") || lower.startsWith("https:")
                 || lower.startsWith("www.")) {
@@ -101,10 +117,11 @@ public final class ScanOrigin {
         if (s.indexOf(':') >= 0) {
             return reject("Unsupported URI scheme - content is never opened");
         }
-        return addressResult(s, 0L);
+        return addressResult(s, 0L, params);
     }
 
-    private static Result addressResult(String s, long amountSats) {
+    private static Result addressResult(String s, long amountSats,
+                                        NetworkParams params) {
         byte[] payload;
         try {
             payload = Base58Check.decode(s);
@@ -115,7 +132,7 @@ public final class ScanOrigin {
             return reject("Not a valid MAZA address");
         }
         if (payload.length != 21
-                || (payload[0] & 0xFF) != Bip44Maza.ADDRESS_VERSION) {
+                || (payload[0] & 0xFF) != params.pubkeyVersion) {
             return reject("Not a MAZA address");
         }
         return new Result(true, s, null, amountSats);
