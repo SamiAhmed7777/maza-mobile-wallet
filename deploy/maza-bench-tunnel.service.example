@@ -24,7 +24,7 @@ Wants=network-online.target
 #                         GATEWAY (e.g. 127.0.0.1 when the gateway runs
 #                         walletbench locally).
 #   <key-path>          : SSH private key that can reach the gateway.
-ExecStart=/usr/bin/ssh -N -L <local-bind-ip>:18701:<bench-host-ip>:18701 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -i <key-path> -o IdentitiesOnly=yes <user>@<ssh-gateway-host>
+ExecStart=/usr/bin/ssh -N -L <local-bind-ip>:18701:<bench-host-ip>:18701 -L <local-bind-ip>:18702:<bench-host-ip>:18702 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -i <key-path> -o IdentitiesOnly=yes <user>@<ssh-gateway-host>
 Restart=always
 RestartSec=5
 

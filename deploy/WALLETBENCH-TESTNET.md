@@ -16,6 +16,7 @@ mazad, sharing the SAME release tree as the mainnet bench
 | systemd unit | `maza-wallet-bench.service` | `maza-wallet-bench-testnet.service` |
 | env file | `/etc/maza-wallet-bench.env` | `/etc/maza-wallet-bench-testnet.env` |
 | bind | tailscale IP :18701 | tailscale IP :18702 |
+| client transport | tunnel-host listener :18701 | tunnel-host listener :18702 (same tunnel unit, second `-L` forward) |
 | node RPC | mainnet mazad (12832) | testnet mazad (`/var/lib/mazad-testnet`, RPC 18446) |
 | bench account | `mobile-play` | `mobile-play-testnet` |
 | state file | `/var/lib/maza-wallet-bench/state.json` | `/var/lib/maza-wallet-bench-testnet/state.json` |
@@ -31,11 +32,28 @@ only; no app or backend code changes.
 
 TAILNET-ONLY, by decision. There is no public front door for :18702. The
 app-side Settings network switch (S-6-ii) is not shipped yet, so nothing
-user-visible points here; when a device proof needs it, BlueStacks on a
-tailnet-joined machine reaches the tailnet bind directly. ANY future
-public exposure of the testnet bench is its own decision and inherits the
-public-endpoint security rule (rotate the token BEFORE exposure, verify
-old tokens 401, deliver tester tokens by DM only).
+user-visible points here.
+
+Client transport (measured 2026-11-23): direct cross-node tailnet TCP to the
+bench host's tailnet bind FAILED FROM BOTH TESTED CLIENTS on BOTH ports
+(:18701 and :18702 — fresh probe matrix: connection refused/timeout, HTTP
+000), the tailscale netstack-filter behavior the mainnet bench already lived
+through; the same clients reach BOTH ports fine through the tunnel host's
+listener. The working path mirrors the mainnet bench's proven topology: the
+maintainers' tunnel unit carries BOTH forwards
+(`-L <local-bind-ip>:18701:<bench-host-ip>:18701
+-L <local-bind-ip>:18702:<bench-host-ip>:18702` — placeholder vocabulary as
+in `deploy/maza-bench-tunnel.service.example`; the maintainers' real unit
+stays off-repo), so tailnet clients reach `<tunnel-host>:18702` exactly like
+`<tunnel-host>:18701`. Client-side
+verified 2026-11-23: both ports answer 401 from a tailnet-joined
+machine (authenticated gates reachable, token still required per port).
+For a self-hosted twin of this setup, add the matching second `-L` to
+your own tunnel unit (`deploy/maza-bench-tunnel.service.example` shows
+the shape). ANY future public exposure of the testnet bench is its own
+decision and inherits the public-endpoint security rule (rotate the
+token BEFORE exposure, verify old tokens 401, deliver tester tokens by
+DM only).
 
 ## Install / verify
 
