@@ -39,10 +39,13 @@ is reserved for --execute.
 Credentials (WB_TOKEN, RPC user/password) are parsed in-process and are
 never printed, never placed in argv, never logged. Addresses ARE printed
 (blockchain-public data). Exit codes: 0 success/dry-run, 1 gate or probe
-failure, 2 selftest failure.
+failure (node-RPC transport failures — stalled/refused/non-JSON — land
+here as named GateFail FATAL lines, never raw tracebacks), 2 selftest
+failure.
 """
 
 import argparse
+import http.client
 import json
 import os
 import subprocess
@@ -137,8 +140,24 @@ def rpc_call(conf: Dict[str, str], method: str,
     raw = (conf.get("rpcuser", "") + ":" + conf.get("rpcpassword", ""))
     req.add_header("Authorization", "Basic "
                    + base64.b64encode(raw.encode()).decode())
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        payload = json.loads(resp.read())
+    # Transport failures must exit as a named gate failure (FATAL line,
+    # exit 1), never a raw traceback: a stalled node RPC raised raw
+    # TimeoutError/URLError out of run() (residual (b), 47th tick 2026-11-24).
+    # socket.timeout/TimeoutError/ConnectionRefusedError/DNS failures are
+    # OSError subclasses; urllib wraps some as URLError; HTTPError (4xx/5xx
+    # from the daemon) is a URLError subclass too; torn reads raise
+    # http.client.HTTPException. The message carries the method and the
+    # failure reason only — never creds, never a response payload.
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read())
+    except (urllib.error.URLError, http.client.HTTPException,
+            OSError) as exc:
+        raise GateFail(f"rpc {method} transport failure: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise GateFail(f"rpc {method}: non-JSON response") from exc
+    if not isinstance(payload, dict):
+        raise GateFail(f"rpc {method}: non-object JSON response")
     if payload.get("error"):
         raise GateFail(f"rpc {method} error: {payload['error']}")
     return payload.get("result")
