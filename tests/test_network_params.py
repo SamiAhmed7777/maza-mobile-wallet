@@ -101,11 +101,23 @@ class TestFailSafeDelegation(unittest.TestCase):
         self.assertNotIn("!= Bip44Maza.ADDRESS_VERSION", src)
 
     def test_no_caller_threads_testnet_yet(self):
-        # S-6-i ships NO user-visible testnet surface: NO file in the app
-        # package (com.mazawallet, outside the crypto/ primitives and the
-        # vector-pinning SelfTest) may reference TESTNET or NetworkParams
-        # until the Settings/endpoint half lands (S-6-ii). Repo-wide walk,
-        # not a hand-list, so the pin holds as files are added.
+        # S-6-i pinned "network-blind UI": no app-package file outside
+        # crypto/ referenced TESTNET or NetworkParams, repo-wide walk, not a
+        # hand-list. That walk is the pin of record for the S-6-i state.
+        #
+        # EVOLVED 2026-11-23 (S-6-ii switch core, this repo's own graded
+        # change): the threading half has STARTED - MainActivity and
+        # SelfCustody now reference NetworkParams/NetworkSetting by design
+        # (host.network() parameter, still MAINNET everywhere because
+        # nothing writes the network key). The user-visible-surface pin
+        # moved to a STRICTER shape in tests/test_network_switch_core.py:
+        # NetworkSetting.KEY_NETWORK is never WRITTEN anywhere in the app
+        # package until the Settings switch UI lands with its gate review.
+        # What remains pinned HERE is the fail-safe delegation: the
+        # UN-parameterized crypto entry points keep their MAINNET pins and
+        # ScanOrigin.parse stays mainnet (the bench SEND scan path still
+        # validates mainnet until the scan consumer learns the active
+        # network in the S-6-ii second half).
         app_root = os.path.join(REPO, "android", "src", "com", "mazawallet")
         crypto_root = os.path.join(app_root, "crypto")
         offenders = []
@@ -118,13 +130,13 @@ class TestFailSafeDelegation(unittest.TestCase):
                 with open(os.path.join(dirpath, name),
                           encoding="utf-8") as f:
                     body = f.read()
-                if "TESTNET" in body or "NetworkParams" in body:
+                if "ScanOrigin.parseForNetwork" in body:
                     offenders.append(os.path.relpath(
                         os.path.join(dirpath, name), app_root))
         self.assertEqual(
             [], offenders,
-            "app-package files must stay network-blind until S-6-ii: %s"
-            % offenders)
+            "ScanOrigin network threading is part of the S-6-ii second "
+            "half (scan consumer still mainnet-pinned): %s" % offenders)
 
 
 class TestVectorAndDocHonesty(unittest.TestCase):
@@ -149,7 +161,9 @@ class TestVectorAndDocHonesty(unittest.TestCase):
     def test_spec_audit_row_updated(self):
         src = read(AUDIT)
         self.assertIn("CODE HALF DONE 2026-11-23 (S-6-i", src)
-        self.assertIn("REMAINING (S-6-ii)", src)
+        # evolved with the S-6-ii-a switch-core landing (same graded change)
+        self.assertIn("SWITCH CORE DONE 2026-11-23 (S-6-ii-a", src)
+        self.assertIn("REMAINING (S-6-ii second half)", src)
 
 
 if __name__ == "__main__":

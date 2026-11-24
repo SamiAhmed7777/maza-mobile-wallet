@@ -245,6 +245,37 @@ public final class SelfTest {
         check("networkparams reflection: fields final, no public ctor",
                 networkParamsReflectionOk());
 
+        // ------------------------------------------- S-6-ii switch core
+        // NetworkSetting is the UI layer's prefs contract: fail-safe
+        // MAINNET on null/absent (every pre-switch install), fail-loud on
+        // an unknown stored id, and the per-network endpoint keys. The
+        // composition check proves the exact path the wallet now uses
+        // (resolve -> derive -> encode) lands on the NODE-VALIDATED testnet
+        // vector pinned above - the switch core rides the same anchors,
+        // never its own constants.
+        String stored = "test";
+        check("networksetting: null/absent resolves MAINNET (fail-safe)",
+                NetworkSetting.resolve(null) == NetworkParams.MAINNET
+                        && NetworkSetting.resolve("") == NetworkParams.MAINNET);
+        check("networksetting: stored ids resolve both networks",
+                NetworkSetting.resolve("main") == NetworkParams.MAINNET
+                        && NetworkSetting.resolve(stored)
+                                == NetworkParams.TESTNET);
+        check("networksetting: unknown id FAILS LOUD (no silent mainnet)",
+                !networkSettingUnknownAccepted());
+        check("networksetting: endpoint keys per network",
+                NetworkSetting.KEY_URL_MAINNET.equals(
+                        NetworkSetting.urlPrefKey(NetworkParams.MAINNET))
+                        && NetworkSetting.KEY_URL_TESTNET.equals(
+                        NetworkSetting.urlPrefKey(NetworkParams.TESTNET))
+                        && !NetworkSetting.KEY_URL_TESTNET.equals(
+                        NetworkSetting.KEY_URL_MAINNET));
+        // Composition: resolve("test") -> encode on the ALREADY-derived
+        // canonical key k0 reproduces the pinned testnet vector above.
+        check("networksetting composition: resolve(test) -> pinned testnet addr",
+                Bip44Maza.address(k0, NetworkSetting.resolve(stored))
+                        .equals("cdYDYkC2r7jqcZquHojyCbYP1sMapXBSLU"));
+
         section("BTC cross-check (same mnemonic, m/44'/0'/0'/0/0, version 0x00)");
         Bip32.Node btc = Bip32.derive(Bip32.masterKey(mazaSeed), "m/44'/0'/0'/0/0");
         byte[] h160 = Base58Check.hash160(btc.pub());
@@ -1754,6 +1785,16 @@ public final class SelfTest {
     private static boolean forIdUnknownAccepted() {
         try {
             NetworkParams.forId("regtest-unknown");
+            return true; // silently returned something: BAD
+        } catch (RuntimeException e) {
+            return false; // threw: correct fail-loud behavior
+        }
+    }
+
+    /** Same fail-loud probe for NetworkSetting.resolve (S-6-ii switch core). */
+    private static boolean networkSettingUnknownAccepted() {
+        try {
+            NetworkSetting.resolve("regtest-unknown");
             return true; // silently returned something: BAD
         } catch (RuntimeException e) {
             return false; // threw: correct fail-loud behavior

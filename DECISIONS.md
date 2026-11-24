@@ -611,6 +611,24 @@ MazaCore v0.16.3 source (github.com/MazaCoin/maza tag v0.16.3,
   switch and the on-chain testnet proof remain open (the samihost
   testnet chain is empty — blocks=0 as of 2026-11-23); no user-visible
   testnet surface exists in the app.
+- **Switch CORE landed (2026-11-23, S-6-ii-a, zero behavior change):**
+  `crypto/NetworkSetting.java` is the UI layer's prefs contract —
+  `network` id read through `resolve()` (null/absent → MAINNET fail-safe;
+  unknown id → fail-loud via D18's `forId`), per-network endpoint keys
+  (`url` mainnet / `url_testnet`, testnet default EMPTY — no public
+  testnet endpoint exists; the exposure decision is Payu-gated and NOT
+  taken). MainActivity resolves the active network
+  (`activeNetwork()`/`endpointUrlFor()`) and implements
+  `SelfCustody.Host.network()`; SelfCustody now encodes/validates EVERY
+  address (receive, change, watch window, key lookup, send guard) for the
+  ACTIVE network instead of the mainnet constant — the client-side half
+  of the cross-network guard. NOTHING writes the network key yet (the
+  Settings switch UI is the S-6-ii second half with its own gate
+  review), so every existing install resolves MAINNET exactly as before;
+  `tests/test_network_switch_core.py` pins that no-write rule. The
+  derivation PATH is unchanged (`m/44'/13'` on both networks — only the
+  encoding version bytes differ per D18), so the seed, cursors, and
+  encrypted-at-rest vault are untouched by network selection.
 
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all

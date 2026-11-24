@@ -26,6 +26,7 @@ import com.mazawallet.crypto.Bip39;
 import com.mazawallet.crypto.Bip44Maza;
 import com.mazawallet.crypto.FeePolicy;
 import com.mazawallet.crypto.GapPolicy;
+import com.mazawallet.crypto.NetworkParams;
 import com.mazawallet.crypto.TxBuilder;
 
 import org.json.JSONArray;
@@ -54,6 +55,11 @@ public final class SelfCustody {
     public interface Host {
         String baseUrl();
         String token(); // null while locked out
+        /** S-6-ii switch core: the ACTIVE network (shared-prefs resolved).
+         *  Every address encoding/validation in this class derives from
+         *  this - MAINNET today (nothing writes the network key until the
+         *  Settings switch UI lands), TESTNET once configured. */
+        NetworkParams network();
         void onUnauthorized();
         /** S-2a: true when protected actions (send / create / import seed)
          *  may proceed. MainActivity's implementation shows the PIN cover
@@ -214,6 +220,13 @@ public final class SelfCustody {
         return cached;
     }
 
+    /** The ACTIVE network (host-resolved from shared prefs). The derivation
+     *  path is network-independent; only the address/WIF ENCODING follows
+     *  this - see NetworkParams + Bip44Maza's parameterized overloads. */
+    private NetworkParams net() {
+        return host.network();
+    }
+
     /** Finds the key whose address matches (scans both chains; the change
      *  chain advances past the import window as changeIndex grows, so the
      *  scan must cover at least changeIndex+1 or change UTXOs at indices
@@ -222,7 +235,7 @@ public final class SelfCustody {
         int maxIdx = windowBound();
         for (int chain = 0; chain <= 1; chain++) {
             for (int i = 0; i < maxIdx; i++) {
-                if (Bip44Maza.address(keyAt(chain, i)).equals(address)) {
+                if (Bip44Maza.address(keyAt(chain, i), net()).equals(address)) {
                     return keyAt(chain, i);
                 }
             }
@@ -533,7 +546,8 @@ public final class SelfCustody {
     }
 
     private String currentAddress() {
-        return Bip44Maza.address(keyAt(Bip44Maza.RECEIVE_CHAIN, recvIndex));
+        return Bip44Maza.address(keyAt(Bip44Maza.RECEIVE_CHAIN, recvIndex),
+                net());
     }
 
     // --------------------------------------------------------------- refresh
@@ -749,8 +763,12 @@ public final class SelfCustody {
         final byte[] toHash;
         try {
             byte[] payload = Base58Check.decode(to);
+            // Cross-network guard: the recipient MUST encode for the ACTIVE
+            // network (testnet 88 / mainnet 50). A mainnet address typed or
+            // scanned in testnet mode refuses here, and vice versa - this
+            // is the client-side half of the controlled-env rule.
             if (payload.length != 21
-                    || (payload[0] & 0xFF) != Bip44Maza.ADDRESS_VERSION) {
+                    || (payload[0] & 0xFF) != net().pubkeyVersion) {
                 sendErr("Invalid address.");
                 return;
             }
@@ -852,7 +870,7 @@ public final class SelfCustody {
             // dust: the change output stays (judge polish fold, r1).
             if (change >= FeePolicy.dustThresholdSats()) {
                 Bip32.Node changeKey = keyAt(Bip44Maza.CHANGE_CHAIN, changeIndex);
-                changeAddress = Bip44Maza.address(changeKey);
+                changeAddress = Bip44Maza.address(changeKey, net());
                 outputs.add(new TxBuilder.Output(change, Bip44Maza.p2pkhScript(changeKey)));
             } else if (change > 0) {
                 // MazaCore never creates a dust change output: the remainder
@@ -974,7 +992,7 @@ public final class SelfCustody {
         List<String> out = new ArrayList<>();
         for (int chain = 0; chain <= 1; chain++) {
             for (int i = 0; i < maxIdx; i++) {
-                out.add(Bip44Maza.address(keyAt(chain, i)));
+                out.add(Bip44Maza.address(keyAt(chain, i), net()));
             }
         }
         return out;
@@ -1041,7 +1059,8 @@ public final class SelfCustody {
             String addr = t.optString("address", "");
             if (addr.isEmpty()) continue;
             for (int idx = 0; idx < bound; idx++) {
-                if (Bip44Maza.address(keyAt(Bip44Maza.RECEIVE_CHAIN, idx))
+                if (Bip44Maza.address(
+                            keyAt(Bip44Maza.RECEIVE_CHAIN, idx), net())
                         .equals(addr)) {
                     used[idx] = true;
                     seen++;

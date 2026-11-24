@@ -41,6 +41,8 @@ import com.mazawallet.crypto.LockPolicy;
 import com.mazawallet.crypto.ScanFlowPolicy;
 import com.mazawallet.crypto.ScanOrigin;
 import com.mazawallet.crypto.MazaUri;
+import com.mazawallet.crypto.NetworkParams;
+import com.mazawallet.crypto.NetworkSetting;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -71,8 +73,36 @@ public class MainActivity extends Activity
      *  visible on purpose: the settings screen edits the SAME saved URL the
      *  Connect card reads). */
     static final String PREFS = "maza";
-    static final String KEY_URL = "url";
+    static final String KEY_URL = NetworkSetting.KEY_URL_MAINNET;
     static final String DEFAULT_URL = "https://mazatest.sami-host.me"; // public TEST endpoint (see deploy/PUBLIC-HOSTING.md); field stays user-editable
+
+    // ------------------------------------------- S-6-ii switch core (network)
+    // ZERO BEHAVIOR CHANGE: nothing writes NetworkSetting.KEY_NETWORK yet -
+    // the Settings switch UI lands in the S-6-ii second half with its own
+    // gate review, so resolve() returns MAINNET for every install today and
+    // every path below pins mainnet exactly as before. These helpers exist
+    // now so the switch lands as pure UI on a threaded, tested core.
+    // NOTE: the per-network endpoint contract means a network switch also
+    // switches BACKENDS (mainnet bench vs testnet bench are separate
+    // services with separate books); the connect-flow wiring for that is
+    // part of the S-6-ii second half.
+
+    /** The ACTIVE network from shared prefs (fail-safe MAINNET default;
+     *  fail-loud on an unknown stored id). */
+    private NetworkParams activeNetwork() {
+        return NetworkSetting.resolve(
+                prefs.getString(NetworkSetting.KEY_NETWORK, null));
+    }
+
+    /** Endpoint for the given network. MAINNET keeps the existing saved
+     *  default; TESTNET defaults to EMPTY - there is no public testnet
+     *  endpoint (Payu-gated exposure decision, NOT taken), so a testnet
+     *  connection must be configured explicitly. */
+    private String endpointUrlFor(NetworkParams net) {
+        String def = net.isMainnet() ? DEFAULT_URL : "";
+        return prefs.getString(NetworkSetting.urlPrefKey(net), def);
+    }
+
     // NO default token: credentials are never baked into source or APK.
     private static final long POLL_MS = 15000;
     private static final int MAX_ROWS = 30;
@@ -900,6 +930,11 @@ public class MainActivity extends Activity
     @Override
     public String baseUrl() {
         return baseUrl;
+    }
+
+    @Override
+    public NetworkParams network() {
+        return activeNetwork();
     }
 
     @Override
