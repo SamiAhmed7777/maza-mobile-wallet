@@ -629,6 +629,26 @@ MazaCore v0.16.3 source (github.com/MazaCoin/maza tag v0.16.3,
   derivation PATH is unchanged (`m/44'/13'` on both networks — only the
   encoding version bytes differ per D18), so the seed, cursors, and
   encrypted-at-rest vault are untouched by network selection.
+- **Switch UI landed (2026-11-23, S-6-ii-b):** the Settings NETWORK card
+  (Mainnet / Testnet buttons) is now the ONLY writer of the `network` key
+  (`commit()`-persisted before the UI reflects it). Endpoints are
+  per-network end to end: the SERVER card edits and the Connect card
+  prefills/persists the ACTIVE network's key (`url` vs `url_testnet`;
+  testnet default EMPTY — a testnet connection is configured explicitly,
+  controlled-environment posture). The Connect card NAMES the network
+  ("Network: MAZA mainnet" / "Network: MAZA testnet (controlled
+  environment)"). RECONNECT GUARD: MainActivity captures the network id at
+  unlock (`sessionNetId`) and on every resume compares it to the persisted
+  selection — a switch made in Settings DROPS the live session to the old
+  backend (separate services, separate books) and lands on a Connect card
+  prefilled for the new network ("Network switched - connect to the
+  selected network"). The scan consumer now validates scanned text against
+  the ACTIVE network (`ScanOrigin.parseForNetwork(payloadText,
+  activeNetwork())`) — a testnet session accepts testnet addresses and
+  rejects mainnet ones via the same send-path contract. Endpoint changes
+  within one network keep the documented "reconnect to apply" behavior
+  (no forced drop). STILL GATED: the controlled-env device proof (testnet
+  chain blocks=0) and the public testnet endpoint decision (Payu).
 
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all

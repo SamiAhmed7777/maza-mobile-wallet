@@ -20,7 +20,9 @@ package com.mazawallet.crypto;
  * un-parameterized Bip44Maza.address/wif and ScanOrigin.parse methods keep
  * pinning MAINNET until a caller EXPLICITLY passes TESTNET. There is no
  * global mutable mode anywhere in the crypto layer — network selection is
- * a parameter the UI layer must thread deliberately (S-6 second half).
+ * a parameter the UI layer must thread deliberately (S-6: the Settings
+ * NETWORK card selects it; every consumer resolves it through
+ * NetworkSetting.resolve).
  *
  * Pure Java, no android imports: desktop SelfTest drives every row.
  */

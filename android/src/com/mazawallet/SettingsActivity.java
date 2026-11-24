@@ -28,6 +28,8 @@ import com.mazawallet.crypto.Bip32;
 import com.mazawallet.crypto.Bip39;
 import com.mazawallet.crypto.Bip44Maza;
 import com.mazawallet.crypto.LockPolicy;
+import com.mazawallet.crypto.NetworkParams;
+import com.mazawallet.crypto.NetworkSetting;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -39,7 +41,9 @@ import java.util.Arrays;
  * <p>Two pages in one activity (the manifest carries exactly one extra
  * &lt;activity&gt; registration for this lane):
  * <ol>
- *   <li>SETTINGS - endpoint URL (the SAME pref the Connect card writes),
+ *   <li>SETTINGS - network selection (mainnet/testnet, S-6-ii-b), endpoint
+ *       URL (the saved endpoint of the selected network - the SAME pref the
+ *       Connect card reads/writes for that network),
  *       auto-lock delay (5/10/30 min), theme mode (system/light/dark);</li>
  *   <li>WALLET MANAGEMENT - receive addresses, seed re-display behind the
  *       PIN, wipe wallet (double confirm + typed WIPE + current-PIN
@@ -49,7 +53,14 @@ import java.util.Arrays;
  * <p>Settings storage contract (prefs file "maza", shared with MainActivity
  * and PinGuard):
  * <ul>
- *   <li>{@code url} - endpoint, owned by MainActivity's Connect card too;</li>
+ *   <li>{@code network} - S-6-ii-b network selection (NetworkParams ids:
+ *       main | test, never quoted literals in this file),
+ *       single-sourced through {@link NetworkSetting} (null/absent resolves
+ *       MAINNET; MainActivity's resume guard drops a live session on a
+ *       switch);</li>
+ *   <li>{@code url} - mainnet endpoint, owned by MainActivity's Connect card
+ *       too; {@code url_testnet} - the testnet endpoint (default EMPTY, no
+ *       public testnet endpoint exists);</li>
  *   <li>{@code pref_autolock_minutes} - int minutes, default 5, the settings
  *       AUTHORITY. {@code pin.autolock_ms} is PinGuard's storage hook (the
  *       window it builds the LockPolicy with), so the selector writes BOTH
@@ -130,6 +141,7 @@ public final class SettingsActivity extends Activity {
     private Button[] autolockBtns;
     private TextView autolockNoteTv;
     private Button[] themeBtns;
+    private Button[] networkBtns;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -162,15 +174,39 @@ public final class SettingsActivity extends Activity {
         root.setPadding(dp(16), dp(24), dp(16), dp(24));
         addHeader(root, getString(R.string.settings_subtitle));
 
+        // ---- S-6-ii-b network selection ----
+        LinearLayout net = card();
+        root.addView(net, mp(0, 0, 0, dp(12)));
+        net.addView(label(getString(R.string.settings_network), 13, accent,
+                Typeface.BOLD));
+        LinearLayout netRow = row();
+        net.addView(netRow, mp(0, dp(8), 0, 0));
+        String[] netIds = {NetworkParams.MAINNET.id, NetworkParams.TESTNET.id};
+        int[] netNames = {R.string.network_mainnet, R.string.network_testnet};
+        networkBtns = new Button[netIds.length];
+        for (int i = 0; i < netIds.length; i++) {
+            final String netId = netIds[i];
+            Button b = button(getString(netNames[i]), cardBg, text, null);
+            b.setOnClickListener(v -> selectNetwork(netId));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            lp.rightMargin = i == netIds.length - 1 ? 0 : dp(6);
+            netRow.addView(b, lp);
+            networkBtns[i] = b;
+        }
+        net.addView(label(getString(R.string.settings_network_note), 11, muted,
+                Typeface.NORMAL), mp(0, dp(8), 0, 0));
+        renderNetwork();
+
         // ---- endpoint ----
         LinearLayout server = card();
-        root.addView(server, mp(0, dp(16), 0, dp(12)));
+        root.addView(server, mp(0, 0, 0, dp(12)));
         server.addView(label(getString(R.string.settings_server), 13, accent, Typeface.BOLD));
         server.addView(label(getString(R.string.settings_server_label), 12, muted,
                 Typeface.NORMAL), mp(0, dp(6), 0, 0));
-        urlEt = input(prefs.getString(MainActivity.KEY_URL, MainActivity.DEFAULT_URL),
+        urlEt = input(savedEndpointForActiveNetwork(),
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        urlEt.setHint(MainActivity.DEFAULT_URL);
+        urlEt.setHint(endpointHint());
         urlEt.setTypeface(Typeface.MONOSPACE);
         server.addView(urlEt, mp(0, dp(4), 0, 0));
         urlErrTv = label("", 12, danger, Typeface.NORMAL);
@@ -255,6 +291,62 @@ public final class SettingsActivity extends Activity {
                 v -> showWalletPage()));
     }
 
+    /** The ACTIVE network resolved through the NetworkSetting contract
+     *  (null/absent -> MAINNET; only ids this screen writes are stored, and
+     *  resolve() fails loud on anything else). */
+    private NetworkParams activeNetwork() {
+        return NetworkSetting.resolve(
+                prefs.getString(NetworkSetting.KEY_NETWORK, null));
+    }
+
+    /** Saved endpoint (or default) for the ACTIVE network. Testnet defaults
+     *  EMPTY - there is no public testnet endpoint (Payu-gated exposure
+     *  decision, NOT taken); a testnet connection is configured explicitly. */
+    private String savedEndpointForActiveNetwork() {
+        NetworkParams net = activeNetwork();
+        return prefs.getString(NetworkSetting.urlPrefKey(net),
+                net.isMainnet() ? MainActivity.DEFAULT_URL : "");
+    }
+
+    /** Input hint for the ACTIVE network's endpoint field. */
+    private String endpointHint() {
+        return activeNetwork().isMainnet() ? MainActivity.DEFAULT_URL : "";
+    }
+
+    /** S-6-ii-b: persist the network selection (commit, not apply - the
+     *  durable write lands before the UI reflects it, same discipline as
+     *  the autolock retune) and re-point the SERVER card at the newly
+     *  active network's saved endpoint. MainActivity's resume guard drops
+     *  any live session to the OLD backend when this screen returns. */
+    private void selectNetwork(String netId) {
+        boolean persisted = prefs.edit()
+                .putString(NetworkSetting.KEY_NETWORK, netId).commit();
+        if (!persisted) {
+            toast(getString(R.string.network_save_failed));
+            return;
+        }
+        renderNetwork();
+        refreshEndpointCard();
+    }
+
+    private void renderNetwork() {
+        if (networkBtns == null) return;
+        String current = activeNetwork().id;
+        String[] netIds = {NetworkParams.MAINNET.id, NetworkParams.TESTNET.id};
+        for (int i = 0; i < netIds.length; i++) {
+            boolean on = netIds[i].equals(current);
+            networkBtns[i].setBackground(rounded(on ? accent : cardBg));
+            networkBtns[i].setTextColor(on ? bg : text);
+        }
+    }
+
+    /** Re-point the SERVER input + error line at the ACTIVE network. */
+    private void refreshEndpointCard() {
+        urlEt.setText(savedEndpointForActiveNetwork());
+        urlEt.setHint(endpointHint());
+        urlErrTv.setText("");
+    }
+
     private void saveEndpoint() {
         String raw = urlEt.getText().toString().trim();
         if (raw.length() == 0) {
@@ -266,9 +358,11 @@ public final class SettingsActivity extends Activity {
             return;
         }
         String url = stripSlash(raw);
-        // SAME key the Connect card reads (pref persistence across updates is
-        // intended: a saved endpoint survives reinstalls of the app data).
-        prefs.edit().putString(MainActivity.KEY_URL, url).apply();
+        // SAME key the Connect card reads for the ACTIVE network (pref
+        // persistence across updates is intended: a saved endpoint survives
+        // reinstalls of the app data). Each network keeps its OWN endpoint.
+        prefs.edit().putString(
+                NetworkSetting.urlPrefKey(activeNetwork()), url).apply();
         urlEt.setText(url);
         urlErrTv.setText("");
         toast(getString(R.string.toast_endpoint_saved));

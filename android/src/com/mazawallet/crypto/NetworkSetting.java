@@ -22,11 +22,12 @@ package com.mazawallet.crypto;
  *                    this to EMPTY - a testnet connection must be
  *                    configured explicitly (controlled-env posture).
  *
- * ZERO BEHAVIOR CHANGE (switch core half): nothing in the app WRITES
- * KEY_NETWORK yet - the Settings switch UI lands in the S-6-ii second half
- * together with its own gate review, per the standing rule that no
- * user-visible testnet surface ships without the switch + review. tests/
- * test_network_params.py pins that until then.
+ * SETTINGS-SIDE WRITER (S-6-ii-b): the Settings NETWORK card is the ONLY
+ * code in the app that WRITES KEY_NETWORK (commit-persisted; pinned by
+ * tests/test_network_switch_core.py's settings-only-write walk). Every
+ * other surface reads the selection through resolve() and follows it:
+ * per-network endpoint keys, the resume reconnect guard, and the scan
+ * consumer all resolve the ACTIVE network.
  *
  * Pure Java, no android imports: desktop SelfTest drives every row.
  */

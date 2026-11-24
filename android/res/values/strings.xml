@@ -10,6 +10,12 @@
     <string name="settings_server_label">Server URL</string>
     <string name="settings_server_save">Save endpoint</string>
     <string name="settings_server_note">The Connect screen uses this address. Reconnect to apply a change.</string>
+    <string name="settings_network">NETWORK</string>
+    <string name="network_mainnet">Mainnet</string>
+    <string name="network_testnet">Testnet</string>
+    <string name="settings_network_note">Switching networks ends the session and swaps the SERVER endpoint. Testnet has no default endpoint - controlled environment only.</string>
+    <string name="network_save_failed">Could not save the network selection.</string>
+    <string name="net_network_switched">Network switched - connect to the selected network.</string>
     <string name="settings_autolock">AUTO-LOCK</string>
     <string name="settings_autolock_current">Auto-lock after %1$d min</string>
     <string name="settings_autolock_note">Locks the wallet after this much inactivity, and when it has been in the background this long. Applies immediately, including the session you are in.</string>

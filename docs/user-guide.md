@@ -128,7 +128,8 @@ sending twice sends twice. Never re-tap a send because it seemed slow.
 
 | Section | What it does |
 | --- | --- |
-| SERVER | The URL the Connect screen uses. Save, then reconnect to apply. |
+| NETWORK | Mainnet or Testnet. Switching networks signs you out and swaps the SERVER endpoint; the Connect screen shows which network it connects to. Testnet has no default endpoint - controlled environment only. |
+| SERVER | The URL the Connect screen uses for the selected network. Save, then reconnect to apply. |
 | AUTO-LOCK | Minutes of inactivity (and background time) before the wallet locks. Applies immediately. |
 | APPEARANCE | System / Light / Dark. System follows the device's day/night setting, switching live. |
 | WALLET MANAGEMENT | Receive addresses, reveal seed phrase (PIN-gated), and wipe. Wipe deletes the seed phrase, the PIN, the endpoint, and all settings from the device. |

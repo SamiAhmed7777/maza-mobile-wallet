@@ -76,22 +76,30 @@ public class MainActivity extends Activity
     static final String KEY_URL = NetworkSetting.KEY_URL_MAINNET;
     static final String DEFAULT_URL = "https://mazatest.sami-host.me"; // public TEST endpoint (see deploy/PUBLIC-HOSTING.md); field stays user-editable
 
-    // ------------------------------------------- S-6-ii switch core (network)
-    // ZERO BEHAVIOR CHANGE: nothing writes NetworkSetting.KEY_NETWORK yet -
-    // the Settings switch UI lands in the S-6-ii second half with its own
-    // gate review, so resolve() returns MAINNET for every install today and
-    // every path below pins mainnet exactly as before. These helpers exist
-    // now so the switch lands as pure UI on a threaded, tested core.
-    // NOTE: the per-network endpoint contract means a network switch also
-    // switches BACKENDS (mainnet bench vs testnet bench are separate
-    // services with separate books); the connect-flow wiring for that is
-    // part of the S-6-ii second half.
+    // ------------------------------------------- S-6-ii network selection
+    // SHIPPED (S-6-ii-b): the Settings NETWORK card is the only writer of
+    // NetworkSetting.KEY_NETWORK (pinned by the settings-only-write walk in
+    // tests/test_network_switch_core.py); every path below resolves the
+    // ACTIVE network through it. Per-network endpoint contract: a network
+    // switch also switches BACKENDS (mainnet bench vs testnet bench are
+    // separate services with separate books) - the resume guard drops a
+    // switched session, and the connect flow persists the typed URL under
+    // the ACTIVE network's endpoint key.
 
     /** The ACTIVE network from shared prefs (fail-safe MAINNET default;
      *  fail-loud on an unknown stored id). */
     private NetworkParams activeNetwork() {
         return NetworkSetting.resolve(
                 prefs.getString(NetworkSetting.KEY_NETWORK, null));
+    }
+
+    /** True when the persisted network selection no longer matches the
+     *  network this session was unlocked on. Fail-safe: a session with no
+     *  recorded id counts as changed (drop, never keep a session whose
+     *  backend identity cannot be proven). */
+    private boolean sessionNetworkChanged() {
+        return sessionNetId == null
+                || !activeNetwork().id.equals(sessionNetId);
     }
 
     /** Endpoint for the given network. MAINNET keeps the existing saved
@@ -132,6 +140,13 @@ public class MainActivity extends Activity
 
     private SharedPreferences prefs;
     private String baseUrl;      // server URL, no trailing slash
+
+    // S-6-ii-b: the network id THIS session was unlocked on. Captured at
+    // unlock success, compared in onResume - a network switch made in
+    // Settings drops the session to the OLD backend (mainnet bench and
+    // testnet bench are separate services with separate books), and the
+    // connect card re-prefills for the newly selected network.
+    private String sessionNetId;
     private String token;        // null while locked
     private String lastAddress = "";
     private double fee = 0.0001;
@@ -318,6 +333,18 @@ public class MainActivity extends Activity
         // place when it changed - BEFORE the lock overlay decisions below, so
         // the rebuilt cover is the one they act on.
         repaintForThemeChange();
+        // S-6-ii-b reconnect guard: a network switch made in Settings drops
+        // the session to the OLD backend - mainnet bench and testnet bench
+        // are separate services with separate books, and this session's
+        // baseUrl still points at the previous one. Identity is captured at
+        // unlock and re-derived on every resume (settings return included).
+        // Mirrors the session-expired path: showConnect tears the session
+        // down and rebuilds the connect card for the NEW network.
+        if (token != null && sessionNetworkChanged()) {
+            AppLog.i("network switched; dropping session");
+            showConnect(getString(R.string.net_network_switched));
+            return;
+        }
         // Returning after >= the auto-lock window in background re-locks
         // (device out of the user's hands). The POLICY bracket runs on EVERY
         // resume regardless of which screen is showing (judge r1: skipping
@@ -349,6 +376,7 @@ public class MainActivity extends Activity
         ui.removeCallbacks(pollTask);
         ui.removeCallbacks(lockTick);
         token = null;
+        sessionNetId = null; // session identity dies with the session
 
         LinearLayout col = column();
         col.setPadding(dp(20), dp(32), dp(20), dp(20));
@@ -367,9 +395,20 @@ public class MainActivity extends Activity
         col.addView(card, mp(0, dp(16), 0, 0));
 
         card.addView(label("Server URL", 13, pal.textSecondary(), Typeface.BOLD));
-        urlEt = input(prefs.getString(KEY_URL, DEFAULT_URL),
+        // S-6-ii-b: the Connect card serves the ACTIVE network - prefill its
+        // saved endpoint (mainnet keeps the public-door default; testnet
+        // defaults EMPTY, a testnet connection is configured explicitly)
+        // and NAME the network so a testnet session can never be mistaken
+        // for the mainnet bench (separate services, separate books).
+        final NetworkParams connectNet = activeNetwork();
+        urlEt = input(endpointUrlFor(connectNet),
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        urlEt.setHint(connectNet.isMainnet() ? DEFAULT_URL : "");
         card.addView(urlEt, mp(0, 0, 0, 0));
+        card.addView(label(connectNet.isMainnet()
+                        ? "Network: MAZA mainnet"
+                        : "Network: MAZA testnet (controlled environment)",
+                12, pal.textSecondary(), Typeface.NORMAL), mp(0, dp(6), 0, 0));
 
         card.addView(label("Token", 13, pal.textSecondary(), Typeface.BOLD), mp(0, dp(12), 0, 0));
         tokenEt = input("", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
@@ -862,7 +901,12 @@ public class MainActivity extends Activity
      *  its user-safe reason on the overlay and KEEPS scanning. */
     @Override
     public void onDecoded(String payloadText) {
-        final ScanOrigin.Result r = ScanOrigin.parse(payloadText);
+        // S-6-ii-b: the scan consumer validates against the ACTIVE network's
+        // version byte (parse() alone stays mainnet-pinned) - a testnet
+        // session accepts testnet addresses, and a mainnet address fails
+        // the send-path contract in testnet mode (and vice versa).
+        final ScanOrigin.Result r =
+                ScanOrigin.parseForNetwork(payloadText, activeNetwork());
         ui.post(() -> {
             int action = ScanFlowPolicy.onDecoded(r.ok);
             if (action == ScanFlowPolicy.FILL_AND_CLOSE) {
@@ -991,7 +1035,15 @@ public class MainActivity extends Activity
                         () -> Api.http(baseUrl, token, "POST", "/api/unlock", body));
                 if (r.code == 200) {
                     AppLog.i("unlock ok");
-                    prefs.edit().putString(KEY_URL, url).apply();
+                    // S-6-ii-b: bind the session to the network it was
+                    // unlocked on, and persist the typed URL under THAT
+                    // network's endpoint key (the saved-URL-per-network
+                    // contract; the mainnet key is untouched by a testnet
+                    // connect and vice versa).
+                    sessionNetId = activeNetwork().id;
+                    prefs.edit().putString(
+                            NetworkSetting.urlPrefKey(activeNetwork()),
+                            url).apply();
                     ui.post(() -> {
                         connecting = false;
                         showWallet();

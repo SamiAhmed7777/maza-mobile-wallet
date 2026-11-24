@@ -55,10 +55,11 @@ public final class SelfCustody {
     public interface Host {
         String baseUrl();
         String token(); // null while locked out
-        /** S-6-ii switch core: the ACTIVE network (shared-prefs resolved).
+        /** S-6-ii switch: the ACTIVE network (shared-prefs resolved; the
+         *  Settings NETWORK card is the only writer of the key).
          *  Every address encoding/validation in this class derives from
-         *  this - MAINNET today (nothing writes the network key until the
-         *  Settings switch UI lands), TESTNET once configured. */
+         *  this - MAINNET for every install that never switched,
+         *  TESTNET once configured. */
         NetworkParams network();
         void onUnauthorized();
         /** S-2a: true when protected actions (send / create / import seed)

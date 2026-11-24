@@ -118,11 +118,16 @@ class TopLevelShape(unittest.TestCase):
 
 
 class OriginDiscipline(unittest.TestCase):
-    """The decoder output has exactly ONE consumer: ScanOrigin.parse."""
+    """The decoder output has exactly ONE consumer: ScanOrigin - routed
+    through the ACTIVE network since S-6-ii-b."""
 
     def test_mainactivity_routes_decoded_text_through_scan_origin(self):
         src = read(MAIN)
-        self.assertIn("ScanOrigin.parse(payloadText)", src)
+        # S-6-ii-b: the scan consumer validates against the ACTIVE network's
+        # version byte (the mainnet-pinned parse() call is superseded)
+        self.assertIn(
+            "ScanOrigin.parseForNetwork(payloadText, activeNetwork());", src)
+        self.assertNotIn("ScanOrigin.parse(payloadText);", src)
 
     def test_scanner_never_fetches_or_opens_content(self):
         src = read(SCANNER)

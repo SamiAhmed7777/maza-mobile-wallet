@@ -100,27 +100,20 @@ class TestFailSafeDelegation(unittest.TestCase):
         # the OLD constant-pin shape is gone (no double source of truth)
         self.assertNotIn("!= Bip44Maza.ADDRESS_VERSION", src)
 
-    def test_no_caller_threads_testnet_yet(self):
-        # S-6-i pinned "network-blind UI": no app-package file outside
-        # crypto/ referenced TESTNET or NetworkParams, repo-wide walk, not a
-        # hand-list. That walk is the pin of record for the S-6-i state.
-        #
-        # EVOLVED 2026-11-23 (S-6-ii switch core, this repo's own graded
-        # change): the threading half has STARTED - MainActivity and
-        # SelfCustody now reference NetworkParams/NetworkSetting by design
-        # (host.network() parameter, still MAINNET everywhere because
-        # nothing writes the network key). The user-visible-surface pin
-        # moved to a STRICTER shape in tests/test_network_switch_core.py:
-        # NetworkSetting.KEY_NETWORK is never WRITTEN anywhere in the app
-        # package until the Settings switch UI lands with its gate review.
-        # What remains pinned HERE is the fail-safe delegation: the
-        # UN-parameterized crypto entry points keep their MAINNET pins and
-        # ScanOrigin.parse stays mainnet (the bench SEND scan path still
-        # validates mainnet until the scan consumer learns the active
-        # network in the S-6-ii second half).
+    def test_scan_consumer_threads_active_network(self):
+        # S-6-i pinned "network-blind UI"; S-6-ii-a started the threading
+        # (host.network()); S-6-ii-b (this repo's own graded change)
+        # COMPLETES it for the scan consumer: the decoded payload now
+        # validates against the ACTIVE network's version byte through
+        # ScanOrigin.parseForNetwork(payloadText, activeNetwork()). The
+        # old "no caller may call parseForNetwork" walk is superseded by
+        # that wiring; what stays pinned HERE is that the threading goes
+        # through the ACTIVE network resolution - never a hardcoded
+        # TESTNET constant in the UI layer.
         app_root = os.path.join(REPO, "android", "src", "com", "mazawallet")
         crypto_root = os.path.join(app_root, "crypto")
-        offenders = []
+        threaded = []
+        hardcoded = []
         for dirpath, _dirnames, filenames in os.walk(app_root):
             if dirpath.startswith(crypto_root):
                 continue  # the primitives themselves own the parameter
@@ -131,12 +124,33 @@ class TestFailSafeDelegation(unittest.TestCase):
                           encoding="utf-8") as f:
                     body = f.read()
                 if "ScanOrigin.parseForNetwork" in body:
-                    offenders.append(os.path.relpath(
+                    threaded.append(os.path.relpath(
                         os.path.join(dirpath, name), app_root))
+                # a hardcoded testnet thread in the UI layer would bypass
+                # the persisted selection (fail-safe contract). Enumeration
+                # through the parameter objects (.id, the switch buttons)
+                # is the legitimate use; a PINNED NetworkParams.TESTNET
+                # argument or a literal forId() is not.
+                for line in body.split("\n"):
+                    if "NetworkParams.TESTNET" in line and ".id" not in line:
+                        hardcoded.append("%s: %s" % (
+                            os.path.relpath(
+                                os.path.join(dirpath, name), app_root),
+                            line.strip()[:60]))
+                    if 'forId("' in line:
+                        hardcoded.append("%s: forId literal %s" % (
+                            os.path.relpath(
+                                os.path.join(dirpath, name), app_root),
+                            line.strip()[:60]))
         self.assertEqual(
-            [], offenders,
-            "ScanOrigin network threading is part of the S-6-ii second "
-            "half (scan consumer still mainnet-pinned): %s" % offenders)
+            ["MainActivity.java"], threaded,
+            "the scan consumer is the ONLY parseForNetwork caller in the "
+            "UI layer: %s" % threaded)
+        self.assertEqual(
+            [], hardcoded,
+            "UI-layer network threading must resolve the ACTIVE network "
+            "through NetworkSetting.resolve, never a hardcoded "
+            "NetworkParams.TESTNET: %s" % hardcoded)
 
 
 class TestVectorAndDocHonesty(unittest.TestCase):
@@ -163,7 +177,14 @@ class TestVectorAndDocHonesty(unittest.TestCase):
         self.assertIn("CODE HALF DONE 2026-11-23 (S-6-i", src)
         # evolved with the S-6-ii-a switch-core landing (same graded change)
         self.assertIn("SWITCH CORE DONE 2026-11-23 (S-6-ii-a", src)
-        self.assertIn("REMAINING (S-6-ii second half)", src)
+        # evolved with the S-6-ii-b switch-UI landing (this graded change):
+        # the REMAINING scope is now the chain-gated device proof only
+        self.assertIn("SWITCH UI DONE 2026-11-23 (S-6-ii-b", src)
+        self.assertIn(
+            "REMAINING: controlled-env device proof (testnet blocks=0)",
+            src)
+        # the superseded scope line is gone (no stale copy anywhere)
+        self.assertNotIn("REMAINING (S-6-ii second half)", src)
 
 
 if __name__ == "__main__":
