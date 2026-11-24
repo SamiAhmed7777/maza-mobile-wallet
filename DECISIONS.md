@@ -602,9 +602,15 @@ MazaCore v0.16.3 source (github.com/MazaCoin/maza tag v0.16.3,
   pinned in the SelfTest section "MAZA testnet profile" (desktop selftest
   328 checks) and the wiring in `tests/test_network_params.py`.
 - **Remainder (S-6 second half):** Settings network switch +
-  per-network endpoint + a controlled-env testnet backend, then the
-  device/controlled-env proof. Not started; no user-visible testnet
-  surface exists in this changeset.
+  per-network endpoint, then the device/controlled-env proof. The
+  controlled-env BACKEND half is shipped as `deploy/install-walletbench-testnet.sh`
+  (+ `deploy/WALLETBENCH-TESTNET.md`): a second walletbench unit on the
+  samihost testnet mazad, tailnet-only :18702, own token/state/account,
+  no code changes (walletbench is fully env-parameterized). Deployment +
+  live status tracked in the operational backlog run log. The app-side
+  switch and the on-chain testnet proof remain open (the samihost
+  testnet chain is empty — blocks=0 as of 2026-11-23); no user-visible
+  testnet surface exists in the app.
 
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all

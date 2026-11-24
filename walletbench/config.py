@@ -32,8 +32,10 @@ RPC_PASSWORD = _env("WB_RPC_PASSWORD")
 RPC_CONF = _env("WB_RPC_CONF", "/var/lib/mazad/maza.conf")
 RPC_TIMEOUT = int(_env("WB_RPC_TIMEOUT", "15"))
 # Durable address-book persistence. Empty (dev/tests) = memory-only; the
-# installer sets this to /var/lib/maza-wallet-bench/state.json so a
-# Restart=always cycle cannot orphan funded addresses. Read LIVE via
+# The installer sets WB_STATE_FILE to the instance's own state.json path
+# (e.g. /var/lib/maza-wallet-bench/state.json for the mainnet bench or
+# /var/lib/maza-wallet-bench-testnet/state.json for the testnet sibling)
+# so a Restart=always cycle cannot orphan funded addresses. Read LIVE via
 # state_file() — tests repoint it per-case.
 
 
