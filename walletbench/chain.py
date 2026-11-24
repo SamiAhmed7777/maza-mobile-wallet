@@ -21,6 +21,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from .addrcheck import encode_address, is_maza_address
+
 from . import config
 
 # Flat fee per send, MAZA. Generous vs the code floor (1000 sat/kB relay,
@@ -199,15 +201,19 @@ class MockChain:
 
     def getnewaddress(self) -> str:
         self._addr_seq += 1
-        return "M" + f"{self._addr_seq:011d}" + "x" * 22  # 1+11+22 = 34
+        # Checksum-valid mainnet-shape address (v50): the node would never
+        # return a letter-shaped fake, and the service now validates on
+        # load/persist boundaries (S-6-ii-prep-c).
+        return encode_address(50, bytes([self._addr_seq & 0xFF]) * 20)
 
     def listunspent_for(self, addresses: List[str],
                         minconf: int = 1) -> List[Dict[str, Any]]:
         return [u for u in self.utxos if u["address"] in set(addresses)]
 
     def validateaddress(self, address: str) -> Dict[str, Any]:
-        valid = isinstance(address, str) and address.startswith("M") \
-            and len(address) == 34
+        # Models a MAZA node: validates P2PKH of either deployed chain
+        # (mainnet v50 / testnet v88) by base58check, not letter shape.
+        valid = is_maza_address(address)
         return {"isvalid": valid, "ismine": address in self.wallet_owned,
                 "iswatchonly": False, "address": address}
 
@@ -215,7 +221,7 @@ class MockChain:
         """Mint a node-side default-account address: wallet-owned, NOT in
         the bench book — models the swept-change sink M20 reconciles."""
         self._addr_seq += 1
-        addr = "M" + f"{self._addr_seq:011d}" + "y" * 22
+        addr = encode_address(50, bytes([(self._addr_seq & 0xFF) ^ 0xA5]) * 20)
         self.wallet_owned.add(addr)
         return addr
 

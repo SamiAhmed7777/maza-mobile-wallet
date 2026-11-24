@@ -24,10 +24,14 @@ from http.server import ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from walletbench import api, config  # noqa: E402
+from walletbench.addrcheck import encode_address  # noqa: E402
 from walletbench.chain import MockChain, WalletRPC, ChainError, FLAT_FEE  # noqa: E402
 
 TOKEN = "test-token-123"
-FOREIGN_ADDR = "M9" + "f" * 32  # 34 chars, simulates the bridge deposit addr
+# Checksum-valid mainnet-shape fixture (v50). The service validates
+# addresses by base58check decode + version byte now, so fixtures must be
+# real encodings — the node would never emit a letter-shaped fake.
+FOREIGN_ADDR = encode_address(50, b"\x9f" * 20)
 
 
 def make_server(chain):
@@ -436,9 +440,11 @@ class TestChainAdapter(unittest.TestCase):
             self.assertTrue(callable(getattr(rpc, method)))
 
 
-WATCH_A = "M" + "a" * 33
-WATCH_B = "M" + "b" * 33
-FOREIGN_WATCH = "M" + "c" * 33
+WATCH_A = encode_address(50, b"\xa1" * 20)
+WATCH_B = encode_address(50, b"\xa2" * 20)
+FOREIGN_WATCH = encode_address(50, b"\xa3" * 20)
+TESTNET_A = encode_address(88, b"\xb1" * 20)
+TESTNET_B = encode_address(88, b"\xb2" * 20)
 
 
 class TestSelfCustody(BenchTestCase):
@@ -1555,8 +1561,181 @@ class TestQrPaymentRequestUri(BenchTestCase):
         # '+' literal: decode("a+b") must be "a+b", not "a b"
         self.assertEqual(
             api.WalletBenchHandler._strict_pct_decode("a+b"), "a+b")
+
+    def test_strict_pct_decode_rejects_bad_escapes(self):
         self.assertIsNone(api.WalletBenchHandler._strict_pct_decode("%2"))
         self.assertIsNone(api.WalletBenchHandler._strict_pct_decode("%GG"))
+
+
+class TestChainTolerantAddressValidation(BenchTestCase):
+    """S-6-ii-prep-c: every address-shaped gate accepts BOTH deployed
+    chains (mainnet pubkey version 50, testnet pubkey version 88) by
+    base58check decode + version byte, never a letter-shape check.
+
+    A `startswith("M")` gate crash-loops the testnet bench on every
+    restart once a testnet book persists (finding A: 0/4000 synthetic
+    testnet addresses carry the M prefix), and silently drops testnet
+    outputs from funding-tx reconciliation (the M20 stranded-change
+    class, testnet flavor). Version constants are FETCHED from MazaCore
+    v0.16.3 src/chainparams.cpp (mainnet line 171 = 50, testnet line
+    297 = 88; file sha256 50ed60dc647095a60447824a6b124c4fef06c42fdc564f
+    058bc0cf241875b910). The KATs below were generated with an
+    independent one-off test-side encoder, not by walletbench.addrcheck.
+    """
+
+    KAT_MAINNET_ZERO = "M7uAERuQW2AotfyLDyewFGcLUDtAYu9v5V"  # v50 + 20x00
+    KAT_TESTNET_ZERO = "cQk5eZEMUsn6y9Gd9vK3g2xEPPg1e5m7n6"  # v88 + 20x00
+
+    # --- unit: the predicate itself --------------------------------------
+    def test_kat_generated_independently(self):
+        # fixture encoder must reproduce the independent known-answer
+        # encodings exactly (encoder regression, not self-confirmation)
+        self.assertEqual(encode_address(50, bytes(20)),
+                         self.KAT_MAINNET_ZERO)
+        self.assertEqual(encode_address(88, bytes(20)),
+                         self.KAT_TESTNET_ZERO)
+
+    def test_predicate_accepts_both_deployed_chains(self):
+        self.assertTrue(api.is_maza_address(self.KAT_MAINNET_ZERO))
+        self.assertTrue(api.is_maza_address(self.KAT_TESTNET_ZERO))
+        self.assertTrue(api.is_maza_address(WATCH_A))    # v50 fixture
+        self.assertTrue(api.is_maza_address(TESTNET_A))  # v88 fixture
+
+    def test_predicate_rejects_junk_and_foreign_versions(self):
+        self.assertFalse(api.is_maza_address("M" + "1" * 33))  # checksum junk
+        self.assertFalse(api.is_maza_address("M" + "a" * 32))  # wrong length
+        self.assertFalse(api.is_maza_address("not-an-address"))
+        self.assertFalse(api.is_maza_address(42))
+        self.assertFalse(api.is_maza_address(None))
+        self.assertFalse(api.is_maza_address(""))
+        self.assertFalse(api.is_maza_address(  # regtest v140: not deployed
+            encode_address(140, b"\x01" * 20)))
+        self.assertFalse(api.is_maza_address(  # BTC mainnet v0: foreign
+            encode_address(0, b"\x01" * 20)))
+
+    # --- the restart crash-loop surface ----------------------------------
+    def _load_book(self, addresses, watch=None):
+        """Write a state file, clear the cache, run the REAL loader.
+        Returns (addresses, watch) or raises ChainError."""
+        fd, path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({
+                "addresses": addresses,
+                "txids": [],
+                "watch_addresses": watch or [],
+            }))
+        os.environ["WB_STATE_FILE"] = path
+        for key in ("addresses", "txids", "watch_addresses"):
+            api._cache.pop(key, None)
+        try:
+            api._load_state_locked()
+            return (list(api._cache.get("addresses", [])),
+                    list(api._cache.get("watch_addresses", [])))
+        finally:
+            os.environ.pop("WB_STATE_FILE", None)
+            os.unlink(path)
+            for key in ("addresses", "txids", "watch_addresses"):
+                api._cache.pop(key, None)
+
+    def test_state_loads_mainnet_book(self):
+        addrs, watch = self._load_book([WATCH_A, WATCH_B], watch=[FOREIGN_WATCH])
+        self.assertEqual(addrs, [WATCH_A, WATCH_B])
+        self.assertEqual(watch, [FOREIGN_WATCH])
+
+    def test_state_loads_testnet_book(self):
+        addrs, watch = self._load_book([TESTNET_A], watch=[TESTNET_B])
+        self.assertEqual(addrs, [TESTNET_A])
+        self.assertEqual(watch, [TESTNET_B])
+
+    def test_state_loads_mixed_book(self):
+        addrs, _ = self._load_book([WATCH_A, TESTNET_A])
+        self.assertEqual(addrs, [WATCH_A, TESTNET_A])
+
+    def test_state_rejects_checksum_junk(self):
+        # behavior tightening: the old shape check ACCEPTED this junk
+        with self.assertRaises(ChainError):
+            self._load_book(["M" + "1" * 33])
+
+    def test_state_rejects_wrong_version(self):
+        for bad in (encode_address(140, b"\x01" * 20),   # regtest
+                    encode_address(0, b"\x01" * 20)):    # BTC v0
+            with self.assertRaises(ChainError):
+                self._load_book([bad])
+
+    def test_state_rejects_non_string_and_wrong_shape(self):
+        for bad in (42, None, {"x": 1}):
+            with self.assertRaises(ChainError):
+                self._load_book([bad])
+
+    def test_mockchain_emits_checksum_valid_addresses(self):
+        chain = MockChain()
+        for _ in range(4):
+            self.assertTrue(api.is_maza_address(chain.getnewaddress()))
+            self.assertTrue(api.is_maza_address(chain.mint_wallet_address()))
+
+    # --- endpoint surfaces ------------------------------------------------
+    def test_watch_import_accepts_testnet_addresses(self):
+        cookie = self.unlock()
+        status, _, body = self.request(
+            "POST", "/api/watch/import",
+            {"addresses": [TESTNET_A, TESTNET_B]}, cookie=cookie)
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data["imported"], 2)
+        self.assertEqual(data["watched"], 2)
+
+    def test_watch_import_still_rejects_checksum_junk(self):
+        cookie = self.unlock()
+        status, _, _ = self.request(
+            "POST", "/api/watch/import", {"addresses": ["M" + "1" * 33]},
+            cookie=cookie)
+        self.assertEqual(status, 400)
+
+    def test_reconcile_books_wallet_owned_testnet_change(self):
+        # M20's change-sweep recovery must see v88 outputs too, or a
+        # testnet funding tx strands its change outside the book.
+        addr, cookie = self.fund_bench(25.0)
+        change = TESTNET_A
+        self.chain.wallet_owned.add(change)
+        self.chain.fund_address(change, 0.4999)
+        self.chain.record_decoded_tx("b" * 64, [
+            {"n": 0, "value": 1.0,
+             "scriptPubKey": {"addresses": [FOREIGN_ADDR]}},
+            {"n": 1, "value": 0.4999,
+             "scriptPubKey": {"addresses": [change]}},
+        ])
+        status, _, body = self.request(
+            "POST", "/api/book/reconcile", {"txid": "b" * 64},
+            cookie=cookie)
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertEqual(result["added"], [change])
+        self.assertEqual(result["external"], [FOREIGN_ADDR])
+
+    def test_reconcile_drops_testnet_output_from_external_when_junk(self):
+        # a checksum-junk "address" in a tx fixture contributes nothing
+        addr, cookie = self.fund_bench(25.0)
+        self.chain.record_decoded_tx("c" * 64, [
+            {"n": 0, "value": 1.0,
+             "scriptPubKey": {"addresses": ["M" + "1" * 33]}},
+        ])
+        status, _, body = self.request(
+            "POST", "/api/book/reconcile", {"txid": "c" * 64},
+            cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["external"], [])
+
+    def test_qr_addr_accepts_watched_testnet_address(self):
+        cookie = self.unlock()
+        status, _, _ = self.request(
+            "POST", "/api/watch/import", {"addresses": [TESTNET_A]},
+            cookie=cookie)
+        self.assertEqual(status, 200)
+        status, _, body = self.request(
+            "GET", "/api/qr.svg?addr=" + urllib.parse.quote(TESTNET_A),
+            cookie=cookie)
+        self.assertEqual(status, 200)
 
 
 if __name__ == "__main__":

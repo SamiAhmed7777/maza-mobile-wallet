@@ -45,6 +45,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional
 
 from . import config, qr
+from .addrcheck import is_maza_address
 from .chain import FLAT_FEE, ChainError, get_chain
 
 MAX_BODY_BYTES = 16384
@@ -139,8 +140,7 @@ def _tx_output_addresses(tx: Dict[str, Any]) -> List[str]:
             single = spk.get("address")
             addrs = [single] if isinstance(single, str) and single else []
         for addr in addrs or []:
-            if isinstance(addr, str) and addr.startswith("M") \
-                    and len(addr) == 34 and addr not in seen:
+            if is_maza_address(addr) and addr not in seen:
                 seen.append(addr)
     return seen
 
@@ -219,8 +219,10 @@ def _load_state_locked() -> None:
         raise ChainError("corrupt state: addresses is not a list")
     addresses: List[str] = []
     for addr in raw_addrs:
-        if not isinstance(addr, str) or not addr.startswith("M") \
-                or len(addr) != 34:
+        # Chain-tolerant (S-6-ii-prep-c): base58check + version in
+        # {50 mainnet, 88 testnet} — a letter-shape check would crash-loop
+        # the testnet bench on every restart (its book is c-prefixed).
+        if not is_maza_address(addr):
             raise ChainError(f"corrupt state: bad address entry {addr!r}")
         addresses.append(addr)
     raw_txids = data.get("txids", [])
@@ -236,8 +238,7 @@ def _load_state_locked() -> None:
         raise ChainError("corrupt state: watch_addresses is not a list")
     watch: List[str] = []
     for addr in raw_watch:
-        if not isinstance(addr, str) or not addr.startswith("M") \
-                or len(addr) != 34:
+        if not is_maza_address(addr):
             raise ChainError(f"corrupt state: bad watch address {addr!r}")
         watch.append(addr)
     if addresses:
@@ -415,8 +416,7 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             return
         valid: List[str] = []
         for addr in raw:
-            if not isinstance(addr, str) or not addr.startswith("M") \
-                    or len(addr) != 34:
+            if not is_maza_address(addr):
                 self._watch_json(HTTPStatus.BAD_REQUEST,
                                  {"error": f"invalid MAZA address {addr!r}"},
                                  0)
@@ -1024,8 +1024,7 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             return payload, None
         if raw_addr is not None:
             addr = raw_addr
-            if not (isinstance(addr, str) and addr.startswith("M")
-                    and len(addr) == 34):
+            if not (isinstance(addr, str) and is_maza_address(addr)):
                 return None, "addr not valid or not watched"
             if addr not in self._watch_addresses():
                 return None, "addr not valid or not watched"

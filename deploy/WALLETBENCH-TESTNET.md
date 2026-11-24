@@ -68,9 +68,16 @@ DONE:
 
 1. `/api/state` on the bound IP answers **401** (serving + locked);
 2. authenticated `GET /api/watch/utxos` with the env token answers **200
-   JSON** — this exercises the real path (token -> service -> state ->
-   testnet mazad RPC; the service cold-starts its bench book off the
-   testnet node wallet here, so node wallet access is proven too);
+   JSON** — this exercises the real path (token -> service -> auth ->
+   testnet mazad RPC listunspent over the WATCH book). CORRECTED
+   (S-6-ii-prep-c, 2026-11-24): this endpoint does NOT cold-start the
+   bench book — it reads `_watch_addresses` only and never calls
+   `_ensure_addresses`, so `getnewaddress`/node-wallet access is NOT
+   proven here (the earlier "cold-starts its bench book off the testnet
+   node wallet here" claim was wrong). The bench book is brought up
+   explicitly by `deploy/fund-testnet-bench.py --execute` (authenticated
+   `/api/state` -> `_ensure_addresses` -> durable persist -> verify ->
+   restart-proof);
 3. identity: the release's own `walletbench.config` must resolve the RPC
    endpoint to `127.0.0.1:18446` with the env applied.
 
@@ -87,10 +94,16 @@ never in the transcript, and never inside the systemd-readable env file
   maza-wallet-bench-testnet.service` STOPS serving; the installed
   env/unit/state files remain on disk and are removed manually.
 
-- The samihost testnet chain is EMPTY (blocks=0, headers=0, ibd=True as
-  of 2026-11-23): the backend serves and generates book addresses, but
-  any ON-CHAIN testnet send/broadcast proof waits until the testnet
-  chain actually advances (or is mined forward). The S-6-ii DONE
+- The samihost testnet chain was EMPTY (blocks=0 at install time,
+  2026-11-23); since 2026-11-24 the S-6-ii-prep-b self-mining campaign
+  (generatetoaddress windows to tip 140, controlled env per spec Phase 7)
+  is advancing it — MEASURED tip=123 blocks==headers at 16:25 UTC
+  2026-11-24 (tip is a moving target; measure, never assume). Funding
+  gates live in `deploy/fund-testnet-bench.py` (tip>=101 maturity,
+  blocks==headers + fresh-tip sync, matured-UTXO total; the ibd flag is
+  report-only there — structurally stuck True by the testnet
+  minimumchainwork on the self-mined fork) — it refuses to fund until
+  the hard gates pass. The S-6-ii DONE
   criterion stays open until then.
 - The testnet mazad currently has no systemd unit (it was started
   manually); if the host reboots, restart it before this service is
