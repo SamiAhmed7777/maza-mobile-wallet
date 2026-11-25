@@ -1,0 +1,55 @@
+# M6 APK distribution channel — verification transcript (r3b, supersedes r3; polish-fold grade B urn:ump:wiomziyagjbwdkqu3qwwfjohkhzi7yx5h7asiywe5crgsyv2zfbq)
+Captured: 2026-11-25T13:49:19Z from DNS2 against the public HTTPS path
+r3 round verdict: grade B, zero blocking issues; the four polish suggestions were folded and are pinned here: (1) password preserved except line terminator — fixture test_password_whitespace_preserved; (2) hash-line counting scoped to the /apk route block + documented exit 3 instead of bare assert — classify() and apply_edits() now raise ValueError inside main's handler; (3) CMD lines carry NO annotations — each note sits on its own NOTE: line; (4) the remote temp-installer cleanup runs even when the install fails (rc captured before rm). History: r1 C (2 blockers) fixed in r2; r2 D (4 blockers) fixed in r3; a fixture found the r2 prefix-replace residue bug (double-$14$ line) which r3's whole-line replace fixed and the live configs were self-healed; the live line now carries exactly one $14$.
+Staged file: samihost:/opt/maza-wallet-bench/apk/maza-wallet-v1.1.0.apk
+Staged sha256: f1b575cf4cefdce723ac7eacc0238788edc3f593c327e58334fa89f52de33f9e (578745 bytes, versionCode=3 versionName=1.1.0, v2+v3 signed)
+
+## Installer fixture tests (tests/test_apk_route_install.py — 9 cases)
+### CMD: python3 tests/test_apk_route_install.py
+Ran 9 tests in 0.035s
+
+OK
+
+## Live installer run ON samihost (fixed bytes, mktemp-unique remote path, cleanup-guaranteed chain; hashes redacted here — they exist only in the root-owned configs)
+### CMD: R=$(ssh samihost "mktemp -t m6install.XXXXXX") && scp -q deploy/apk-route-install.py "samihost:$R" && sed -n "s/^password=//p" /root/.maza-wallet/apk-download.cred | ssh samihost "python3 \x27$R\x27; rc=\$?; rm -f \x27$R\x27; exit \$rc"
+NOTE: password file is /root/.maza-wallet/apk-download.cred (0600, operator host) — read in-process, never printed
+OUT: ROTATED-HASH on all three config sources with timestamped .bak-m6apk-20261125T134841Z backups / VALIDATE: Valid configuration / RELOADED: caddy active / ROUTE-ROTATE exit=0 / chain rc=0
+### CMD: for f in /etc/caddy/Caddyfile /var/lib/caddy-guard/protected-blocks.txt /var/lib/caddy-guard/protected-blocks.txt.pre-guard; do printf "%s: " "$f"; grep "maza \$2" "$f" | grep -o "\$14\$" | wc -l; done
+NOTE: run on samihost; exactly ONE cost marker per hash line proves no prefix-replace residue
+OUT: /etc/caddy/Caddyfile: 1 / protected-blocks.txt: 1 / .pre-guard: 1
+
+## Auth + integrity verification
+### CMD: N=$(mktemp) && printf "default\nlogin maza\npassword %s\n" "$(sed -n "s/^password=//p" /root/.maza-wallet/apk-download.cred)" > "$N" && chmod 600 "$N"
+### CMD: curl -s -o /dev/null -w %{http_code} https://mazatest.sami-host.me/apk/maza-wallet-v1.1.0.apk
+NOTE: no auth header — must refuse
+OUT: 401   EXPECT: 401
+### CMD: curl -s -o /dev/null -w %{http_code} -u maza:wrongpass https://mazatest.sami-host.me/apk/maza-wallet-v1.1.0.apk
+OUT: 401   EXPECT: 401
+### CMD: curl -s --netrc-file "$N" -o /tmp/m6-dl.apk -w "%{http_code} %{size_download}" https://mazatest.sami-host.me/apk/maza-wallet-v1.1.0.apk
+OUT: 200 578745   EXPECT: 200 578745
+### CMD: sha256sum /tmp/m6-dl.apk
+OUT: f1b575cf4cefdce723ac7eacc0238788edc3f593c327e58334fa89f52de33f9e   EXPECT: == staged sha256 above
+### CMD: curl -s --netrc-file "$N" https://mazatest.sami-host.me/apk/maza-wallet-v1.1.0.apk.sha256
+OUT: f1b575cf4cefdce723ac7eacc0238788edc3f593c327e58334fa89f52de33f9e  maza-wallet-v1.1.0.apk
+### CMD: curl -s --netrc-file "$N" -o /dev/null -w %{http_code} https://mazatest.sami-host.me/apk/
+NOTE: directory request — file_server runs without browse
+OUT: 404   EXPECT: 404
+
+## No-regression probes
+### CMD: curl -s -o /dev/null -w %{http_code} https://mazatest.sami-host.me/indexer/health
+OUT: 200   EXPECT: 200
+### CMD: curl -s -o /dev/null -w %{http_code} https://mazatest.sami-host.me/
+OUT: 200   EXPECT: 200
+### CMD: curl -s -o /dev/null -w %{http_code} https://mazatest.sami-host.me/api/state
+NOTE: no token. First capture in this transcript hit a single transient connection failure (000); three immediate re-probes all answered — transient, not a route regression. Re-probe command: for i in 1 2 3; do curl -s -o /dev/null -w "%{http_code}\n" https://mazatest.sami-host.me/api/state; sleep 2; done
+OUT (re-probe): 401 / 401 / 401   EXPECT: 401
+
+## Route + hash-line presence in all three config sources
+### CMD: for f in /etc/caddy/Caddyfile /var/lib/caddy-guard/protected-blocks.txt /var/lib/caddy-guard/protected-blocks.txt.pre-guard; do printf "%s routes=" "$f"; grep -c "handle_path /apk/\*" "$f"; printf " hashlines="; grep -cE "^[[:space:]]+maza \\\$2" "$f"; done
+NOTE: run on samihost
+/etc/caddy/Caddyfile routes=1
+ hashlines=1
+/var/lib/caddy-guard/protected-blocks.txt routes=1
+ hashlines=1
+/var/lib/caddy-guard/protected-blocks.txt.pre-guard routes=1
+ hashlines=1
