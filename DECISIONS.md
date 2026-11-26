@@ -421,6 +421,22 @@ The encoded QR payload is the EXACT composed string (byte-exact round
 trip), and the endpoint is a payment-request renderer for THIS
 wallet's addresses only — never a generic QR-content service.
 
+TYPED SEND ADOPTION (M28-a, added 2026-11-26): the typed SEND amount
+in BOTH doSend sites (bench `MainActivity`, self-custody `SelfCustody`)
+is now gated through `MazaUri.parseAmountText` — the same
+BitcoinUnits::parse contract above — before any float use. The bare
+`Double.parseDouble` path it replaces was an acceptance superset
+(measured at M28: `0x1p3` → 8.0, `5f`/`5d` → 5.0, `1e2` → 100.0,
+`+5` → 5.0); the contract rejects all of those outright. For every
+decimal the contract accepts, `strictSats / 1e8` is bit-identical to
+what `parseDouble` returned (IEEE division of exact integers is the
+correctly-rounded quotient), so the bench JSON body carries the same
+number it always carried for clean decimals; the self-custody flow
+signs the EXACT parsed sats instead of `Math.round(parseDouble × COIN)`.
+Input-strictness only — no fee, confirmation or URI parameter is
+touched. Pins: SelfTest M28-a rows (desktop) +
+`tests/test_send_amount_gate.py` (wiring).
+
 ## D15 — BIP44 gap-limit watch window (M11, added 2026-11-17)
 
 The self-custody watch window follows the BIP44 standard gap limit

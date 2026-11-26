@@ -1108,17 +1108,25 @@ public class MainActivity extends Activity
             sendResult("Enter address and amount.", RESULT_ERROR);
             return;
         }
-        final double amt;
-        try {
-            amt = Double.parseDouble(amtStr);
-        } catch (NumberFormatException e) {
+        // M28-a: the typed amount must pass the SAME strict decimal shape
+        // as the scan path (MazaUri = MazaCore BitcoinUnits::parse, D14):
+        // digits, at most one '.', at most 8 fraction digits, no signs,
+        // exponents, hex-float or f/d suffixes. parseDouble accepted those
+        // shapes with surprise values (measured: 0x1p3 -> 8.0, 1e2 -> 100.0,
+        // +5 -> 5.0, 5f/5d -> 5.0); the contract rejects them outright.
+        // For every shape the contract accepts, strictSats/1e8 is
+        // bit-identical to what parseDouble returned, so the server sees
+        // the same number it always saw for clean decimals.
+        final Long strictSats = MazaUri.parseAmountText(amtStr);
+        if (strictSats == null) {
             sendResult("Invalid amount.", RESULT_ERROR);
             return;
         }
-        if (amt <= 0 || Double.isFinite(amt) == false) {
+        if (strictSats <= 0) {
             sendResult("Amount must be positive.", RESULT_ERROR);
             return;
         }
+        final double amt = strictSats / (double) MazaUri.SATS_PER_MAZA;
         sendBtn.setEnabled(false);
         sendResult("Sending...", RESULT_NEUTRAL);
         new Thread(() -> {

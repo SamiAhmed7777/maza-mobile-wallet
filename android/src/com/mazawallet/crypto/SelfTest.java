@@ -1005,6 +1005,27 @@ public final class SelfTest {
         typed = MazaUri.parseAmountText("abc");
         check("mazauri: parseAmountText rejects non-numeric text",
                 typed == null);
+        // --- M28-a: the typed SEND gate reuses this contract; these are
+        // the parseDouble acceptance shapes measured at M28 that the
+        // contract must keep rejecting on the send path.
+        typed = MazaUri.parseAmountText("0x1p3");
+        check("mazauri: parseAmountText rejects hex-float 0x1p3 (M28-a)",
+                typed == null);
+        typed = MazaUri.parseAmountText("5f");
+        check("mazauri: parseAmountText rejects float suffix 5f (M28-a)",
+                typed == null);
+        typed = MazaUri.parseAmountText("5d");
+        check("mazauri: parseAmountText rejects double suffix 5d (M28-a)",
+                typed == null);
+        typed = MazaUri.parseAmountText("1e2");
+        check("mazauri: parseAmountText rejects exponent 1e2 (M28-a)",
+                typed == null);
+        typed = MazaUri.parseAmountText("+5");
+        check("mazauri: parseAmountText rejects leading plus (M28-a)",
+                typed == null);
+        typed = MazaUri.parseAmountText("5");
+        check("mazauri: parseAmountText plain integer still accepted (M28-a)",
+                typed != null && typed == 500000000L);
         typed = MazaUri.parseAmountText("");
         check("mazauri: parseAmountText EMPTY -> 0L, not null (the "
                         + "screen treats sats <= 0 as invalid / no request)",

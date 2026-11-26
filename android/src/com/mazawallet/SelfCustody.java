@@ -27,6 +27,7 @@ import com.mazawallet.crypto.Bip39;
 import com.mazawallet.crypto.Bip44Maza;
 import com.mazawallet.crypto.FeePolicy;
 import com.mazawallet.crypto.GapPolicy;
+import com.mazawallet.crypto.MazaUri;
 import com.mazawallet.crypto.NetworkParams;
 import com.mazawallet.crypto.TxBuilder;
 
@@ -815,14 +816,17 @@ public final class SelfCustody {
             sendErr("Enter address and amount.");
             return;
         }
-        final double amt;
-        try {
-            amt = Double.parseDouble(amtStr);
-        } catch (NumberFormatException e) {
+        // M28-a: the typed amount must pass the SAME strict decimal shape
+        // as the scan path (MazaUri = MazaCore BitcoinUnits::parse, D14) -
+        // parseDouble's exotic acceptances (0x1p3, 1e2, +5, 5f/5d) are
+        // rejected outright. The signed amount is the EXACT sats the
+        // contract parsed, not Math.round(parseDouble * COIN).
+        final Long strictSats = MazaUri.parseAmountText(amtStr);
+        if (strictSats == null) {
             sendErr("Invalid amount.");
             return;
         }
-        if (amt <= 0 || !Double.isFinite(amt)) {
+        if (strictSats <= 0) {
             sendErr("Amount must be positive.");
             return;
         }
@@ -849,7 +853,7 @@ public final class SelfCustody {
         sendResult("Building and signing transaction...", pal.textSecondary());
         new Thread(() -> {
             try {
-                sendFlow(toHash, Math.round(amt * COIN));
+                sendFlow(toHash, strictSats);
             } catch (Unauthorized u) {
                 unauthorized();
             } catch (IOException e) {
