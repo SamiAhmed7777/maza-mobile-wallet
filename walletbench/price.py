@@ -80,6 +80,19 @@ USER_AGENT = ("maza-wallet-bench/1.0 "
               "(price display; github.com/SamiAhmed7777/maza-mobile-wallet)")
 
 
+# Neither source redirects in normal operation, and a redirect is never
+# followed: urllib would replay the request headers - the CoinMarketCap key
+# among them - to whatever host and scheme the redirect names. A 3xx is an
+# answer like any other status (http_302), not an instruction.
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+# The one opener fetch_json goes through. Tests replace `price._open`.
+_open = urllib.request.build_opener(_NoRedirect).open
+
+
 class Pair(NamedTuple):
     """One validated exchange market row."""
     name: str          # "MAZA_LTC"
@@ -181,37 +194,81 @@ def parse_cmc_web(payload: Any) -> Dict[str, Decimal]:
     return {}
 
 
-def fetch_json(url: str, timeout: float = FETCH_TIMEOUT_S,
-               headers: Optional[Dict[str, str]] = None
-               ) -> Tuple[bool, Any, str]:
-    """GET `url` -> (ok, decoded JSON | None, reason).
-
-    `reason` is always a FIXED short code (timeout / unreachable / bad_json
-    / http_<status>) - never the body and never a header value: the
-    CoinMarketCap key rides a request header and must not reach a log line.
-    """
-    request_headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
-    request_headers.update(headers or {})
-    request = urllib.request.Request(url, headers=request_headers)
+def _pull(request: urllib.request.Request, timeout: float,
+          box: Dict[str, Any]) -> None:
+    """Worker body of fetch_json: one GET and its body. Every outcome is
+    written to `box` as ok / raw / reason. It runs off the caller's
+    thread, so a trickling upstream holds the CALLER for at most
+    `timeout`."""
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read(MAX_BODY_BYTES)
+        with _open(request, timeout=timeout) as response:
+            raw = bytearray()
+            deadline = time.monotonic() + timeout
+            # read1 takes what ONE socket read brought. read(n) would
+            # wait for all n bytes, and the idle timer restarts at every
+            # byte - so a socket timeout alone bounds nothing.
+            while len(raw) < MAX_BODY_BYTES:
+                if time.monotonic() >= deadline:
+                    box.update(ok=False, raw=None, reason="timeout")
+                    return
+                chunk = response.read1(min(65536, MAX_BODY_BYTES - len(raw)))
+                if not chunk:
+                    break
+                raw += chunk
+            box.update(ok=True, raw=bytes(raw), reason="")
     except urllib.error.HTTPError as exc:
         # The error carries the response's file object. Close it here
         # instead of leaving that to the garbage collector: the keyless
         # CoinMarketCap feed answers 429 under load, so this runs.
         with exc:
-            return False, None, "http_%d" % exc.code
+            box.update(ok=False, raw=None, reason="http_%d" % exc.code)
     except urllib.error.URLError as exc:
-        if isinstance(exc.reason, (TimeoutError, socket.timeout)):
-            return False, None, "timeout"
-        return False, None, "unreachable"
+        box.update(ok=False, raw=None, reason=(
+            "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout))
+            else "unreachable"))
     except (TimeoutError, socket.timeout):
-        return False, None, "timeout"
+        box.update(ok=False, raw=None, reason="timeout")
     except (OSError, HTTPException, ValueError):
-        return False, None, "unreachable"
+        box.update(ok=False, raw=None, reason="unreachable")
+
+
+def fetch_json(url: str, timeout: float = FETCH_TIMEOUT_S,
+               headers: Optional[Dict[str, str]] = None
+               ) -> Tuple[bool, Any, str]:
+    """GET `url` -> (ok, decoded JSON | None, reason), within `timeout`.
+
+    The WHOLE exchange - connecting, headers and body - is bounded by
+    `timeout`: it runs on a worker the caller waits for at most that
+    long, and the worker itself stops reading at a deadline of its own.
+    A socket timeout alone would bound only the idle gaps, so an
+    upstream dripping one byte at a time could hold a plain read for as
+    long as it liked.
+
+    A redirect is never followed (neither source redirects in normal
+    operation): urllib would replay the request headers to whatever host
+    and scheme the redirect names. It is reported like any other status.
+
+    `reason` is always a FIXED short code (timeout / unreachable /
+    bad_json / http_<status>) - never the body and never a header
+    value: the CoinMarketCap key rides a request header and must not
+    reach a log line.
+    """
+    request_headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+    request_headers.update(headers or {})
+    request = urllib.request.Request(url, headers=request_headers)
+    box: Dict[str, Any] = {}
+    worker = threading.Thread(target=_pull, args=(request, timeout, box),
+                              name="price-fetch", daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if "ok" not in box:
+        # Still working at the deadline. It is not waited for: a daemon,
+        # it ends on its own socket timeout.
+        return False, None, "timeout"
+    if not box["ok"]:
+        return False, None, box["reason"]
     try:
-        return True, json.loads(raw.decode("utf-8")), ""
+        return True, json.loads(box["raw"].decode("utf-8")), ""
     except (ValueError, UnicodeDecodeError):
         return False, None, "bad_json"
 
@@ -239,6 +296,7 @@ def cmc_quotes(api_key: str, timeout: float = FETCH_TIMEOUT_S,
         return {}, "official", reason or "no_quote"
     quotes: Dict[str, Decimal] = {}
     reason = ""
+    answered = set()
     # Three small requests share ONE bounded budget so a dead upstream can
     # never hold a caller for three full timeouts.
     deadline = mono() + 2 * timeout
@@ -256,8 +314,12 @@ def cmc_quotes(api_key: str, timeout: float = FETCH_TIMEOUT_S,
             reason = "no_quote"
             continue
         quotes.update(got)
+        answered.update(got)
     if quotes:
-        return quotes, "web", ""
+        # Some symbols answered and some did not: the rates that came are
+        # good, and the gap is named - a clean "ok" would hide it.
+        gap = [symbol for symbol in CMC_IDS if symbol not in answered]
+        return quotes, "web", "partial" if gap else ""
     return {}, "web", reason or "no_quote"
 
 
@@ -289,51 +351,102 @@ def _result(usd: Optional[Decimal], source: str, pair: Optional[Pair],
     }
 
 
+def _spawn_thread(work: Callable[[], None]) -> None:
+    """How serve() starts its round in production: a daemon thread."""
+    threading.Thread(target=work, name="price-refresh", daemon=True).start()
+
+
 class PriceCache:
     """Thread-safe snapshot cache with single-flight refresh.
 
-    One caller refreshes under the lock; concurrent callers wait on the
-    same lock and reuse the result - an upstream is never hammered by a
-    burst of requests (FreiXLite bans abusive polling).
+    The lock guards bookkeeping only, never a network call. One caller
+    at a time runs a refresh round (an upstream is never hammered by a
+    burst of requests - FreiXLite bans abusive polling) and holds nothing
+    while it fetches; what it brings back is swapped in under the lock.
+    So every reader is answered from what the cache holds: `snapshot()`
+    waits only for a round it starts itself, and `serve()` - the request
+    path - never waits at all.
     """
 
     def __init__(self,
                  exchange_fetch: Optional[Callable[..., Tuple[bool, Any, str]]] = None,
                  cmc_fetch: Optional[Callable[..., Tuple[Dict[str, Decimal], str, str]]] = None,
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time,
+                 spawn: Optional[Callable[[Callable[[], None]], None]] = None
+                 ) -> None:
         self._exchange_fetch = exchange_fetch or _exchange_fetch
         self._cmc_fetch = cmc_fetch or _cmc_fetch
         self._clock = clock
+        # How serve() starts the round it elects: a daemon thread unless a
+        # test hands in its own.
+        self._spawn = spawn or _spawn_thread
         self._lock = threading.Lock()
+        self._refreshing = False
         self._exchange_at = 0.0
         self._exchange_try = 0.0
         self._pairs: List[Pair] = []
         self._exchange_reason = "not_fetched"
-        self._cmc_at = 0.0
+        # Each dollar rate's OWN fetch time (symbol -> when that rate was
+        # fetched): a rate kept through a partial answer keeps its age.
+        self._cmc_at: Dict[str, float] = {}
         self._cmc_try = 0.0
         self._cmc: Dict[str, Decimal] = {}
         self._cmc_reason = "not_fetched"
         self._cmc_mode = "none"
 
-    def snapshot(self) -> Dict[str, Any]:
-        """Current answer, refreshing first when a TTL has expired."""
+    @staticmethod
+    def _overdue(now: float, stamp: float, ttl: float) -> bool:
+        """True `ttl` seconds after the last attempt. A stamp from the
+        FUTURE counts too: the clock stepped backwards, and nothing
+        measured against that clock can be trusted - so it is fetched
+        again."""
+        elapsed = now - stamp
+        return elapsed < 0 or elapsed >= ttl
+
+    @staticmethod
+    def _held(now: float, at: float) -> bool:
+        """A value younger than MAX_AGE_S. A stamp from the future is NOT
+        held: after a backwards clock step an old quote would otherwise
+        read as brand new, so it is dropped instead - never shown as
+        fresh."""
+        return bool(at) and 0 <= now - at <= MAX_AGE_S
+
+    def _due_locked(self, now: float) -> bool:
+        return (self._overdue(now, self._exchange_try, EXCHANGE_TTL_S)
+                or self._overdue(now, self._cmc_try, CMC_TTL_S))
+
+    def _elect(self) -> bool:
+        """True when the caller may run a refresh round: a TTL has
+        expired and no round is running (single flight)."""
         with self._lock:
-            self._refresh_locked()
+            if self._refreshing or not self._due_locked(self._clock()):
+                return False
+            self._refreshing = True
+            return True
+
+    def snapshot(self) -> Dict[str, Any]:
+        """Current answer, refreshing first when a TTL has expired. Waits
+        for a round it starts itself - bounded by the fetch timeouts -
+        and never behind another caller's: while one runs, this answers
+        from what is held."""
+        if self._elect():
+            self._round()
+        with self._lock:
             return self._build_locked()
 
     def refresh(self) -> Dict[str, Any]:
-        """TTL check + the count-only PRICE_REFRESH line. The background
-        refresher calls this so requests find a warm cache."""
-        fetched = False
+        """The refresher's call: a round when a TTL has expired, then the
+        count-only PRICE_REFRESH line for what that round fetched."""
+        fetched, reasons = False, None
+        if self._elect():
+            fetched, reasons = self._round()
         with self._lock:
-            fetched = self._refresh_locked()
             snapshot = self._build_locked()
-            # The reason fields are read under the lock they belong to: a
-            # concurrent refresh between the release and the log must not
-            # mix two rounds' reasons into one line.
-            exchange_reason = self._exchange_reason
-            cmc_reason = self._cmc_reason
-            cmc_mode = self._cmc_mode
+            # The reason fields come from the round's own swap (read under
+            # the lock that made them), never from a later round that may
+            # have run in between: one line, one round.
+            exchange_reason, cmc_reason, cmc_mode = reasons or (
+                self._exchange_reason, self._cmc_reason, self._cmc_mode)
         if fetched:
             found = snapshot.get("price") or {}
             _log_refresh(exchange_reason or "ok", cmc_reason or "ok",
@@ -341,21 +454,103 @@ class PriceCache:
                          bool(found.get("stale")))
         return snapshot
 
-    def _refresh_locked(self) -> bool:
-        """True when at least one source was fetched in this call.
+    def serve(self) -> Dict[str, Any]:
+        """The request path's answer: what the cache holds, right now.
 
-        The TTL is measured from the last ATTEMPT, not the last success:
-        a dead upstream is retried once per TTL, not on every request."""
-        now = self._clock()
-        fetched = False
-        if now - self._exchange_try >= EXCHANGE_TTL_S:
-            fetched = True
-            self._exchange_try = now
+        When a TTL has expired, ONE background round is started - and
+        this caller still does not wait for it: an upstream that hangs
+        must never delay a wallet request. Until the round lands the
+        answer is the previous one, its age telling the truth; a cache
+        that holds nothing yet answers `price: null` (fail closed). If
+        the round cannot be started, the election is released at once -
+        otherwise no refresh could ever run again.
+        """
+        with self._lock:
+            answer = self._build_locked()
+            start = not self._refreshing and self._due_locked(self._clock())
+            if start:
+                self._refreshing = True
+        if start:
             try:
-                ok, payload, reason = self._exchange_fetch()
-                pairs = parse_pairs(payload) if ok else []
-            except Exception as exc:  # one source must not starve the other
-                pairs, reason = [], "error_" + type(exc).__name__
+                self._spawn(self._warm)
+            except Exception as exc:
+                # The round never started, so its own finally never runs:
+                # the election is released HERE or no refresh - not even
+                # the refresher's - could ever run again. The caller is
+                # still answered from what the cache holds.
+                with self._lock:
+                    self._refreshing = False
+                try:
+                    print(f"PRICE_REFRESH spawn error="
+                          f"{type(exc).__name__}", flush=True)
+                except Exception:
+                    pass        # observability must not break a request
+        return answer
+
+    def _warm(self) -> None:
+        """The round serve() started, off the request. An upstream fault
+        is caught inside the round; this catch is for a bug in the round
+        itself, logged by class name only, like the refresher's."""
+        try:
+            self._round()
+        except Exception as exc:
+            print(f"PRICE_REFRESH refresher error={type(exc).__name__}",
+                  flush=True)
+
+    def _round(self) -> Tuple[bool, Tuple[str, str, str]]:
+        """One refresh round, for a caller that won the election.
+
+        The TTL stamps move first (under the lock, from the last ATTEMPT:
+        a dead upstream is retried once per TTL, not on every request);
+        the fetches then run with NO lock held, so a slow upstream never
+        blocks a reader; what came back is swapped in under the lock.
+        Returns whether anything was fetched, and the reason fields as
+        that same lock hold left them. The election ends on every exit.
+        """
+        try:
+            with self._lock:
+                now = self._clock()
+                exchange_due = self._overdue(now, self._exchange_try,
+                                             EXCHANGE_TTL_S)
+                cmc_due = self._overdue(now, self._cmc_try, CMC_TTL_S)
+                if exchange_due:
+                    self._exchange_try = now
+                if cmc_due:
+                    self._cmc_try = now
+            exchange = self._fetch_exchange() if exchange_due else None
+            cmc = self._fetch_cmc() if cmc_due else None
+            with self._lock:
+                fetched = self._swap_locked(now, exchange, cmc)
+                reasons = (self._exchange_reason, self._cmc_reason,
+                           self._cmc_mode)
+            return fetched, reasons
+        finally:
+            with self._lock:
+                self._refreshing = False
+
+    def _fetch_exchange(self) -> Tuple[List[Pair], str]:
+        try:
+            ok, payload, reason = self._exchange_fetch()
+            return parse_pairs(payload) if ok else [], reason
+        except Exception as exc:  # one source must not starve the other
+            return [], "error_" + type(exc).__name__
+
+    def _fetch_cmc(self) -> Tuple[Dict[str, Decimal], str, str]:
+        try:
+            return self._cmc_fetch()
+        except Exception as exc:  # class name only, never the message
+            return {}, "none", "error_" + type(exc).__name__
+
+    def _swap_locked(self, now: float,
+                     exchange: Optional[Tuple[List[Pair], str]],
+                     cmc: Optional[Tuple[Dict[str, Decimal], str, str]]
+                     ) -> bool:
+        """Put one round's answers where the readers look. `None` means
+        the source was not due, so its bookkeeping is not touched."""
+        fetched = False
+        if exchange is not None:
+            fetched = True
+            pairs, reason = exchange
             if pairs:
                 self._pairs, self._exchange_at, self._exchange_reason = (
                     pairs, now, "")
@@ -363,24 +558,23 @@ class PriceCache:
                 # Keep the previous pairs on a failed or empty refresh - the
                 # age tells the truth, and MAX_AGE_S eventually drops them.
                 self._exchange_reason = reason or "no_trading_pair"
-        if now - self._cmc_try >= CMC_TTL_S:
+        if cmc is not None:
             fetched = True
-            self._cmc_try = now
-            try:
-                quotes, mode, reason = self._cmc_fetch()
-            except Exception as exc:  # class name only, never the message
-                quotes, mode, reason = {}, "none", "error_" + type(exc).__name__
+            quotes, mode, reason = cmc
             if quotes:
                 # A partial upstream success (one symbol's request died)
-                # must not throw away the other symbols' still-fresh rates:
-                # overlay the new answers on the previous set while that set
-                # is inside the display window; beyond it, replace wholesale.
-                merged = (dict(self._cmc)
-                          if self._cmc_at and now - self._cmc_at <= MAX_AGE_S
-                          else {})
-                merged.update(quotes)
-                self._cmc, self._cmc_at, self._cmc_reason, self._cmc_mode = (
-                    merged, now, "", mode)
+                # must not throw away the other symbols' rates - and must
+                # not make them young either: the rates that came are
+                # overlaid, each getting its OWN fetch time and the others
+                # keeping theirs. A rate older than MAX_AGE_S is never used
+                # again, however many partial answers arrive after it (the
+                # read decides - see _build_locked).
+                for symbol, rate in quotes.items():
+                    self._cmc[symbol] = rate
+                    self._cmc_at[symbol] = now
+                # "" when every symbol answered, "partial" when some did
+                # not: the rates that came are good and the gap is named.
+                self._cmc_reason, self._cmc_mode = reason, mode
             else:
                 self._cmc_reason, self._cmc_mode = reason or "no_quote", mode
         return fetched
@@ -391,32 +585,36 @@ class PriceCache:
             "freixlite:" + (self._exchange_reason or "ok"),
             "coinmarketcap:" + (self._cmc_reason or "ok"),
         ]
-        pairs_live = bool(self._exchange_at) and now - self._exchange_at <= MAX_AGE_S
-        usd_leg_live = bool(self._cmc_at) and now - self._cmc_at <= MAX_AGE_S
+        pairs_live = self._held(now, self._exchange_at)
         if pairs_live:
             # 1 + 2: the venue's price, converted through the dollar leg.
-            # A pair whose quote currency has no dollar price is skipped in
-            # favour of a trading pair that can be priced.
+            # A pair whose quote currency has no LIVE dollar price is
+            # skipped in favour of a trading pair that can be priced.
             for pair in self._pairs:
-                if usd_leg_live and pair.quote in self._cmc:
-                    # The product of two capped values can still exceed the
-                    # cap: treat that like a missing dollar leg (skip the
-                    # pair) instead of ever quantizing an absurd number.
-                    converted = pair.last * self._cmc[pair.quote]
-                    if converted > PARSE_VALUE_CAP:
-                        continue
-                    return _result(converted,
-                                   "freixlite", pair, self._cmc[pair.quote],
-                                   min(self._exchange_at, self._cmc_at),
-                                   now, attempts)
+                leg_at = self._cmc_at.get(pair.quote, 0.0)
+                if not self._held(now, leg_at):
+                    continue
+                # The product of two capped values can still exceed the
+                # cap: treat that like a missing dollar leg (skip the
+                # pair) instead of ever quantizing an absurd number.
+                converted = pair.last * self._cmc[pair.quote]
+                if converted > PARSE_VALUE_CAP:
+                    continue
+                # The age is that of the oldest input this answer used:
+                # the pair, and THAT rate's own fetch time.
+                return _result(converted,
+                               "freixlite", pair, self._cmc[pair.quote],
+                               min(self._exchange_at, leg_at),
+                               now, attempts)
             # No dollar leg at all: quote the best trading pair in its own
             # currency rather than inventing a conversion.
             return _result(None, "freixlite", self._pairs[0], None,
                            self._exchange_at, now, attempts)
         # 3: nothing usable from the venue - CoinMarketCap's own quote.
-        if usd_leg_live and BASE_SYMBOL in self._cmc:
+        maza_at = self._cmc_at.get(BASE_SYMBOL, 0.0)
+        if self._held(now, maza_at):
             return _result(self._cmc[BASE_SYMBOL], "coinmarketcap", None,
-                           None, self._cmc_at, now, attempts)
+                           None, maza_at, now, attempts)
         # 4: no source. Never a number.
         return {"price": None, "reason": "; ".join(attempts),
                 "attempts": attempts}
@@ -449,15 +647,18 @@ _stop = threading.Event()
 
 
 def current() -> Dict[str, Any]:
-    """The process-wide answer (see PriceCache.snapshot)."""
-    return _default.snapshot()
+    """The request path's answer (PriceCache.serve): what the cache
+    holds - never a wait on the network."""
+    return _default.serve()
 
 
 def start_refresher(interval: float = 15.0) -> None:
     """Keep the process-wide cache warm OFF the request path (daemon
-    thread, idempotent): an upstream that hangs must never delay a wallet
-    request. Without it the first request after each TTL performs the
-    refresh itself, bounded by FETCH_TIMEOUT_S."""
+    thread, idempotent). A request never waits for a fetch (see
+    PriceCache.serve): one that finds an expired TTL is answered from
+    what is held and starts a round in the background. The refresher is
+    what keeps that the rare case - it refreshes before a TTL runs out,
+    so a wallet is normally answered fresh."""
     global _refresher_started
     with _refresher_lock:
         if _refresher_started:
@@ -479,5 +680,6 @@ def start_refresher(interval: float = 15.0) -> None:
 
 
 if __name__ == "__main__":
-    # Ops probe: prints the live answer as JSON (makes the real calls).
-    print(json.dumps(current(), indent=2))
+    # Ops probe: prints the live answer as JSON (makes the real calls,
+    # and waits for them).
+    print(json.dumps(_default.snapshot(), indent=2))

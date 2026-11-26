@@ -787,6 +787,11 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
         byte, so the testnet sibling needs no extra configuration. When the
         network cannot be proven (chain down on a cold start) the answer is
         also no-price: fail closed, never a mainnet number on a test coin.
+
+        The answer is whatever the cache holds when the request lands
+        (price.current -> PriceCache.serve): a refresh runs off the
+        request path, so a slow or hung upstream adds no latency here.
+        Until the first round lands the answer is null, never a guess.
         """
         if not self._require_auth():
             return

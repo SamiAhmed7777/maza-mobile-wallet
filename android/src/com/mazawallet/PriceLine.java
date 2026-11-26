@@ -31,7 +31,8 @@ public final class PriceLine {
     }
 
     /** One quote from GET /api/price. Amounts are decimal strings exactly
-     *  as the bench sent them; any field may be null. */
+     *  as the bench sent them; any field may be null. Built by {@link
+     *  Quote#of} from what the bench sent - never with a defaulted age. */
     public static final class Quote {
         /** Dollar price per 1 MAZA; null when no dollar leg exists. */
         public final String usd;
@@ -58,6 +59,27 @@ public final class PriceLine {
             this.ageS = ageS;
             this.stale = stale;
         }
+
+        /**
+         * M27 (review fold deleg_1ab54e7f F8): the bench's fields as one
+         * quote, or null when an honesty field is missing or unusable.
+         *
+         * <p>{@code ageRaw} must be a JSON integer (Integer or Long) and
+         * {@code staleRaw} a JSON boolean - nothing else. Both arrive as
+         * Object so that "absent" stays distinguishable: a default of 0
+         * seconds / not stale would dress a quote of unknown age up as a
+         * fresh one. A negative age is unknown too (a clock that moved).
+         * No age, no line: fail closed.
+         */
+        public static Quote of(String usd, String source, String pair, String last,
+                String quote, Object ageRaw, Object staleRaw) {
+            boolean intAge = ageRaw instanceof Integer || ageRaw instanceof Long;
+            if (!intAge || !(staleRaw instanceof Boolean)) return null;
+            long ageS = ((Number) ageRaw).longValue();
+            if (ageS < 0L) return null;
+            return new Quote(usd, source, pair, last, quote, ageS,
+                    (Boolean) staleRaw);
+        }
     }
 
     private static final Pattern AMOUNT = Pattern.compile("[0-9]{1,12}(\\.[0-9]{1,12})?");
@@ -79,9 +101,9 @@ public final class PriceLine {
     }
 
     /** The display line, or null when there is nothing honest to show (no
-     *  usable amount at all). */
+     *  usable amount at all, or an age that is not an age). */
     public static String format(Quote q) {
-        if (q == null) return null;
+        if (q == null || q.ageS < 0L) return null;
         String amount;
         if (isAmount(q.usd)) {
             amount = "$" + q.usd;
@@ -111,8 +133,9 @@ public final class PriceLine {
         return isSymbol(code) ? code : null;
     }
 
-    /** "42s old", "16m old", "3h old", "2d old". A negative age (clock
-     *  skew) reads as brand new. */
+    /** "42s old", "16m old", "3h old", "2d old". The clamp is belt and
+     *  braces: Quote.of never lets a negative age through, and format
+     *  refuses one. */
     static String age(long seconds) {
         long s = Math.max(0L, seconds);
         if (s < 60L) return s + "s old";

@@ -684,12 +684,15 @@ change any of it.
   so requests are answered from cache, `STALE_AFTER_S` 900, `MAX_AGE_S`
   24 h (then CMC's own quote if live, else none), `FETCH_TIMEOUT_S` 4 with
   the CMC leg sharing one 8 s budget; a dead upstream is retried once per
-  TTL.
+  TTL. A wallet request never fetches: it is answered from what is held,
+  and at most one background round is started behind it (F2 below).
 - **Trust boundary.** Only the bench calls the sources, behind the token
   (`GET /api/price`). The APK carries no price-source host and never
   contacts one (`tests/test_price_wiring.py`).
 - **Wallet side.** `PriceLine` + `PricePoll` are pure Java (no android /
-  org.json imports); ONE `org.json` read site, `Api.readPrice`. ONE gate
+  org.json imports); ONE `org.json` read site, `Api.readPrice`, where
+  `age_s` and `stale` are read strictly - no default - through
+  `PriceLine.Quote.of` (F8 below). ONE gate
   per session (`PricePoll`, shared by both lines through
   `sharePriceGate`) allows ONE read a minute (`PricePoll.INTERVAL_MS`) and
   rides the screens' existing 15 s `POLL_MS` polls — no timer, no wakelock.
@@ -736,6 +739,67 @@ read runs on a spawned worker (not the UI thread); (F4) the no-op
 clears the gate" pin, and the cadence test's comment-prose asserts were
 dropped (assertions target code, per the module's own strip_comments
 contract).
+
+Review folds (2026-11-26; independent read-only review deleg_1ab54e7f.
+Of its ten findings, six were open at `1b104cb` and one more, `F10`, was
+half open; `F1`, `F3`, `F6` and the display half of `F10` had already been
+closed by the fold above. `F2` and `F4` were reproduced first-hand before
+any fix. The last rule is not one of its findings: it was reproduced
+first-hand the same day while re-reading the partial-answer fold above.
+No cadence number above changes. Each rule below is pinned by
+tests that were SHOWN to fail against the old behaviour - mutation runs on
+an isolated copy of the tree, 17 mutants of `price.py` and 8 of the wallet
+sources, each breaking exactly the tests named for it):
+
+- **(F2) A request never waits, and no lock spans a network call.** A
+  refresh round elects under the lock, fetches with NO lock held, and
+  swaps its result in under the lock. The request path is
+  `PriceCache.serve()`: it answers what the cache holds at that moment and
+  starts at most ONE background round when a TTL has expired; a cache that
+  holds nothing yet answers `price: null`. `snapshot()` keeps its
+  synchronous contract for a round it starts itself and never queues
+  behind another caller's.
+- **(F4) A redirect is an answer, never an instruction.** `fetch_json` goes
+  through ONE opener (`price._open`) whose redirect handler refuses every
+  redirect (`_NoRedirect.redirect_request` returns `None`). urllib's
+  default handler replays the request headers to whatever host the
+  redirect names - the CoinMarketCap key among them, when one is
+  configured. A 3xx is reported like any other status (`http_302`).
+- **(F5) A fetch is bounded end to end.** It runs on a worker thread
+  (`price-fetch`) that the caller abandons at `FETCH_TIMEOUT_S`, and the
+  worker's own body read goes through `read1` against a deadline of its
+  own. A socket timeout alone bounds only the idle gaps, so an upstream
+  dripping one byte at a time could hold a plain `read()` for as long as
+  it liked.
+- **(F7) A stamp from the future is unmeasurable.** An `updated_at` later
+  than now means the clock stepped backwards (an NTP correction, a VM
+  restored from a snapshot). The quote is not held - never shown as fresh
+  - and the source is fetched again.
+- **(F8) The wallet reads `age_s` and `stale` strictly.** `PriceLine.Quote.of`
+  accepts a JSON integer and a JSON boolean and nothing else: a missing,
+  odd-typed or negative age, or a missing stale flag, means NO line.
+  `optLong("age_s", 0)` and `optBoolean("stale", false)` dressed a quote
+  of unknown age up as a fresh one. `PriceLine.format` refuses a negative
+  age as well, so no path can print one.
+- **(F9) That rule is driven, not grep-asserted.** It lives in the pure
+  Java class and runs on the desktop JVM (`tests/test_price_wiring.py`).
+  What stays pinned by source is the `org.json` edge: `Api.quoteOf`,
+  which exists only on Android, hands `p.opt("age_s")` and
+  `p.opt("stale")` through untouched and coerces neither from text, and
+  no class but `PriceLine` constructs a `Quote` - the scan covers every
+  source that touches the price, so the strict read is the ONE way in.
+- **(F10) A partly failed CoinMarketCap pass says so.** When some symbols
+  answer and some do not, the reason is `partial` - `coinmarketcap:partial`
+  in `attempts`, `cmc=partial` in the PRICE_REFRESH line - while the price
+  itself stays displayed.
+- **(Own audit) A rate kept through partial answers keeps its own age.**
+  Each dollar rate remembers when IT was fetched (`_cmc_at`, one stamp
+  per symbol). A partial CoinMarketCap answer stamps only the symbols it
+  answered; every other rate keeps its own stamp, and a rate older than
+  `MAX_AGE_S` is never used again, however many partial answers follow.
+  The 2026-11-25 fold re-stamped the whole set on every merge, so a rate
+  upstream had stopped quoting read as fresh for as long as the other
+  symbols kept answering.
 
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all

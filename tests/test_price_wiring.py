@@ -120,13 +120,44 @@ public final class PriceProbe {
                     1, false)) == null, "not a venue price: [" + bad + "]");
         }
         eq("1 MAZA \u2248 $0.5 \u00B7 0s old",
-                PriceLine.format(q("0.5", "<script>", "<b>", null, null, -5, false)),
-                "text that is not a symbol is dropped; negative age is new");
+                PriceLine.format(q("0.5", "<script>", "<b>", null, null, 0, false)),
+                "text that is not a symbol is dropped");
+        ok(PriceLine.format(q("0.5", "freixlite", null, null, null, -5, false)) == null,
+                "a negative age is not an age: no line");
         // An amount is printed exactly as sent - never re-rounded here.
         eq("1 MAZA \u2248 $0.50000001 \u00B7 FreiXLite \u00B7 59s old",
                 PriceLine.format(q("0.50000001", "freixlite", null, null,
                         null, 59, false)),
                 "an amount is printed as sent");
+
+        // M27 (review fold deleg_1ab54e7f F8): the two honesty fields are
+        // read strictly. A quote of UNKNOWN age is not shown - a default
+        // of "0 seconds old, not stale" would invent freshness.
+        eq("1 MAZA \u2248 $0.5 \u00B7 FreiXLite MAZA_LTC \u00B7 42s old",
+                PriceLine.format(PriceLine.Quote.of("0.5", "freixlite",
+                        "MAZA_LTC", "1", "LTC", 42, false)),
+                "a JSON integer age and a JSON boolean stale: a whole quote");
+        eq("1 MAZA \u2248 $0.5 \u00B7 FreiXLite MAZA_LTC \u00B7 STALE 43s old",
+                PriceLine.format(PriceLine.Quote.of("0.5", "freixlite",
+                        "MAZA_LTC", "1", "LTC", 43L, Boolean.TRUE)),
+                "a long age and a boxed stale flag");
+        eq("1 MAZA \u2248 $0.5 \u00B7 FreiXLite \u00B7 0s old",
+                PriceLine.format(PriceLine.Quote.of("0.5", "freixlite", null,
+                        null, null, 0, false)),
+                "a real zero age is an age: 0s old, not unknown");
+        Object[] notAnAge = {null, 42.0, "42", Boolean.TRUE, -1, -5L};
+        for (Object bad : notAnAge) {
+            ok(PriceLine.Quote.of("0.5", "freixlite", "MAZA_LTC", "1", "LTC",
+                    bad, false) == null, "not an age: [" + bad + "]");
+        }
+        Object[] notAFlag = {null, "false", "true", 0, 1};
+        for (Object bad : notAFlag) {
+            ok(PriceLine.Quote.of("0.5", "freixlite", "MAZA_LTC", "1", "LTC",
+                    42, bad) == null, "not a stale flag: [" + bad + "]");
+        }
+        ok(PriceLine.format(PriceLine.Quote.of("0.5", "freixlite", null, null,
+                null, null, false)) == null,
+                "a quote with no age renders no line at all");
 
         // Age buckets.
         eq("0s old", PriceLine.age(0), "age 0");
@@ -400,12 +431,32 @@ class BenchAppContract(unittest.TestCase):
         api = code(API)
         reader = api[api.index("private static PriceLine.Quote quoteOf("):]
         read = set(re.findall(r'str\(p, "([a-z_]+)"\)', reader))
-        read |= set(re.findall(r'p\.opt(?:Long|Boolean)\("([a-z_]+)"', reader))
+        # M27: age_s and stale are read with a bare opt() - a missing value
+        # must stay distinguishable, so there is no default any more.
+        read |= set(re.findall(r'p\.opt(?:Long|Boolean)?\("([a-z_]+)"', reader))
         self.assertEqual(read, sent - NOT_SHOWN,
                          "a key changed on one side of the wire only")
         self.assertEqual(sent - read, NOT_SHOWN,
                          "the app stopped (or started) using a key")
         self.assertIn('optJSONObject("price")', reader)
+
+    def test_a_missing_freshness_field_never_reads_as_fresh(self):
+        # Review fold (deleg_1ab54e7f F8): the defaults are gone, the
+        # strict factory is the only way a quote is built here, and the
+        # behaviour itself is probed on the JVM (Quote.of, above).
+        api = code(API)
+        self.assertNotIn('optLong("age_s", 0)', api)
+        self.assertNotIn('optBoolean("stale", false)', api)
+        self.assertNotIn("new PriceLine.Quote(", api)
+        self.assertIn("PriceLine.Quote.of(", api)
+        self.assertIn('p.opt("age_s"), p.opt("stale")', api)
+        # Neither an integer age nor a boolean flag is coerced from text.
+        self.assertNotRegex(api, r"parseLong|parseBoolean|Boolean\.parseBoolean|valueOf\(\"")
+        # And nowhere else is a quote built past the factory: the strict
+        # read is only as good as its being the ONE way in.
+        bypassed = [name for name in TOUCHED if name != "PriceLine.java"
+                    and "new PriceLine.Quote(" in code(os.path.join(SRC, name))]
+        self.assertEqual(bypassed, [])
 
     def test_only_the_bench_calls_a_price_source(self):
         # The APK carries no price-source host: discovery is the bench's

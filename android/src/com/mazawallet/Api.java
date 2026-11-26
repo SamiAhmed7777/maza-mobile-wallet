@@ -158,13 +158,22 @@ public final class Api {
         }
     }
 
-    /** The bench's answer, or null when it has no source right now. */
+    /**
+     * M26: the bench's answer, or null when it has no source right now.
+     *
+     * <p>M27 (review fold deleg_1ab54e7f F8): {@code age_s} and
+     * {@code stale} are read STRICTLY - a JSON integer and a JSON
+     * true/false, with no default. A missing or odd-typed value means the
+     * age of this quote is unknown, and a quote of unknown age is not
+     * shown (PriceLine.Quote.of answers null). "0 seconds old, not
+     * stale" is the one thing a default must never invent.
+     */
     private static PriceLine.Quote quoteOf(JSONObject body) {
         JSONObject p = body == null ? null : body.optJSONObject("price");
         if (p == null) return null;
-        return new PriceLine.Quote(str(p, "usd"), str(p, "source"),
+        return PriceLine.Quote.of(str(p, "usd"), str(p, "source"),
                 str(p, "pair"), str(p, "last"), str(p, "quote"),
-                p.optLong("age_s", 0), p.optBoolean("stale", false));
+                p.opt("age_s"), p.opt("stale"));
     }
 
     /** A JSON null or a missing key both read as Java null (never "null"). */
