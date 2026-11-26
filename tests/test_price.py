@@ -1098,6 +1098,65 @@ class DeadChain(MockChain):
         raise ChainError("rpc: connection refused")
 
 
+class TestRefresherNetworkGate(unittest.TestCase):
+    """M28 (replayed review deleg_6106976c): serve() started the price
+    refresher on EVERY bench, so a testnet bench polled the upstream price
+    APIs every 15s for quotes its own /api/price route refuses (testnet
+    coins have no market). serve() now consults the book's address version
+    first: a testnet (or otherwise non-mainnet) book skips the refresher,
+    and an unreadable version fails OPEN, because a boot-time chain race
+    must not disable the mainnet bench's pre-warm and the per-request
+    route gate stays the correctness backstop."""
+
+    def setUp(self):
+        import tempfile
+        fd, state_file = tempfile.mkstemp(prefix="maza-refresher-", suffix=".json")
+        os.close(fd)
+        os.unlink(state_file)  # missing file = fresh cold start, not corrupt
+        os.environ["WB_STATE_FILE"] = state_file
+        self.state_file = state_file
+        self.addCleanup(os.environ.pop, "WB_STATE_FILE", None)
+        self.addCleanup(self.drop_state_file)
+
+    def fresh_book(self):
+        """Forget the book in memory AND on disk: a case that cold-started
+        the previous chain must not leak its persisted addresses into the
+        next case's load (subtest 2 would otherwise re-read subtest 1's
+        testnet book and skip for the wrong reason)."""
+        api._cache.pop("addresses", None)
+        api._cache.pop("txids", None)
+        api._cache.pop("watch_addresses", None)
+        self.drop_state_file()
+
+    def drop_state_file(self):
+        if os.path.exists(self.state_file):
+            os.unlink(self.state_file)
+
+    def test_mainnet_book_starts_the_refresher(self):
+        self.fresh_book()
+        self.assertIsNone(api._refresher_reason(MockChain()))
+
+    def test_testnet_book_skips_the_refresher(self):
+        self.fresh_book()
+        self.assertEqual(api._refresher_reason(TestnetChain()), "testnet")
+
+    def test_unreadable_version_fails_open(self):
+        self.fresh_book()
+        self.assertIsNone(api._refresher_reason(DeadChain()))
+
+    def test_serve_starts_the_refresher_only_for_a_mainnet_book(self):
+        for chain, expected in ((TestnetChain(), 0), (MockChain(), 1)):
+            with self.subTest(starts=bool(expected)):
+                self.fresh_book()
+                with mock.patch.object(api, "get_chain", return_value=chain), \
+                     mock.patch.object(api.config, "TOKEN", "test-token"), \
+                     mock.patch.object(api.price, "start_refresher") as start, \
+                     mock.patch.object(api, "ThreadingHTTPServer") as server_cls:
+                    server_cls.return_value.serve_forever = lambda: None
+                    api.serve()
+                    self.assertEqual(start.call_count, expected)
+
+
 class TestBenchHarnessSocket(unittest.TestCase):
     """The harness this module reuses starts a real listening socket per
     test. shutdown() alone stops the loop but leaves that socket open, so

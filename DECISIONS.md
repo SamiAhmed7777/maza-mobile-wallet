@@ -678,7 +678,13 @@ change any of it.
 - **Fail closed.** No source → `{"price": null, ...}` and the wallet shows
   NO line; a wallet never shows a number it could not source. Testnet and
   unknown networks return no price at all (network read from the bench's
-  own address version byte, per D18).
+  own address version byte, per D18). M28 (replayed review
+  deleg_6106976c): a non-mainnet bench also never STARTS the upstream
+  refresher — `serve()` probes the book's address version first
+  (`_refresher_reason`) and skips with a count-only `PRICE_REFRESH
+  refresher skipped reason=` line; an unreadable version fails open (a
+  boot-time chain race must not disable the mainnet bench's pre-warm)
+  and the per-request route gate stays the correctness backstop.
 - **Cadence (engineering choices).** `EXCHANGE_TTL_S` 60, `CMC_TTL_S` 600,
   a refresher every 15 s (`start_refresher`, first fetch at bench start)
   so requests are answered from cache, `STALE_AFTER_S` 900, `MAX_AGE_S`

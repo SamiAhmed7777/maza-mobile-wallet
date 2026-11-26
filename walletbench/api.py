@@ -334,17 +334,11 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
         under a lock — without both, restarts orphan funded addresses and
         concurrent cold-start requests adopt different addresses (judge
         rounds 2-3).
+
+        M28: the body lives at module level (_ensure_addresses_for) so
+        serve() can run the same read for the price-refresher gate.
         """
-        with _state_lock:
-            addrs = _cache.get("addresses")
-            if addrs is None:
-                _load_state_locked()
-                addrs = _cache.get("addresses")
-                if not addrs:
-                    addrs = [self.chain.getnewaddress()]
-                _cache["addresses"] = addrs
-                _persist_state_locked()
-            return list(addrs)
+        return _ensure_addresses_for(self.chain)
 
     def _primary_address(self) -> str:
         addrs = self._ensure_addresses()
@@ -1107,6 +1101,44 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
         self.wfile.write(png)
 
 
+# --- price network gate (M28, replayed review deleg_6106976c) ---------------
+def _ensure_addresses_for(chain) -> List[str]:
+    """The bench address book under the state lock, with an explicit chain:
+    the body of WalletBenchHandler._ensure_addresses, callable before any
+    request exists (serve() probes the book's network before it starts the
+    price refresher)."""
+    with _state_lock:
+        addrs = _cache.get("addresses")
+        if addrs is None:
+            _load_state_locked()
+            addrs = _cache.get("addresses")
+            if not addrs:
+                addrs = [chain.getnewaddress()]
+            _cache["addresses"] = addrs
+            _persist_state_locked()
+        return list(addrs)
+
+
+def _refresher_reason(chain) -> Optional[str]:
+    """Why the startup price refresher must NOT run, or None to start it.
+
+    A testnet bench (v88 book) must never poll the upstream price APIs:
+    the /api/price route refuses its answers anyway (testnet coins have
+    no market — D19), so the refresher would spend the venues' request
+    budgets forever on data no client is ever served. An unreadable
+    version fails OPEN: a boot-time chain race must not disable the
+    mainnet bench's pre-warm, and the per-request route gate stays the
+    correctness backstop.
+    """
+    try:
+        version = base58check_version(_ensure_addresses_for(chain)[0])
+    except ChainError:
+        return None
+    if version == price.MAINNET_ADDRESS_VERSION:
+        return None
+    return "testnet" if version == price.TESTNET_ADDRESS_VERSION else "network_unknown"
+
+
 def serve() -> None:
     if not config.TOKEN:
         raise SystemExit("WB_TOKEN is required")
@@ -1114,8 +1146,13 @@ def serve() -> None:
     handler.chain = get_chain()
     handler.token_digest = _token_digest(config.TOKEN)
     server = ThreadingHTTPServer((config.LISTEN_HOST, config.LISTEN_PORT), handler)
-    # M26: keep the price cache warm off the request path.
-    price.start_refresher()
+    # M26: keep the price cache warm off the request path. M28: never on a
+    # non-mainnet bench — the route refuses those answers anyway.
+    skip = _refresher_reason(handler.chain)
+    if skip is None:
+        price.start_refresher()
+    else:
+        print(f"PRICE_REFRESH refresher skipped reason={skip}", flush=True)
     print(f"maza wallet bench on {config.LISTEN_HOST}:{config.LISTEN_PORT} "
           f"account={config.ACCOUNT} cap={config.MAX_SEND} fee={FLAT_FEE}",
           flush=True)
