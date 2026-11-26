@@ -9,6 +9,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -120,6 +121,12 @@ public final class SelfCustody {
 
     // Wallet-state widgets.
     private TextView balanceTv;
+    /** M26: price line under the balance; GONE until the bench has a quote. */
+    private TextView priceTv;
+    /** M26: the price gate. The activity shares its own (sharePriceGate),
+     *  so both lines ask at most once a minute between them and a rebuilt
+     *  screen repaints from what was already asked. */
+    private PricePoll pricePoll = new PricePoll();
     private TextView addrTv;
     private TextView addrIndexTv;
     private ImageView qrIv;
@@ -442,6 +449,13 @@ public final class SelfCustody {
         balanceTv = label("...", 28, pal.textPrimary(), Typeface.BOLD);
         balCard.addView(balanceTv, mp(0, dp(2), 0, 0));
 
+        // M26: price for display. GONE until the bench has a quote (and
+        // always GONE on testnet, where coins have no market).
+        priceTv = label("", 13, pal.textSecondary(), Typeface.NORMAL);
+        priceTv.setVisibility(View.GONE);
+        renderPrice(pricePoll.last());   // a repaint keeps the line
+        balCard.addView(priceTv, mp(0, dp(2), 0, 0));
+
         LinearLayout addrCard = card();
         root.addView(addrCard, mp(0, dp(12), 0, 0));
         addrCard.addView(label("RECEIVE ADDRESS", 12, pal.accent(), Typeface.BOLD));
@@ -608,13 +622,64 @@ public final class SelfCustody {
                     return;
                 }
 
-                ui.post(() -> applyRefresh(balance, utxos, txs, scan));
+                ui.post(() -> {
+                    applyRefresh(balance, utxos, txs, scan);
+                    // M26: after the paint, on its own worker - a slow price
+                    // read never delays a balance.
+                    pollPrice();
+                });
             } catch (IOException e) {
                 ui.post(() -> note("Update failed: " + e.getMessage(), pal.danger()));
             } catch (JSONException e) {
                 ui.post(() -> note("Bad response from server.", pal.danger()));
             }
         }, "selfcustody-refresh").start();
+    }
+
+    /** M26: share the activity's price gate. Call on the UI thread, right
+     *  after construction: this screen then asks at most once a minute
+     *  TOGETHER with the other line, and a rebuilt screen starts from the
+     *  quote that is already known instead of asking again. */
+    public void sharePriceGate(PricePoll shared) {
+        pricePoll = shared;
+        renderPrice(shared.last());
+    }
+
+    /** M26: ask for a price if this minute's slot is free. Called on the UI
+     *  thread once the balance is painted. The read goes to its own worker,
+     *  so a slow or hung price read can never delay a balance refresh. When
+     *  the other line already asked, repaint from what it got. */
+    private void pollPrice() {
+        final String forUrl = host.baseUrl();
+        final String tok = host.token();
+        final long ticket = tok == null ? PricePoll.NOT_DUE
+                : pricePoll.due(SystemClock.elapsedRealtime());
+        if (ticket == PricePoll.NOT_DUE) {
+            renderPrice(pricePoll.last());
+            return;
+        }
+        new Thread(() -> {
+            final Api.Price price = Api.readPrice(pricePoll, ticket, forUrl, tok);
+            ui.post(() -> paintPrice(price));
+        }, "price").start();
+    }
+
+    /** M26: apply one price read. A read that produced nothing new leaves
+     *  the line as it is; "no source right now" hides it. The session is
+     *  checked again HERE: the answer was recorded on a worker, and a
+     *  session can end (showWallet calls clear, on this same thread)
+     *  before this paint runs. */
+    private void paintPrice(Api.Price price) {
+        if (price.keep || !pricePoll.isCurrent(price.ticket)) return;
+        renderPrice(price.quote);
+    }
+
+    /** Show the price line, or hide it when there is nothing honest to show. */
+    private void renderPrice(PriceLine.Quote quote) {
+        if (priceTv == null) return;
+        String line = PriceLine.format(quote);
+        priceTv.setVisibility(line == null ? View.GONE : View.VISIBLE);
+        priceTv.setText(line == null ? "" : line);
     }
 
     private void applyRefresh(double balance, JSONArray utxos, JSONArray txs,

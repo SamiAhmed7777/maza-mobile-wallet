@@ -101,6 +101,77 @@ public final class Api {
         }
     }
 
+    /**
+     * M26: outcome of one price read.
+     *
+     * {@code keep} is true when the read produced no new information (the
+     * request failed, or the answer belongs to a session that has already
+     * ended): the caller leaves the line untouched. Otherwise {@code quote}
+     * is the quote to show, or null for "no source right now", which hides
+     * the line.
+     */
+    public static final class Price {
+        public static final Price KEEP = new Price(null, true, PricePoll.NOT_DUE);
+        public final PriceLine.Quote quote;
+        public final boolean keep;
+        /** The session ticket the answer was recorded under. The paint
+         *  repeats the check (PricePoll.isCurrent): a session can end
+         *  between the read and the paint. KEEP carries no ticket. */
+        public final long ticket;
+
+        private Price(PriceLine.Quote quote, boolean keep, long ticket) {
+            this.quote = quote;
+            this.keep = keep;
+            this.ticket = ticket;
+        }
+    }
+
+    /**
+     * M26: one price read. {@code ticket} is what PricePoll.due handed the
+     * caller; the answer is remembered only while that is still the current
+     * session, so a reply that arrives after an unlock never lands on the
+     * new endpoint's screen. Runs on the caller's worker thread and never
+     * throws: a display extra must not fail anything it rides on. A plain
+     * GET, retried by Net like every other read.
+     */
+    public static Price readPrice(PricePoll poll, long ticket, String baseUrl,
+            String token) {
+        try {
+            Resp r = Net.withRetry("GET", "/api/price",
+                    () -> http(baseUrl, token, "GET", "/api/price", null));
+            if (r.code == HttpURLConnection.HTTP_NOT_FOUND) {
+                // An older bench has no such route: stop asking, show nothing.
+                poll.retire(ticket);
+                return poll.record(ticket, null) ? new Price(null, false, ticket)
+                        : Price.KEEP;
+            }
+            if (r.code != HttpURLConnection.HTTP_OK) {
+                throw new IOException("price HTTP " + r.code);
+            }
+            PriceLine.Quote quote = quoteOf(r.json());
+            return poll.record(ticket, quote) ? new Price(quote, false, ticket)
+                    : Price.KEEP;
+        } catch (IOException | JSONException e) {
+            // Class name only, never the message.
+            AppLog.w("price unavailable " + e.getClass().getSimpleName());
+            return Price.KEEP;
+        }
+    }
+
+    /** The bench's answer, or null when it has no source right now. */
+    private static PriceLine.Quote quoteOf(JSONObject body) {
+        JSONObject p = body == null ? null : body.optJSONObject("price");
+        if (p == null) return null;
+        return new PriceLine.Quote(str(p, "usd"), str(p, "source"),
+                str(p, "pair"), str(p, "last"), str(p, "quote"),
+                p.optLong("age_s", 0), p.optBoolean("stale", false));
+    }
+
+    /** A JSON null or a missing key both read as Java null (never "null"). */
+    private static String str(JSONObject o, String key) {
+        return o.isNull(key) ? null : o.optString(key, null);
+    }
+
     /** M25: route identity for log lines comes from Net (the retry table's
      *  own normalizer) - this class no longer keeps a second copy. */
 }

@@ -101,6 +101,7 @@ public final class Net {
             new Route("POST", "/api/watch/import", 3, false),  // idempotent: dedupes addresses
             new Route("GET", "/api/watch/utxos", 3, false),    // read (SelfCustody)
             new Route("GET", "/api/watch/history", 3, false),  // read (SelfCustody)
+            new Route("GET", "/api/price", 3, false),         // price for display (M26): a read
             new Route("GET", "/api/v0/address", 3, false),    // indexer address read
             new Route("GET", "/api/v0/tx", 3, false),         // indexer transaction read
             new Route("GET", "/api/v0/block", 3, false),      // indexer block read

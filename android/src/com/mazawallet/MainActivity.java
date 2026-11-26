@@ -20,6 +20,7 @@ import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.Editable;
 import android.text.InputType;
 import android.view.Gravity;
@@ -196,6 +197,11 @@ public class MainActivity extends Activity
 
     // Wallet widgets (one set, updated in place by applyState).
     private TextView balanceTv;
+    /** M26: price line under the balance; GONE until the bench has a quote. */
+    private TextView priceTv;
+    /** M26: one price read a minute per session, shared with the
+     *  self-custody line; survives tab repaints. */
+    private final PricePoll pricePoll = new PricePoll();
     private TextView accountTv;
     private TextView lastSyncTv;
     private TextView addressTv;
@@ -429,6 +435,9 @@ public class MainActivity extends Activity
      *  tick, QR). The unlock path; W3-a's repaint calls buildWalletUi() itself
      *  so a theme switch does not re-trigger the M21 watch import. */
     private void showWallet() {
+        // M26: a new session may mean a new endpoint - forget the previous
+        // endpoint's price BEFORE anything paints it.
+        pricePoll.clear();
         buildWalletUi();
         // M14: notification channel exists before any receive can fire, the
         // last-seen balance resets per session (unlock/reconnect never
@@ -686,6 +695,13 @@ public class MainActivity extends Activity
 
         balanceTv = label("...", 36, pal.textPrimary(), Typeface.BOLD);
         col.addView(balanceTv);
+
+        // M26: price for display. GONE until the bench has a quote (and
+        // always GONE on testnet, where coins have no market).
+        priceTv = label("", 13, pal.textSecondary(), Typeface.NORMAL);
+        priceTv.setVisibility(View.GONE);
+        renderPrice(pricePoll.last());   // a theme repaint keeps the line
+        col.addView(priceTv, mp(0, dp(4), 0, 0));
 
         accountTv = label("", 13, pal.textSecondary(), Typeface.NORMAL);
         col.addView(accountTv, mp(0, dp(4), 0, 0));
@@ -962,6 +978,8 @@ public class MainActivity extends Activity
     private void buildWalletTab() {
         LinearLayout col = tabColumn();
         selfCustody = new SelfCustody(this, this, pal);
+        // M26: both lines share the session's price gate.
+        selfCustody.sharePriceGate(pricePoll);
         col.addView(selfCustody.view());
         pinSection = column();
         col.addView(pinSection, mp(0, dp(12), 0, dp(8)));
@@ -1170,6 +1188,9 @@ public class MainActivity extends Activity
                 final WalletState ws = WalletState.parse(r.text());
                 ui.post(() -> {
                     applyState(ws);
+                    // M26: after the paint, on its own worker - a slow price
+                    // read never delays a balance.
+                    pollPrice();
                     if (selfCustody != null) selfCustody.refresh();
                     schedulePoll();
                 });
@@ -1185,6 +1206,43 @@ public class MainActivity extends Activity
                 });
             }
         }, "state").start();
+    }
+
+    /** M26: ask for a price if this minute's slot is free. Called on the UI
+     *  thread once the balance is painted. The read goes to its own worker,
+     *  so a slow or hung price read can never delay a balance refresh. When
+     *  the other line already asked, repaint from what it got. */
+    private void pollPrice() {
+        final String forUrl = baseUrl;
+        final String tok = token;
+        final long ticket = tok == null ? PricePoll.NOT_DUE
+                : pricePoll.due(SystemClock.elapsedRealtime());
+        if (ticket == PricePoll.NOT_DUE) {
+            renderPrice(pricePoll.last());
+            return;
+        }
+        new Thread(() -> {
+            final Api.Price price = Api.readPrice(pricePoll, ticket, forUrl, tok);
+            ui.post(() -> paintPrice(price));
+        }, "price").start();
+    }
+
+    /** M26: apply one price read. A read that produced nothing new leaves
+     *  the line as it is; "no source right now" hides it. The session is
+     *  checked again HERE: the answer was recorded on a worker, and a
+     *  session can end (showWallet calls clear, on this same thread)
+     *  before this paint runs. */
+    private void paintPrice(Api.Price price) {
+        if (price.keep || !pricePoll.isCurrent(price.ticket)) return;
+        renderPrice(price.quote);
+    }
+
+    /** Show the price line, or hide it when there is nothing honest to show. */
+    private void renderPrice(PriceLine.Quote quote) {
+        if (priceTv == null) return;
+        String line = PriceLine.format(quote);
+        priceTv.setVisibility(line == null ? View.GONE : View.VISIBLE);
+        priceTv.setText(line == null ? "" : line);
     }
 
     /** S-5: no silent empty states. A failed refresh writes ONE reason onto

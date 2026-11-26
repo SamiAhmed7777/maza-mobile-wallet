@@ -47,11 +47,20 @@ def make_server(chain):
     return server, f"http://127.0.0.1:{server.server_address[1]}"
 
 
-class BenchTestCase(unittest.TestCase):
+class BenchHarness(unittest.TestCase):
+    """Server + request helpers with no tests of its own, so other test
+    modules can reuse the harness without running this module's tests."""
+
     def setUp(self):
         self.chain = MockChain()
         self.server, self.base = make_server(self.chain)
-        self.addCleanup(self.server.shutdown)
+        self.addCleanup(self._stop_server)
+
+    def _stop_server(self):
+        """Stop the serve loop AND close the listening socket. shutdown()
+        alone leaves the socket open: one leaked descriptor per test."""
+        self.server.shutdown()
+        self.server.server_close()
 
     def request(self, method: str, path: str, body: dict = None,
                 cookie: str = None, raw_body: bytes = None):
@@ -67,7 +76,8 @@ class BenchTestCase(unittest.TestCase):
             with urllib.request.urlopen(req, timeout=5) as resp:
                 return resp.status, dict(resp.headers), resp.read()
         except urllib.error.HTTPError as exc:
-            return exc.code, dict(exc.headers), exc.read()
+            with exc:  # an error response is an open socket until closed
+                return exc.code, dict(exc.headers), exc.read()
 
     def unlock(self):
         status, headers, _ = self.request(
@@ -90,6 +100,8 @@ class BenchTestCase(unittest.TestCase):
         self.chain.fund_address(addr, amount)
         return addr, cookie
 
+
+class BenchTestCase(BenchHarness):
     # --- auth ---------------------------------------------------------------
     def test_unlock_rejects_bad_token(self):
         status, _, body = self.request(

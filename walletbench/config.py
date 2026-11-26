@@ -41,6 +41,14 @@ RPC_TIMEOUT = int(_env("WB_RPC_TIMEOUT", "15"))
 
 def state_file() -> str:
     return _env("WB_STATE_FILE")
+
+
+def cmc_api_key() -> str:
+    """Optional CoinMarketCap API key (the official API). Empty = the
+    keyless public JSON feed (walletbench/price.py). Read live like the
+    RPC env, never baked into the APK (the service is the only caller)."""
+    return _env("WB_CMC_API_KEY")
+
 # Static assets served from STATIC_DIR — exact-filename whitelist.
 STATIC_WHITELIST = {
     "wallet.js": "application/javascript; charset=utf-8",

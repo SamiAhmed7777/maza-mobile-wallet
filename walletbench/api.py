@@ -13,6 +13,11 @@ Routes:
     POST /api/watch/import -> {"addresses":[...]} watch-only import (no keys)
     GET  /api/watch/utxos  -> UTXOs of the watch set (self-custody balance)
     GET  /api/watch/history-> history filtered to the watch set
+    GET  /api/price       -> {"price": {"usd","source","pair","last","quote",
+                            "quote_usd","updated_at","age_s","stale"}} for
+                            display (M26: FreiXLite primary, CoinMarketCap
+                            for the USD leg / fallback; null = no source;
+                            never on a testnet bench)
     POST /api/broadcast   -> {"hex": "..."} broadcast a CLIENT-SIGNED tx
     POST /api/book/reconcile -> {"txid"} -> append the tx's wallet-owned
                               change outputs to the bench address book (M20:
@@ -44,8 +49,8 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional
 
-from . import config, qr
-from .addrcheck import is_maza_address
+from . import config, price, qr
+from .addrcheck import base58check_version, is_maza_address
 from .chain import FLAT_FEE, ChainError, get_chain
 
 MAX_BODY_BYTES = 16384
@@ -721,6 +726,8 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             self._qr()
         elif path == "/api/qr.png":
             self._qr_png()
+        elif path == "/api/price":
+            self._price()
         else:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -765,6 +772,35 @@ class WalletBenchHandler(BaseHTTPRequestHandler):
             return True
         self._json(HTTPStatus.UNAUTHORIZED, {"error": "locked"})
         return False
+
+    def _price(self) -> None:
+        """MAZA price for display (M26) - FreiXLite first, CoinMarketCap
+        only where needed (walletbench/price.py). Token-gated like every
+        other read.
+
+        `price: null` with a 200 is the honest "no source right now"
+        answer, not a server fault: an auxiliary display feed must never
+        turn an upstream outage into 5xx noise in the wallet's console.
+
+        A testnet bench NEVER quotes a price - testnet coins have no
+        market. The chain is read from the bench's own address version
+        byte, so the testnet sibling needs no extra configuration. When the
+        network cannot be proven (chain down on a cold start) the answer is
+        also no-price: fail closed, never a mainnet number on a test coin.
+        """
+        if not self._require_auth():
+            return
+        try:
+            version = base58check_version(self._primary_address())
+        except ChainError:
+            version = None
+        if version != price.MAINNET_ADDRESS_VERSION:
+            reason = "testnet"
+            if version != price.TESTNET_ADDRESS_VERSION:
+                reason = "network_unknown"
+            self._json(HTTPStatus.OK, {"price": None, "reason": reason})
+            return
+        self._json(HTTPStatus.OK, price.current())
 
     def _state(self) -> None:
         if not self._require_auth():
@@ -1073,6 +1109,8 @@ def serve() -> None:
     handler.chain = get_chain()
     handler.token_digest = _token_digest(config.TOKEN)
     server = ThreadingHTTPServer((config.LISTEN_HOST, config.LISTEN_PORT), handler)
+    # M26: keep the price cache warm off the request path.
+    price.start_refresher()
     print(f"maza wallet bench on {config.LISTEN_HOST}:{config.LISTEN_PORT} "
           f"account={config.ACCOUNT} cap={config.MAX_SEND} fee={FLAT_FEE}",
           flush=True)

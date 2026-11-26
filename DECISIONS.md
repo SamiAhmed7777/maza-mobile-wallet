@@ -650,10 +650,99 @@ MazaCore v0.16.3 source (github.com/MazaCoin/maza tag v0.16.3,
   (no forced drop). STILL GATED: the controlled-env device proof (testnet
   chain blocks=0) and the public testnet endpoint decision (Payu).
 
+## D19 — Price display (M26, added 2026-11-25)
+
+Directive (Payu, 2026-11-25): "have Maza price discovery come from freixlite
+and coinmarketcap info if needed".
+
+**NOT inherited — there is nothing to inherit.** MazaCore v0.16.3 (326935b8e)
+quotes no fiat price: `git grep -i -E
+"coinmarketcap|coingecko|pricefeed|price_feed|fiatprice|fiat_price|cryptocompare"
+v0.16.3 -- '*.cpp' '*.h' '*.hpp' '*.c' '*.py' '*.js' '*.json'` → 0 files.
+Unlike D1–D18, every number below is an ENGINEERING CHOICE and Payu may
+change any of it.
+
+- **Scope: DISPLAY ONLY.** Nothing spends, signs, sets fees, confirms, or
+  validates against a price. It is one line under the balance.
+- **Sources (`walletbench/price.py`).** PRIMARY: FreiXLite's MAZA/LTC —
+  the one MAZA market in freixlite.com's market list — read through
+  FreiExchange's public API (`api.freiexchange.com/v2/summary`). Where that
+  API returns several MAZA pairs, the largest 24h base volume wins; a
+  zero-volume pair never wins while any MAZA pair trades. USD LEG: the
+  venue quotes in LTC/BTC, so `usd = last × CoinMarketCap's USD for the
+  quote currency` (CMC ids MAZA 164, BTC 1, LTC 2). FALLBACK ("if
+  needed"): when the venue is unreachable or has no trading MAZA pair,
+  CoinMarketCap's own MAZA quote. CoinMarketCap lists MAZA/BTC as MAZA's
+  only market (its market-pairs endpoint, 2026-11-25) and that pair has
+  zero volume — which is why CMC is never the first choice.
+- **Fail closed.** No source → `{"price": null, ...}` and the wallet shows
+  NO line; a wallet never shows a number it could not source. Testnet and
+  unknown networks return no price at all (network read from the bench's
+  own address version byte, per D18).
+- **Cadence (engineering choices).** `EXCHANGE_TTL_S` 60, `CMC_TTL_S` 600,
+  a refresher every 15 s (`start_refresher`, first fetch at bench start)
+  so requests are answered from cache, `STALE_AFTER_S` 900, `MAX_AGE_S`
+  24 h (then CMC's own quote if live, else none), `FETCH_TIMEOUT_S` 4 with
+  the CMC leg sharing one 8 s budget; a dead upstream is retried once per
+  TTL.
+- **Trust boundary.** Only the bench calls the sources, behind the token
+  (`GET /api/price`). The APK carries no price-source host and never
+  contacts one (`tests/test_price_wiring.py`).
+- **Wallet side.** `PriceLine` + `PricePoll` are pure Java (no android /
+  org.json imports); ONE `org.json` read site, `Api.readPrice`. ONE gate
+  per session (`PricePoll`, shared by both lines through
+  `sharePriceGate`) allows ONE read a minute (`PricePoll.INTERVAL_MS`) and
+  rides the screens' existing 15 s `POLL_MS` polls — no timer, no wakelock.
+  The read runs on its own worker after the balance is painted, so it can
+  never delay a balance. A rebuilt or re-opened screen repaints from what
+  the gate remembers instead of asking again. A new session (unlock, which
+  may mean another endpoint) calls `clear()`: the previous endpoint's
+  price is forgotten before anything paints, and every answer carries the
+  session it was asked in, so a late reply — or a 404 — from the previous
+  session cannot land on the new one. That check is repeated at paint
+  time (`PricePoll.isCurrent`): the answer is recorded on a worker and
+  painted later on the UI thread, where a session can end in between.
+  `Api.Price.KEEP` leaves the line
+  untouched when a read produced nothing new; a read with no source hides
+  it. An older bench without the route answers 404 and the asking stops
+  for the session. Amounts cross the wire and the app as decimal strings;
+  nothing is ever parsed to a float.
+- **Copy.** `1 MAZA ≈ $0.00180249 · FreiXLite MAZA_LTC · 42s old`; a stale
+  quote adds `STALE`; the fallback reads `CoinMarketCap` with no pair.
+- **Known effect, stated so nobody is surprised (seen 2026-11-25):** the
+  traded pair prices MAZA near $0.0018 while CoinMarketCap's own quote is
+  near $0.0012. The likely reason is an inference, not something
+  CoinMarketCap states: its page says MAZA trades on one market with
+  nothing traded in 24 hours, and its figure sits close to the untraded
+  MAZA_BTC pair's last price converted at BTC's price. The wallet shows
+  the traded market.
+
+Tests: `tests/test_price.py` (bench behaviour on offline fakes) and
+`tests/test_price_wiring.py` (wallet wiring + a desktop-JVM probe of both
+pure-Java classes).
+
+Review folds (2026-11-25 adoption; independent read-only review
+deleg_6106976c, all four findings verified against the live bytes before
+fixing): (F1) upstream values are now bounded — `PARSE_VALUE_CAP` 1e15
+rejects absurd "prices"/volumes at parse, and a conversion whose product
+still exceeds the cap is skipped like a missing dollar leg — so `text()`
+can never raise `InvalidOperation` and `/api/price` answers 200 (with the
+fallback or an own-currency quote) where it previously 500'd and stayed
+wedged on the poisoned row; (F2) a partial CoinMarketCap success now
+OVERLAYS the previous symbol rates instead of replacing them (rates past
+`MAX_AGE_S` are not resurrected); (F3) the wiring suite now pins that the
+read runs on a spawned worker (not the UI thread); (F4) the no-op
+`pricePoll.reset` guard was replaced with a real "the ask path never
+clears the gate" pin, and the cadence test's comment-prose asserts were
+dropped (assertions target code, per the module's own strip_comments
+contract).
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation
   default) would still route through Payu per standing directive.
+- D19 is the one exception to "all inherited": a fiat price feed does not
+  exist in MazaCore, so its numbers are stated engineering choices.
 - Repo: `github.com/SamiAhmed7777/maza-mobile-wallet` (created 2026-11-16).
 - Next: scaffold repo (default plan: `maza-mobile-wallet` under
   SamiAhmed7777, MazaPay-style lanes, Codex-graded commits) + light-client
