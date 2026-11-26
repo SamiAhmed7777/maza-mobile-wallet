@@ -748,7 +748,7 @@ any fix. The last rule is not one of its findings: it was reproduced
 first-hand the same day while re-reading the partial-answer fold above.
 No cadence number above changes. Each rule below is pinned by
 tests that were SHOWN to fail against the old behaviour - mutation runs on
-an isolated copy of the tree, 17 mutants of `price.py` and 8 of the wallet
+an isolated copy of the tree, 19 mutants of `price.py` and 8 of the wallet
 sources, each breaking exactly the tests named for it):
 
 - **(F2) A request never waits, and no lock spans a network call.** A
@@ -800,6 +800,18 @@ sources, each breaking exactly the tests named for it):
   The 2026-11-25 fold re-stamped the whole set on every merge, so a rate
   upstream had stopped quoting read as fresh for as long as the other
   symbols kept answering.
+- **(Own audit) A round that cannot start releases the election.** The
+  refresh election is a single-slot gate whose normal exit is the round's
+  own finally; but if the spawn itself fails, the round never starts and
+  that finally never runs - and the held slot would starve every later
+  round, the refresher's included, into the same failed spawn forever.
+  So `serve()` releases the slot at the moment the failure is known: the
+  caller is still answered from what the cache holds, and the reason is
+  logged by exception class name only (never the message), in the line
+  `PRICE_REFRESH spawn error=<class>`. Pinned by
+  `test_a_round_that_cannot_start_releases_the_election`; the 19-mutant run's
+  pair S/T (spawn failed unreleased / spawn error unnamed) each broke
+  exactly that test and nothing else, twice, on the final bytes.
 
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
