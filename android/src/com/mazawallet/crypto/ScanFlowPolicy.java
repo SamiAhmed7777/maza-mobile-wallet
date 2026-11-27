@@ -27,6 +27,8 @@ public final class ScanFlowPolicy {
     public static final int SHOW_HINT = 2;    // inline user-safe copy, stay on SEND
     public static final int FILL_AND_CLOSE = 3; // write address into SEND, close overlay
     public static final int KEEP_SCANNING = 4;  // show reason on overlay, keep camera live
+    public static final int DETACH_OVERLAY = 5;   // M30: remove overlay, re-enable send form
+    public static final int RELEASE_OFF_MAIN = 6; // M30: schedule scanner release off-main
 
     /** User-safe copy for a denied CAMERA permission (never mentions
      *  internals; points at the typed-address fallback). */
@@ -49,5 +51,16 @@ public final class ScanFlowPolicy {
      *  ScanOrigin.parse by the caller - the ok flag here IS that verdict). */
     public static int onDecoded(boolean scanOriginAccepted) {
         return scanOriginAccepted ? FILL_AND_CLOSE : KEEP_SCANNING;
+    }
+
+    /** Row 4 (M30): any scan close request - CANCEL tap, accepted decode,
+     *  lock cover, pause, destroy, rebuild. Returns the MANDATORY ORDER of
+     *  the two close steps: the overlay detaches and the send form re-enables
+     *  BEFORE the scanner release is scheduled, and the release itself must
+     *  run OFF the main thread. A wedged camera close (witnessed on the
+     *  emulator 2026-11-27: CameraCaptureSession.close() never returned) can
+     *  then never freeze the UI or stop the balance/history poll. */
+    public static int[] onCloseScanRequested() {
+        return new int[]{DETACH_OVERLAY, RELEASE_OFF_MAIN};
     }
 }

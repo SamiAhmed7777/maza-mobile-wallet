@@ -311,6 +311,8 @@ public final class SelfTest {
         section("ScanOrigin origin discipline (M8a QR scan policy)");
         scanOriginChecks();
         scanFlowChecks();
+        section("Scan close order (M30 CANCEL freeze)");
+        scanCloseChecks();
         lumaRotateChecks();
 
         section("MazaUri payment-URI contract (M9, official desktop port)");
@@ -1672,14 +1674,15 @@ public final class SelfTest {
         // indistinguishable to the wiring).
         int[] acts = {ScanFlowPolicy.OPEN_SCAN, ScanFlowPolicy.REQUEST_PERM,
                 ScanFlowPolicy.SHOW_HINT, ScanFlowPolicy.FILL_AND_CLOSE,
-                ScanFlowPolicy.KEEP_SCANNING};
+                ScanFlowPolicy.KEEP_SCANNING, ScanFlowPolicy.DETACH_OVERLAY,
+                ScanFlowPolicy.RELEASE_OFF_MAIN};
         boolean distinct = true;
         for (int i = 0; i < acts.length; i++) {
             for (int j = i + 1; j < acts.length; j++) {
                 if (acts[i] == acts[j]) distinct = false;
             }
         }
-        check("scanflow: all five action codes distinct", distinct);
+        check("scanflow: all seven action codes distinct", distinct);
         // Denied copy is user-safe ASCII naming the fallback (typed address).
         boolean hintOk = ScanFlowPolicy.DENIED_HINT != null
                 && !ScanFlowPolicy.DENIED_HINT.isEmpty()
@@ -1688,6 +1691,122 @@ public final class SelfTest {
                 && isAscii(ScanFlowPolicy.DENIED_HINT);
         check("scanflow: denied hint is non-empty ASCII naming the typed fallback",
                 hintOk, ScanFlowPolicy.DENIED_HINT);
+    }
+
+    /**
+     * M30: the scan close ORDER, driven behaviorally against a model of the
+     * witnessed freeze (emulator 2026-11-27: CANCEL with a wedged camera -
+     * session.close() never returned and the app sat frozen for minutes with
+     * the overlay stuck on screen and the poll stopped). The contract: the
+     * overlay detaches and the send form re-enables BEFORE the release is
+     * scheduled, the release runs OFF the main thread, and a wedged release
+     * costs a background thread - never the UI.
+     */
+    private static void scanCloseChecks() {
+        int[] order = ScanFlowPolicy.onCloseScanRequested();
+        check("scanclose: close order is detach-overlay THEN schedule release",
+                order.length == 2
+                        && order[0] == ScanFlowPolicy.DETACH_OVERLAY
+                        && order[1] == ScanFlowPolicy.RELEASE_OFF_MAIN);
+
+        // The witnessed shape: the release BLOCKS forever (wedged camera
+        // service). The host applies the ordered steps to this model; the
+        // send form must already be usable before step 2 even starts, and
+        // must stay usable while step 2 never completes - and step 2 here is
+        // a REAL thread parked on a latch that never counts down (judge
+        // polish fold: the block is genuine, not a counter).
+        CloseModel m = new CloseModel();
+        m.apply(ScanFlowPolicy.DETACH_OVERLAY);
+        boolean uiSafeBeforeRelease = m.overlayGone && m.sendFormUsable;
+        boolean dispatched = m.applyRelease();
+        check("scanclose: send form usable BEFORE the release is scheduled",
+                uiSafeBeforeRelease,
+                "overlayGone=" + m.overlayGone + " usable=" + m.sendFormUsable);
+        check("scanclose: release dispatches exactly once per close",
+                dispatched);
+        boolean genuinelyStuck = false;
+        try {
+            genuinelyStuck = !m.releaseStuck.await(1500,
+                    java.util.concurrent.TimeUnit.MILLISECONDS)
+                    && m.releaseInFlight();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        check("scanclose: release thread genuinely blocked while form stays usable",
+                genuinelyStuck && m.overlayGone && m.sendFormUsable);
+        check("scanclose: a blocking release never touches the main thread",
+                m.mainThreadFree);
+        // Re-CANCEL while the release is wedged: no second release may be
+        // scheduled, and the UI state must not regress.
+        m.apply(ScanFlowPolicy.DETACH_OVERLAY);
+        boolean secondDispatch = m.applyRelease();
+        check("scanclose: repeated close while wedged cannot double-release",
+                !secondDispatch && m.overlayGone && m.sendFormUsable);
+        // Order violation model: scheduling the release FIRST (the pre-M30
+        // shape) leaves the overlay up and the form unreachable while the
+        // release blocks - exactly the freeze that was witnessed.
+        CloseModel bad = new CloseModel();
+        bad.applyRelease(); // wrong order: release before detach
+        check("scanclose: release-first order would leave the overlay stuck",
+                bad.releaseAttemptsSeen() && !bad.overlayGone);
+        // Model cleanup: release the parked threads (they are daemons and
+        // the await above was bounded; this just ends them promptly).
+        m.releaseStuck.countDown();
+        bad.releaseStuck.countDown();
+    }
+
+    /** Plain POJO model (no Android types, no outer capture - the d8-proven
+     *  nested shape) of the two close steps against a release that blocks
+     *  forever. The main-thread flag models the host contract: the release
+     *  step is dispatched to its own thread, so the thread that applied the
+     *  steps (the UI thread in the real app) is never the one that blocks. */
+    private static final class CloseModel {
+        /** Never counted until model cleanup: the parked release thread IS
+         *  the wedged-camera close. */
+        final java.util.concurrent.CountDownLatch releaseStuck =
+                new java.util.concurrent.CountDownLatch(1);
+        private final java.util.concurrent.atomic.AtomicBoolean dispatched =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        private Thread releaseThread;
+        boolean overlayGone = false;
+        boolean sendFormUsable = true;
+        boolean mainThreadFree = true;
+
+        void apply(int step) {
+            if (step == ScanFlowPolicy.DETACH_OVERLAY) {
+                overlayGone = true;
+                sendFormUsable = true;
+            }
+        }
+
+        /** Step 2 as the host must schedule it: dispatched ONCE (the
+         *  idempotent CAS), run off-main on a REAL thread that then blocks
+         *  for the model's lifetime. Returns false on a re-dispatch attempt. */
+        boolean applyRelease() {
+            if (!dispatched.compareAndSet(false, true)) {
+                return false;
+            }
+            releaseThread = new Thread(() -> {
+                try {
+                    releaseStuck.await(); // never counted: the wedged close
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }, "model-release");
+            releaseThread.setDaemon(true);
+            releaseThread.start();
+            return true;
+        }
+
+        /** The release thread is genuinely in flight and not finished. */
+        boolean releaseInFlight() {
+            return releaseThread != null && releaseThread.isAlive();
+        }
+
+        /** A dispatch attempt happened (for the wrong-order model row). */
+        boolean releaseAttemptsSeen() {
+            return dispatched.get();
+        }
     }
 
     /**

@@ -905,17 +905,27 @@ public class MainActivity extends Activity
         qrScanner.start();
     }
 
-    /** Release the camera and tear the overlay down; never throws (a stale
-     *  overlay must never wedge the send form). */
+    /** Tear the scan overlay down and release the camera; never throws (a
+     *  stale overlay must never wedge the send form). M30: the close ORDER
+     *  is ScanFlowPolicy.onCloseScanRequested()'s row, applied verbatim -
+     *  the overlay detaches and the send form re-enables BEFORE the scanner
+     *  release is scheduled, and the release itself runs off the main thread
+     *  (QrScanner.stop) - a wedged camera close (emulator 2026-11-27:
+     *  session.close() never returned) can then never freeze the UI or stop
+     *  the balance/history poll. */
     private void closeScan() {
-        if (qrScanner != null) {
-            try {
-                qrScanner.stop();
-            } catch (RuntimeException ignored) {
-                // release-path failure is never user-facing
+        for (int step : ScanFlowPolicy.onCloseScanRequested()) {
+            if (step == ScanFlowPolicy.DETACH_OVERLAY) {
+                detachScanOverlay();
+            } else if (step == ScanFlowPolicy.RELEASE_OFF_MAIN) {
+                stopScanEngine();
             }
-            qrScanner = null;
         }
+    }
+
+    /** Close step 1: detach the overlay so the send form is immediately
+     *  usable, whatever the camera release does afterwards. */
+    private void detachScanOverlay() {
         if (scanOverlay != null) {
             ViewGroup parent = (ViewGroup) scanOverlay.getParent();
             if (parent != null) {
@@ -928,6 +938,20 @@ public class MainActivity extends Activity
         }
         scanOverlay = null;
         scanStatusTv = null;
+    }
+
+    /** Close step 2: schedule the scanner release. QrScanner.stop() flips
+     *  its kill switch on THIS (main) thread and runs the blocking camera
+     *  close on its own daemon thread (M30) - it can no longer block here. */
+    private void stopScanEngine() {
+        if (qrScanner != null) {
+            try {
+                qrScanner.stop(); // M30: kill switch now, release off-thread
+            } catch (RuntimeException ignored) {
+                // release-path failure is never user-facing
+            }
+            qrScanner = null;
+        }
     }
 
     /** QrScanner.Listener: decoded payload text lands on the BG thread. The
