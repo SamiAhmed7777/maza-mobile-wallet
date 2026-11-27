@@ -209,6 +209,10 @@ public class MainActivity extends Activity
     private TextView qrStatusTv;
     /** M9-ii: optional amount for the payment-request QR on RECEIVE. */
     private EditText reqAmountEt;
+
+    /** M29: the typed receive amount as an approximate dollar figure
+     *  (display only; UsdApprox). */
+    private TextView reqUsdTv;
     /** M14: last-seen bench balance in sats (memory-only per session; the
      *  first sample of a session never notifies - NotifyPolicy.shouldFire). */
     private Long lastBenchSats;
@@ -740,6 +744,21 @@ public class MainActivity extends Activity
         reqAmountEt.setHint(getString(R.string.req_amount_hint));
         col.addView(reqAmountEt, mp(0, dp(4), 0, 0));
 
+        // M29: the typed amount as an approximate dollar figure, right
+        // under the input. DISPLAY ONLY: the payment URI is composed from
+        // the MAZA amount alone (MazaUri; the URI contract has no dollar
+        // value). It repaints from the quote the balance line paints
+        // from - it never asks for a price itself and never reads the
+        // network. It follows the typed amount. Hidden whenever there is
+        // nothing fresh to show (UsdApprox: stale, no dollar leg,
+        // unusable amount).
+        reqUsdTv = label("", 12, pal.textSecondary(), Typeface.NORMAL);
+        reqUsdTv.setVisibility(View.GONE);
+        col.addView(reqUsdTv, mp(0, dp(4), 0, 0));
+        // The watcher is TOP-LEVEL (ReqUsdWatcher): a nested class that
+        // captures the activity crashes the dexer on this toolchain.
+        reqAmountEt.addTextChangedListener(new ReqUsdWatcher(this));
+
         Button reqBtn = new Button(this);
         reqBtn.setText(getString(R.string.req_qr_button));
         reqBtn.setOnClickListener(v -> onRequestQrTapped());
@@ -1251,6 +1270,24 @@ public class MainActivity extends Activity
         String line = PriceLine.format(quote);
         priceTv.setVisibility(line == null ? View.GONE : View.VISIBLE);
         priceTv.setText(line == null ? "" : line);
+        // M29: the receive figure is derived from the same quote, so
+        // the two lines can never disagree.
+        renderReqUsd(quote);
+    }
+
+    /** M29: show the dollar figure for the typed receive amount, or
+     *  hide it. Reads the quote the gate remembers; asks for nothing. */
+    private void renderReqUsd(PriceLine.Quote quote) {
+        if (reqUsdTv == null || reqAmountEt == null) return;
+        String line = UsdApprox.format(MazaUri.parseAmountText(
+                reqAmountEt.getText().toString().trim()), quote);
+        reqUsdTv.setVisibility(line == null ? View.GONE : View.VISIBLE);
+        reqUsdTv.setText(line == null ? "" : line);
+    }
+
+    /** M29: the typed amount changed; repaint the receive figure. */
+    void onReceiveAmountEdited() {
+        renderReqUsd(pricePoll.last());
     }
 
     /** S-5: no silent empty states. A failed refresh writes ONE reason onto

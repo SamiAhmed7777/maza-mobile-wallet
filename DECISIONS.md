@@ -229,6 +229,10 @@ chain code on three fields (noted per item).
   dexing ANONYMOUS inner classes and nested enum classes
   (`String.length()` NPE, class named in `origin:`); lambdas + named
   classes dex fine. Codebase shape stays lambda-based; avoid `new X(){}`.
+  Refined 2026-11-26 (D20, two one-variable matrices): what crashes is an
+  inner class with an ENCLOSING INSTANCE compiled from this repo's sources,
+  named or anonymous alike; an anonymous class in a static method
+  (`SelfTest$1`) and static nested classes dex fine.
 
 - Auto-lock settings contract (2026-11-17, S-4 follow-up): TWO keys, one
   owner each. `pref_autolock_minutes` (int minutes) is the settings
@@ -835,12 +839,93 @@ sources, each breaking exactly the tests named for it):
   pair S/T (spawn failed unreleased / spawn error unnamed) each broke
   exactly that test and nothing else, twice, on the final bytes.
 
+## D20 — Receive amount as an approximate dollar figure (M29, added 2026-11-26)
+
+Payu's ask (2026-11-26, MAZA Skunkworks): the "amount to receive" field on
+RECEIVE should also show the dollar value. Done as a display line under the
+amount field. Nothing about the request itself changes.
+
+- **INHERITED: the request carries MAZA only.** Verified at MazaCore
+  v0.16.3: `formatBitcoinURI` (`src/qt/guiutil.cpp:221`) writes three query
+  keys and no others: `label`, `message`, `amount`. Neither that file nor
+  `bitcoinunits.cpp` contains any fiat, dollar or price notion. So the
+  wallet adds no parameter: `onRequestQrTapped` still composes
+  `maza:<address>?amount=<8dp>` through `MazaUri.format`
+  (`MainActivity.java:1446`) exactly as before (D14). The dollar figure is
+  DISPLAY ONLY.
+
+- **No inherited default exists for the display.** Like D19 (which brought
+  the price feed itself), the rules below are stated engineering choices and
+  not coin policy: they change what the screen prints, never what is
+  requested, sent or confirmed.
+
+- **What the figure is.** The typed MAZA amount times `Quote.usd`
+  ("Dollar price per 1 MAZA", `PriceLine.java:37-38`), multiplied as exact
+  decimals (`BigDecimal`; a float never touches the figure, and that is
+  pinned). The typed text goes through the same `MazaUri.parseAmountText`
+  contract the request itself uses (`MainActivity.java:1283`, D14), so the
+  figure and the QR always describe the same MAZA amount. The formatter is
+  `UsdApprox.java`.
+
+- **Precision.** A dollar and up: cents, HALF_UP. Under a dollar: four
+  significant digits, HALF_UP (`UsdApprox.java:49-61`). Below $0.00000001
+  the line says `< $0.00000001`. It never prints `$0.00`, because that
+  would read as "nothing". Cents are not used under a dollar because one
+  MAZA is a fraction of a cent and most amounts would collapse to `$0.00`.
+
+- **NOTHING STALE: HIDE, DO NOT LABEL.** The line is absent when the
+  quote is stale, its age is negative, the dollar leg is missing or
+  unusable, or the typed amount is not a positive number of sats
+  (`UsdApprox.java:44-46`). This deliberately differs from the balance
+  price line, which shows an old rate with the word `STALE` in front
+  (`PriceLine.java:125`). The balance is the user's own information; this
+  figure is a number a payer may be told.
+
+- **A shown line always names its age, and its venue whenever the quote
+  carries a usable source code** (`PriceLine.sourceName` returns null for
+  anything else). Example:
+  `≈ $9.01 · FreiXLite · 42s old`. U+2248 and U+00B7 are written as escapes
+  so the source stays ASCII. The venue name is the balance line's own
+  mapping: `PriceLine.sourceName` was widened from private to
+  package-private for this. That is one access token and no logic change
+  (`PriceLine.java:130`).
+
+- **It asks for nothing.** The figure is repainted from the quote the price
+  gate already holds (`PricePoll.last()`): on every keystroke, and whenever
+  the balance line repaints (`MainActivity.java:1262-1289`). Typing never
+  fetches and never triggers a request. That is pinned.
+
+- **Top-level watcher, measured and not assumed.** `TextWatcher` has three
+  abstract methods, so it cannot be a lambda. Two one-variable matrices on
+  this toolchain (javac 21.0.13.1, D8 8.2.2-dev, build-tools 34.0.0), every
+  cell compiled and dexed with the build's own javac and d8 flags (without
+  the vendor jar): an inner class with an ENCLOSING INSTANCE, compiled from
+  this repo's sources, crashes the dexer (`NullPointerException: Cannot
+  invoke "String.length()" because "<parameter1>" is null`). That holds
+  named or anonymous, with an Android supertype or a plain `Runnable`, with
+  or without access to a private outer member, and at `--release 8` as well
+  as `--release 11`. Clean: a static nested class, a nested class that
+  captures only a method parameter, a lambda, and a top-level class holding
+  the host. One limit of that measurement: the precompiled zxing jar ships
+  inner classes with an enclosing instance that dex fine, so the defect is
+  specific to classes compiled by this toolchain's javac and was not
+  characterised further. The rule this codebase follows needs no more than
+  that: callbacks are top-level classes. So the watcher is a top-level class,
+  `ReqUsdWatcher`, forwarding to a package-private handler. That is the same
+  shape as `PromptCb`.
+
+- **Pins.** `tests/test_usd_approx.py` (8 tests): the formatter is compiled
+  on the desktop JVM and driven for real, with expected strings computed
+  independently in Python's `decimal` module. 22 single-change mutants of
+  the formatter and its wiring were each caught; the control passes.
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation
   default) would still route through Payu per standing directive.
-- D19 is the one exception to "all inherited": a fiat price feed does not
-  exist in MazaCore, so its numbers are stated engineering choices.
+- D19 and D20 are the exceptions to "all inherited": a fiat price feed does
+  not exist in MazaCore, so D19's numbers and D20's display rules are stated
+  engineering choices.
 - Repo: `github.com/SamiAhmed7777/maza-mobile-wallet` (created 2026-11-16).
 - Next: scaffold repo (default plan: `maza-mobile-wallet` under
   SamiAhmed7777, MazaPay-style lanes, Codex-graded commits) + light-client

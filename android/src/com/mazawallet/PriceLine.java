@@ -127,7 +127,7 @@ public final class PriceLine {
         return line.toString();
     }
 
-    private static String sourceName(String code) {
+    static String sourceName(String code) {
         if ("freixlite".equals(code)) return "FreiXLite";
         if ("coinmarketcap".equals(code)) return "CoinMarketCap";
         return isSymbol(code) ? code : null;
