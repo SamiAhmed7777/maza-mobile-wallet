@@ -1,0 +1,4 @@
+echo ROUND-C after connect
+shell dumpsys window windows | grep -E 'mCurrentFocus'
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml

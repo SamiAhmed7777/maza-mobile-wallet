@@ -1,0 +1,13 @@
+echo ROUND-R scan capture (redacted) + cancel round-trip
+shell screencap -p /sdcard/m8_raw.png
+pull /sdcard/m8_raw.png C:\Users\hello\maza-bench-lane\cap\raw_scan.png
+shell rm -f /sdcard/m8_raw.png
+ps & C:\Users\hello\maza-bench-lane\redact.ps1 'C:\Users\hello\maza-bench-lane\cap\raw_scan.png' 'C:\Users\hello\maza-bench-lane\cap\07_scan_surface_REDACTED.png' 430 180 740 575 'camera feed redacted'
+ps 'RAW-EXISTS=' + (Test-Path 'C:\Users\hello\maza-bench-lane\cap\raw_scan.png') + ' REDACTED-EXISTS=' + (Test-Path 'C:\Users\hello\maza-bench-lane\cap\07_scan_surface_REDACTED.png')
+shell input tap 800 852
+sleep 2.5
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell screencap -p /sdcard/m8_08.png
+pull /sdcard/m8_08.png C:\Users\hello\maza-bench-lane\cap\08_after_scan_cancel.png
+shell logcat -d | grep -iE 'zxing|dequeue|QrScanner|CameraService|CameraHW|camera' | tail -10

@@ -1,0 +1,3 @@
+echo ROUND-W redact 08 on PC
+ps & C:\Users\hello\maza-bench-lane\redact.ps1 'C:\Users\hello\maza-bench-lane\cap\08_after_scan_cancel.png' 'C:\Users\hello\maza-bench-lane\cap\08_after_scan_cancel_REDACTED.png' 430 180 740 575 'camera feed redacted'
+ps 'RAW08-EXISTS=' + (Test-Path 'C:\Users\hello\maza-bench-lane\cap\08_after_scan_cancel.png')

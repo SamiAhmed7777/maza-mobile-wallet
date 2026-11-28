@@ -1,0 +1,6 @@
+echo ROUND-V redacted state capture
+shell screencap -p /sdcard/m8_raw.png
+pull /sdcard/m8_raw.png C:\Users\hello\maza-bench-lane\cap\raw_scan2.png
+shell rm -f /sdcard/m8_raw.png
+ps & C:\Users\hello\maza-bench-lane\redact.ps1 'C:\Users\hello\maza-bench-lane\cap\raw_scan2.png' 'C:\Users\hello\maza-bench-lane\cap\09_scan_state_REDACTED.png' 430 180 740 575 'camera feed redacted'
+ps 'RAW-EXISTS=' + (Test-Path 'C:\Users\hello\maza-bench-lane\cap\raw_scan2.png')

@@ -1,0 +1,16 @@
+## ROUND-S state after scan cancel
+> shell dumpsys window windows | grep -E 'mCurrentFocus'
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+  mCurrentFocus=Window{435ada0 u0 com.mazawallet/com.mazawallet.MainActivity}
+> shell uiautomator dump /sdcard/ui.xml
+[e] ERROR: null root node returned by UiTestAutomationBridge.
+> shell cat /sdcard/ui.xml
+[e] cat: /sdcard/ui.xml: No such file or directory
+> shell logcat -d -b crash | grep -c 'Impossible totalDuration'
+0
+> shell logcat -d -b crash | grep -E '>>> com\.mazawallet' | tail -3
+> shell dumpsys activity top | grep -E 'ACTIVITY|mResumed' | head -5
+  ACTIVITY com.uncube.launcher3/com.bluestacks.launcher.activity.HomeActivity 8f18987 pid=(not running)
+  ACTIVITY com.mazawallet/.MainActivity 357109 pid=5153
+## ROUND-DONE

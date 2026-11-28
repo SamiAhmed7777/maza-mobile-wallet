@@ -1,0 +1,23 @@
+## ROUND-U anr / main thread / hierarchy text
+> shell dumpsys activity lastanr | head -25
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+Total number of currently running services:0
+ACTIVITY MANAGER LAST ANR (dumpsys activity lastanr)
+  <no ANR has occurred since boot>
+> shell logcat -d -b events | grep -E 'am_anr|am_kill|am_crash|am_proc_died|am_low' | tail -5
+11-27 03:22:50.473  2020  3845 I am_crash: [2833,0,com.uncube.launcher3,819510981,java.lang.OutOfMemoryError,Failed to allocate a 147464 byte allocation with 65984 free bytes and 64KB until OOM, max allowed footprint 402653184, growth limit 402653184,Arrays.java,3260]
+11-27 03:22:50.977  2020  3621 I am_proc_died: [0,2833,com.uncube.launcher3,0,2]
+11-27 03:24:04.515  2020  2717 I am_proc_died: [0,4989,com.uncube.launcher3,200,2]
+11-27 03:25:06.844  2020  2236 I am_kill : [0,3014,com.location.provider,906,empty #17]
+11-27 03:25:06.869  2020  3621 I am_proc_died: [0,3014,com.location.provider,906,18]
+> shell logcat -d | grep -E ' 5153 ' | grep -iE 'ANR|dispatching timed out|not responding|QrScan|Camera|Surface|choreographer|Skipped' | tail -12
+11-27 03:24:04.704  5153  5175 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasWideColorDisplay retrieved: 0
+11-27 03:24:04.705  5153  5175 I ConfigStore: android::hardware::configstore::V1_0::ISurfaceFlingerConfigs::hasHDRDisplay retrieved: 0
+11-27 03:24:04.817  5153  5175 E EGL_emulation: tid 5175: eglSurfaceAttrib(1719): error 0x3009 (EGL_BAD_MATCH)
+11-27 03:24:04.817  5153  5175 W OpenGLRenderer: Failed to set EGL_SWAP_BEHAVIOR on surface 0x79e7ae443080, error=EGL_BAD_MATCH
+11-27 03:28:09.717  5153  5175 E EGL_emulation: tid 5175: eglSurfaceAttrib(1719): error 0x3009 (EGL_BAD_MATCH)
+11-27 03:28:09.717  5153  5175 W OpenGLRenderer: Failed to set EGL_SWAP_BEHAVIOR on surface 0x79e7ae5adf00, error=EGL_BAD_MATCH
+11-27 03:29:08.598  5153  5153 I CameraManagerGlobal: Connecting to camera service
+> shell dumpsys activity top | grep -n -E 'Scan|Surface|CANCEL|Point the camera|DecorView' | head -20
+## ROUND-DONE

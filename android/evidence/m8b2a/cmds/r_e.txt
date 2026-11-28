@@ -1,0 +1,4 @@
+echo ROUND-E crash buffers
+shell logcat -d -b crash | tail -60
+shell logcat -d -b events | grep -E 'am_crash|am_anr|am_kill|am_proc_died|am_finish_activity|am_destroy_activity|am_create_activity|am_resume_activity' | tail -24
+shell logcat -d | grep -i mazawallet | tail -45

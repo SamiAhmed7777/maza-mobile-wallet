@@ -1,0 +1,10 @@
+T 2026-11-27 10:53:17Z
+--- mainnet bench node (walletbench backing node)
+chain=main
+blocks=4496969
+headers=4496969
+verificationprogress=0.9999999696771139
+initialblockdownload=False
+mediantime=1795776436
+pruned=False
+rc=0

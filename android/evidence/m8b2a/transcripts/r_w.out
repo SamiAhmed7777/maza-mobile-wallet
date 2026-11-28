@@ -1,0 +1,8 @@
+## ROUND-W redact 08 on PC
+> ps & C:\Users\hello\maza-bench-lane\redact.ps1 'C:\Users\hello\maza-bench-lane\cap\08_after_scan_cancel.png' 'C:\Users\hello\maza-bench-lane\cap\08_after_scan_cancel_REDACTED.png' 430 180 740 575 'camera feed redacted'
+REDACTED dst=C:\Users\hello\maza-bench-lane\cap\08_after_scan_cancel_REDACTED.png rect=430,180,740,575
+RAW sha256=cf0bca40f86e1cd327e51adde8a422c359add6f2e68f790b55dd6488bcfc176e (original DELETED, raw-exists=False)
+NEW sha256=85283eb73160dca9332f9483fefb9a11f12cd770b1e2627a59a1ac927999b92c
+> ps 'RAW08-EXISTS=' + (Test-Path 'C:\Users\hello\maza-bench-lane\cap\08_after_scan_cancel.png')
+RAW08-EXISTS=False
+## ROUND-DONE

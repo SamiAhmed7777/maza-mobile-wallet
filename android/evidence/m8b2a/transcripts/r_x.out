@@ -1,0 +1,20 @@
+## ROUND-X second CANCEL tap -> ANR check
+> shell input tap 800 852
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+> shell dumpsys activity lastanr | head -14
+Total number of currently running services:0
+ACTIVITY MANAGER LAST ANR (dumpsys activity lastanr)
+  <no ANR has occurred since boot>
+> shell logcat -d -b events | grep -E 'am_anr|am_kill|am_crash|am_proc_died' | tail -4
+11-27 03:22:50.977  2020  3621 I am_proc_died: [0,2833,com.uncube.launcher3,0,2]
+11-27 03:24:04.515  2020  2717 I am_proc_died: [0,4989,com.uncube.launcher3,200,2]
+11-27 03:25:06.844  2020  2236 I am_kill : [0,3014,com.location.provider,906,empty #17]
+11-27 03:25:06.869  2020  3621 I am_proc_died: [0,3014,com.location.provider,906,18]
+> shell logcat -d | grep -E 'ANR in|Input dispatching timed out|Reason:' | tail -6
+> shell dumpsys media.camera | grep -E 'Device 0 is|CONNECT device|DISCONNECT'
+  11-27 03:29:08 : CONNECT device 0 client for package com.mazawallet (PID 5153)
+  Device 0 is open. Client instance dump:
+> shell dumpsys window windows | grep -E 'mCurrentFocus'
+  mCurrentFocus=Window{435ada0 u0 com.mazawallet/com.mazawallet.MainActivity}
+## ROUND-DONE

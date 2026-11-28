@@ -1,0 +1,35 @@
+SHIPPED install.ps1 -> C:\Users\hello\maza-bench-lane\install.ps1 bytes=2304 (want 2304) OK in 21.9s
+=== PRE ===
+PMPATH * daemon not running. starting it now on port 5037 * * daemon started successfully * package:/data/app/com.mazawallet-m6jdqxaO6ySvoCVKz54mqA==/base.apk
+PRE versionCode=1 minSdk=24 targetSdk=34
+PRE versionName=1.0
+PRE firstInstallTime=2026-11-15 18:39:10
+PRE lastUpdateTime=2026-11-17 16:11:13
+=== BACKUP OLD APK ===
+adb: error: remote object '* daemon not running. starting it now on port 5037 * * daemon started successfully * /data/app/com.mazawallet-m6jdqxaO6ySvoCVKz54mqA==/base.apk' does not exist
+OLD-APK MISSING
+=== PUSH NEW ===
+[ 11%] /sdcard/m8b2a.apk
+[ 22%] /sdcard/m8b2a.apk
+[ 33%] /sdcard/m8b2a.apk
+[ 44%] /sdcard/m8b2a.apk
+[ 55%] /sdcard/m8b2a.apk
+[ 66%] /sdcard/m8b2a.apk
+[ 78%] /sdcard/m8b2a.apk
+[ 89%] /sdcard/m8b2a.apk
+[100%] /sdcard/m8b2a.apk
+-rw-rw---- 1 root sdcard_rw 586937 2026-11-27 03:00 /sdcard/m8b2a.apk
+=== INSTALL ===
+Success
+=== WAIT 25s + RECONNECT ===
+connected to 127.0.0.1:5555
+=== VERIFY ===
+package:com.mazawallet
+PMPATH2 package:/data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==/base.apk
+POST versionCode=1 minSdk=24 targetSdk=34
+POST versionName=1.0
+POST firstInstallTime=2026-11-15 18:39:10
+POST lastUpdateTime=2026-11-27 03:00:21
+MD5-DEVICE 1a287b66e3ee91a61a1fd8f66c7b51c4  /data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==/base.apk
+NEW-APK md5=1a287b66e3ee91a61a1fd8f66c7b51c4
+INSTALL-SCRIPT-DONE

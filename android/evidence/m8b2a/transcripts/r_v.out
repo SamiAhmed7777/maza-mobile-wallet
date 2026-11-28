@@ -1,0 +1,14 @@
+## ROUND-V redacted state capture
+> shell screencap -p /sdcard/m8_raw.png
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+> pull /sdcard/m8_raw.png C:\Users\hello\maza-bench-lane\cap\raw_scan2.png
+[100%] sdcard/m8_raw.png
+> shell rm -f /sdcard/m8_raw.png
+> ps & C:\Users\hello\maza-bench-lane\redact.ps1 'C:\Users\hello\maza-bench-lane\cap\raw_scan2.png' 'C:\Users\hello\maza-bench-lane\cap\09_scan_state_REDACTED.png' 430 180 740 575 'camera feed redacted'
+REDACTED dst=C:\Users\hello\maza-bench-lane\cap\09_scan_state_REDACTED.png rect=430,180,740,575
+RAW sha256=94502bc0ed9034dba395cd826003171b04ace526c1ae37caa3ff0f1095512c45 (original DELETED, raw-exists=False)
+NEW sha256=5741029356e1b5734c06ef22c693ca8f310cde7841c90650ff324ba220caf6b0
+> ps 'RAW-EXISTS=' + (Test-Path 'C:\Users\hello\maza-bench-lane\cap\raw_scan2.png')
+RAW-EXISTS=False
+## ROUND-DONE

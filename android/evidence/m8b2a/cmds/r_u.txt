@@ -1,0 +1,5 @@
+echo ROUND-U anr / main thread / hierarchy text
+shell dumpsys activity lastanr | head -25
+shell logcat -d -b events | grep -E 'am_anr|am_kill|am_crash|am_proc_died|am_low' | tail -5
+shell logcat -d | grep -E ' 5153 ' | grep -iE 'ANR|dispatching timed out|not responding|QrScan|Camera|Surface|choreographer|Skipped' | tail -12
+shell dumpsys activity top | grep -n -E 'Scan|Surface|CANCEL|Point the camera|DecorView' | head -20

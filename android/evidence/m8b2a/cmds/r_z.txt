@@ -1,0 +1,10 @@
+echo ROUND-Z recover: force-stop + restart
+shell am force-stop com.mazawallet
+sleep 3
+shell dumpsys media.camera | grep -E 'Device 0 is open|Device 0 is closed|DISCONNECT|CONNECT device' | tail -4
+shell ps | grep -c mazawallet
+shell am start -n com.mazawallet/.MainActivity
+sleep 7
+shell dumpsys window windows | grep -E 'mCurrentFocus'
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml

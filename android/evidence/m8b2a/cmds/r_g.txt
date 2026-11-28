@@ -1,0 +1,6 @@
+echo ROUND-G why not in front
+shell dumpsys activity activities | grep -E 'mResumedActivity|mazawallet' | head -12
+shell logcat -d -b crash | grep -E 'Fatal signal|Abort message|>>> com\.mazawallet' | tail -12
+shell logcat -d -b events | grep -E 'am_crash|am_anr|am_kill|am_create_activity|am_finish_activity|am_resume_activity|am_destroy_activity|am_proc_start|am_proc_died' | grep -E 'mazawallet|am_crash' | tail -16
+shell ps | grep mazawallet
+shell dumpsys package com.mazawallet | grep -E 'stopped=|enabled=|installed=' | head -6

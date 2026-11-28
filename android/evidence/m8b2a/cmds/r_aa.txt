@@ -1,0 +1,5 @@
+echo ROUND-AA reconnect after restart
+shell input tap 800 610
+sleep 7
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml

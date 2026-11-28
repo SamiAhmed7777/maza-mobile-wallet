@@ -1,0 +1,7 @@
+echo ROUND-Q open scan overlay + dump
+shell input tap 800 342
+sleep 3
+shell dumpsys window windows | grep -E 'mCurrentFocus'
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

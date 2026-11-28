@@ -1,0 +1,14 @@
+## ROUND-D crash check
+> shell date
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+Fri Nov 27 03:11:07 PST 2026
+> shell dumpsys activity activities | grep -E 'mResumedActivity|mFocusedActivity|mazawallet' | head -8
+    mResumedActivity: ActivityRecord{6ddf259 u0 com.uncube.launcher3/com.bluestacks.launcher.activity.HomeActivity t2}
+> shell logcat -d -t 600 | grep -E 'FATAL|AndroidRuntime|E/mazawallet|W/mazawallet|mazawallet.*(Exception|Error)' | tail -30
+> shell logcat -d -t 300 | grep -i mazawallet | tail -40
+> shell screencap -p /sdcard/m8_d.png
+> pull /sdcard/m8_d.png C:\Users\hello\maza-bench-lane\cap\d_after_connect.png
+[ 65%] sdcard/m8_d.png
+[100%] sdcard/m8_d.png
+## ROUND-DONE

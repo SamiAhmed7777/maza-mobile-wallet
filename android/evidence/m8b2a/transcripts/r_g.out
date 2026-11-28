@@ -1,0 +1,31 @@
+## ROUND-G why not in front
+> shell dumpsys activity activities | grep -E 'mResumedActivity|mazawallet' | head -12
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+    mResumedActivity: ActivityRecord{6ddf259 u0 com.uncube.launcher3/com.bluestacks.launcher.activity.HomeActivity t2}
+> shell logcat -d -b crash | grep -E 'Fatal signal|Abort message|>>> com\.mazawallet' | tail -12
+11-27 02:58:21.448  2804  3129 F libc    : Fatal signal 6 (SIGABRT), code -6 (SI_TKILL) in tid 3129 (RenderThread), pid 2804 (acks.gamecenter)
+11-27 02:58:21.881  3232  3232 F DEBUG   : Abort message: 'Impossible totalDuration 0'
+11-27 03:09:58.771  5492  5510 F libc    : Fatal signal 6 (SIGABRT), code -6 (SI_TKILL) in tid 5510 (RenderThread), pid 5492 (com.mazawallet)
+11-27 03:09:58.878  5696  5696 F DEBUG   : pid: 5492, tid: 5510, name: RenderThread  >>> com.mazawallet <<<
+11-27 03:09:58.879  5696  5696 F DEBUG   : Abort message: 'Impossible totalDuration 0'
+11-27 03:13:59.920  6179  6197 F libc    : Fatal signal 6 (SIGABRT), code -6 (SI_TKILL) in tid 6197 (RenderThread), pid 6179 (com.mazawallet)
+11-27 03:14:00.052  6208  6208 F DEBUG   : pid: 6179, tid: 6197, name: RenderThread  >>> com.mazawallet <<<
+11-27 03:14:00.052  6208  6208 F DEBUG   : Abort message: 'Impossible totalDuration 0'
+> shell logcat -d -b events | grep -E 'am_crash|am_anr|am_kill|am_create_activity|am_finish_activity|am_resume_activity|am_destroy_activity|am_proc_start|am_proc_died' | grep -E 'mazawallet|am_crash' | tail -16
+11-27 02:58:23.588  2018  3283 I am_crash: [2018,0,com.bluestacks.gamecenter,549994181,Native crash,Aborted,unknown,0]
+11-27 03:04:10.899  2018  4379 I am_create_activity: [0,86542842,150,com.mazawallet/.MainActivity,NULL,NULL,NULL,268435456]
+11-27 03:04:11.447  2018  2035 I am_proc_start: [0,5492,10068,com.mazawallet,activity,com.mazawallet/.MainActivity]
+11-27 03:09:59.443  2018  5699 I am_crash: [2018,0,com.mazawallet,814235204,Native crash,Aborted,unknown,0]
+11-27 03:09:59.450  2018  5699 I am_finish_activity: [0,86542842,150,com.mazawallet/.MainActivity,force-crash]
+11-27 03:10:01.590  2018  2606 I am_proc_died: [0,5492,com.mazawallet,199,2]
+11-27 03:13:57.274  2018  3290 I am_create_activity: [0,111838606,151,com.mazawallet/.MainActivity,NULL,NULL,NULL,268435456]
+11-27 03:13:57.900  2018  2035 I am_proc_start: [0,6179,10068,com.mazawallet,activity,com.mazawallet/.MainActivity]
+11-27 03:14:03.242  2018  6211 I am_crash: [2018,0,com.mazawallet,814235204,Native crash,Aborted,unknown,0]
+11-27 03:14:03.265  2018  6211 I am_finish_activity: [0,111838606,151,com.mazawallet/.MainActivity,force-crash]
+11-27 03:14:03.360  2018  5873 I am_proc_died: [0,6179,com.mazawallet,199,2]
+> shell ps | grep mazawallet
+> shell dumpsys package com.mazawallet | grep -E 'stopped=|enabled=|installed=' | head -6
+    User 0: ceDataInode=3672344 installed=true hidden=false suspended=false stopped=false notLaunched=false enabled=0 instant=false virtual=false
+    User 10: ceDataInode=5243094 installed=true hidden=false suspended=false stopped=true notLaunched=false enabled=0 instant=false virtual=false
+## ROUND-DONE

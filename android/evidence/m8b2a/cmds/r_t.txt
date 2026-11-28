@@ -1,0 +1,3 @@
+echo ROUND-T view hierarchy + camera state (no capture)
+shell dumpsys activity top | grep -E 'android\.(widget|view)\.[A-Za-z]+\{' | cut -c1-150
+shell dumpsys media.camera | grep -iE 'Device [0-9]|Open|Closed|Clients|connected|STATE' | head -12

@@ -1,0 +1,33 @@
+## ROUND-R scan capture (redacted) + cancel round-trip
+> shell screencap -p /sdcard/m8_raw.png
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+> pull /sdcard/m8_raw.png C:\Users\hello\maza-bench-lane\cap\raw_scan.png
+[100%] sdcard/m8_raw.png
+> shell rm -f /sdcard/m8_raw.png
+> ps & C:\Users\hello\maza-bench-lane\redact.ps1 'C:\Users\hello\maza-bench-lane\cap\raw_scan.png' 'C:\Users\hello\maza-bench-lane\cap\07_scan_surface_REDACTED.png' 430 180 740 575 'camera feed redacted'
+REDACTED dst=C:\Users\hello\maza-bench-lane\cap\07_scan_surface_REDACTED.png rect=430,180,740,575
+RAW sha256=3a365a1a0a7505d7444357be86c0ba760725dc3a1f973456d2e74b1417a5abdc (original DELETED, raw-exists=False)
+NEW sha256=e3ada24e5bfc780a9660335fc8bd4704a1d0451077436df7a7d06eaaa96864c2
+> ps 'RAW-EXISTS=' + (Test-Path 'C:\Users\hello\maza-bench-lane\cap\raw_scan.png') + ' REDACTED-EXISTS=' + (Test-Path 'C:\Users\hello\maza-bench-lane\cap\07_scan_surface_REDACTED.png')
+RAW-EXISTS=False REDACTED-EXISTS=True
+> shell input tap 800 852
+> shell uiautomator dump /sdcard/ui.xml
+[e] ERROR: null root node returned by UiTestAutomationBridge.
+> shell cat /sdcard/ui.xml
+[e] cat: /sdcard/ui.xml: No such file or directory
+> shell screencap -p /sdcard/m8_08.png
+> pull /sdcard/m8_08.png C:\Users\hello\maza-bench-lane\cap\08_after_scan_cancel.png
+[100%] sdcard/m8_08.png
+> shell logcat -d | grep -iE 'zxing|dequeue|QrScanner|CameraService|CameraHW|camera' | tail -10
+11-27 03:30:15.053  1848  5745 E Camera3-Stream: getBuffer: wait for output buffer return timed out after 3000ms (max_buffers 2)
+11-27 03:30:15.053  1848  5745 E Camera3-Device: RequestThread: Can't get output buffer, skipping request: Connection timed out (-110)
+11-27 03:30:18.053  1848  5745 E Camera3-Stream: getBuffer: wait for output buffer return timed out after 3000ms (max_buffers 2)
+11-27 03:30:18.053  1848  5745 E Camera3-Device: RequestThread: Can't get output buffer, skipping request: Connection timed out (-110)
+11-27 03:30:21.053  1848  5745 E Camera3-Stream: getBuffer: wait for output buffer return timed out after 3000ms (max_buffers 2)
+11-27 03:30:21.053  1848  5745 E Camera3-Device: RequestThread: Can't get output buffer, skipping request: Connection timed out (-110)
+11-27 03:30:24.054  1848  5745 E Camera3-Stream: getBuffer: wait for output buffer return timed out after 3000ms (max_buffers 2)
+11-27 03:30:24.054  1848  5745 E Camera3-Device: RequestThread: Can't get output buffer, skipping request: Connection timed out (-110)
+11-27 03:30:27.054  1848  5745 E Camera3-Stream: getBuffer: wait for output buffer return timed out after 3000ms (max_buffers 2)
+11-27 03:30:27.054  1848  5745 E Camera3-Device: RequestThread: Can't get output buffer, skipping request: Connection timed out (-110)
+## ROUND-DONE

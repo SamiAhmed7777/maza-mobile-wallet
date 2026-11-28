@@ -1,0 +1,14 @@
+echo ROUND-AB unlock + WALLET tab
+sleep 4
+shell input tap 800 375
+sleep 0.9
+shell input text [PIN]
+sleep 0.9
+shell input tap 800 496
+sleep 4
+shell input tap 1440 858
+sleep 5
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell screencap -p /sdcard/m8_10.png
+pull /sdcard/m8_10.png C:\Users\hello\maza-bench-lane\cap\10_wallet_tab.png

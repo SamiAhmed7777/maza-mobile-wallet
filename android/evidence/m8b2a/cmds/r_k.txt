@@ -1,0 +1,9 @@
+echo ROUND-K fresh boot health + start wallet
+shell logcat -d -b crash | grep -c 'Impossible totalDuration'
+shell logcat -d -b crash | grep -E '>>> com\.' | tail -5
+shell am start -n com.mazawallet/.MainActivity
+sleep 6
+shell dumpsys window windows | grep -E 'mCurrentFocus'
+shell logcat -d -b crash | grep -c 'Impossible totalDuration'
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml

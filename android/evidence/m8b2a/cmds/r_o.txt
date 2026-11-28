@@ -1,0 +1,15 @@
+echo ROUND-O receive amount -> USD approx -> payment QR
+shell input tap 800 357
+sleep 0.8
+shell input text 10
+sleep 1.5
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell screencap -p /sdcard/m8_04.png
+pull /sdcard/m8_04.png C:\Users\hello\maza-bench-lane\cap\04_receive_amount_usd.png
+shell input tap 800 433
+sleep 3.5
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell screencap -p /sdcard/m8_05.png
+pull /sdcard/m8_05.png C:\Users\hello\maza-bench-lane\cap\05_receive_payment_qr.png

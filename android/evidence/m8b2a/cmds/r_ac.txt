@@ -1,0 +1,13 @@
+echo ROUND-AC wallet tab scroll
+shell input swipe 800 700 800 200 400
+sleep 1.5
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell screencap -p /sdcard/m8_11.png
+pull /sdcard/m8_11.png C:\Users\hello\maza-bench-lane\cap\11_wallet_scrolled1.png
+shell input swipe 800 700 800 200 400
+sleep 1.5
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell screencap -p /sdcard/m8_12.png
+pull /sdcard/m8_12.png C:\Users\hello\maza-bench-lane\cap\12_wallet_scrolled2.png

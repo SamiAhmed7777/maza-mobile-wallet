@@ -1,0 +1,5 @@
+echo ROUND-Y frozen-state evidence
+shell logcat -d --pid=5153 -v time | grep -v -E 'Camera3-Stream|Camera3-Device' | tail -25
+shell logcat -d --pid=5153 -v time | grep -c -E 'getBuffer: wait for output buffer'
+shell dumpsys gfxinfo com.mazawallet | grep -E 'Total frames|Janky|FrameDeadline|Number Missed|HISTOGRAM' | head -8
+shell dumpsys media.camera | grep -E 'Device 0 is open|CONNECT device|DISCONNECT' | tail -4

@@ -1,0 +1,6 @@
+echo ROUND-I instance restart (kill HD-Player+BstkSVC, relaunch via one-shot schtask)
+ps Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 8 | ForEach-Object { 'TOP ' + $_.Name + ' ' + [int]($_.WorkingSet64/1MB) + 'MB' }
+ps Get-Process HD-Player,BstkSVC -ErrorAction SilentlyContinue | ForEach-Object { 'KILL ' + $_.Name + ' pid=' + $_.Id + ' at ' + (Get-Date).ToString('HH:mm:ss'); Stop-Process -Id $_.Id -Force }
+sleep 8
+ps 'AFTER-KILL: ' + ((Get-Process HD-Player,BstkSVC -ErrorAction SilentlyContinue | ForEach-Object { $_.Name + ':' + $_.Id }) -join ',')
+ps cmd /c C:\Users\hello\maza-bench-lane\launch.cmd

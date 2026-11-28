@@ -1,0 +1,11 @@
+echo ROUND-M PIN unlock + balance/price line
+qshell input tap 800 375
+sleep 0.9
+qshell input text [PIN]
+sleep 0.9
+qshell input tap 800 496
+sleep 4
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell screencap -p /sdcard/m8_02.png
+pull /sdcard/m8_02.png C:\Users\hello\maza-bench-lane\cap\02_balance_priceline.png

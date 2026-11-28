@@ -1,0 +1,6 @@
+echo ROUND-A2 connect card
+ps New-Item -ItemType Directory -Force -Path C:\Users\hello\maza-bench-lane\cap | Out-Null; 'cap-dir-ok'
+shell dumpsys window windows | grep -E 'mCurrentFocus'
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+pull /sdcard/ui.xml C:\Users\hello\maza-bench-lane\cap\a_connect.xml

@@ -1,0 +1,136 @@
+## ROUND-E crash buffers
+> shell logcat -d -b crash | tail -60
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+11-27 03:02:36.735  2596  2732 E AndroidRuntime: 	at ua.e.a(CrashlyticsWorker.java:1)
+11-27 03:02:36.735  2596  2732 E AndroidRuntime: 	at ua.d.then(R8$$SyntheticClass:3)
+11-27 03:02:36.735  2596  2732 E AndroidRuntime: 	at com.google.android.gms.tasks.zze.run(com.google.android.gms:play-services-tasks@@18.1.0:9)
+11-27 03:02:36.735  2596  2732 E AndroidRuntime: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+11-27 03:02:36.735  2596  2732 E AndroidRuntime: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+11-27 03:02:36.735  2596  2732 E AndroidRuntime: 	at com.google.firebase.concurrent.b.b(CustomThreadFactory.java:13)
+11-27 03:02:36.735  2596  2732 E AndroidRuntime: 	at com.google.firebase.concurrent.b.a(CustomThreadFactory.java:1)
+11-27 03:02:36.735  2596  2732 E AndroidRuntime: 	at com.google.firebase.concurrent.a.run(R8$$SyntheticClass:5)
+11-27 03:02:36.735  2596  2732 E AndroidRuntime: 	at java.lang.Thread.run(Thread.java:764)
+11-27 03:09:58.771  5492  5510 F libc    : Fatal signal 6 (SIGABRT), code -6 (SI_TKILL) in tid 5510 (RenderThread), pid 5492 (com.mazawallet)
+11-27 03:09:58.878  5696  5696 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+11-27 03:09:58.878  5696  5696 F DEBUG   : Build fingerprint: 'samsung/p3sxxx/p3s:9/SP1A.210812.016/G998BXXU4BULF:user/release-keys'
+11-27 03:09:58.878  5696  5696 F DEBUG   : Revision: '0'
+11-27 03:09:58.878  5696  5696 F DEBUG   : ABI: 'x86_64'
+11-27 03:09:58.878  5696  5696 F DEBUG   : pid: 5492, tid: 5510, name: RenderThread  >>> com.mazawallet <<<
+11-27 03:09:58.879  5696  5696 F DEBUG   : signal 6 (SIGABRT), code -6 (SI_TKILL), fault addr --------
+11-27 03:09:58.879  5696  5696 F DEBUG   : Abort message: 'Impossible totalDuration 0'
+11-27 03:09:58.879  5696  5696 F DEBUG   :     rax 0000000000000000  rbx 0000000000001586  rcx 0000781457ca6c08  rdx 0000000000000006
+11-27 03:09:58.879  5696  5696 F DEBUG   :     r8  00007813b45eac20  r9  00007813b45eac20  r10 00007813b45eac20  r11 0000000000000246
+11-27 03:09:58.879  5696  5696 F DEBUG   :     r12 0000781458123100  r13 00007813cdf98f00  r14 0000000000001574  r15 00007813b45eab08
+11-27 03:09:58.879  5696  5696 F DEBUG   :     rdi 0000000000001574  rsi 0000000000001586
+11-27 03:09:58.879  5696  5696 F DEBUG   :     rbp 00007813cf9d7ed0  rsp 00007813b45eaaf8  rip 0000781457ca6c08
+11-27 03:09:58.941  5696  5696 F DEBUG   : 
+11-27 03:09:58.941  5696  5696 F DEBUG   : backtrace:
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #00 pc 0000000000026c08  /system/lib64/libc.so (syscall+24)
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #01 pc 0000000000029875  /system/lib64/libc.so (abort+101)
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #02 pc 0000000000007f0b  /system/lib64/liblog.so (__android_log_assert+363)
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #03 pc 000000000014d4f1  /system/lib64/libhwui.so (android::uirenderer::JankTracker::finishFrame(android::uirenderer::FrameInfo const&)+225)
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #04 pc 0000000000117a09  /system/lib64/libhwui.so (android::uirenderer::renderthread::CanvasContext::draw()+1241)
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #05 pc 000000000011b3fd  /system/lib64/libhwui.so (_ZNSt3__110__function6__funcIZN7android10uirenderer12renderthread13DrawFrameTask11postAndWaitEvE3$_0NS_9allocatorIS6_EEFvvEEclEv$c303f2d2360db58ed70a2d0ac7ed911b+1389)
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #06 pc 00000000000f4712  /system/lib64/libhwui.so (android::uirenderer::WorkQueue::process()+354)
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #07 pc 000000000012912f  /system/lib64/libhwui.so (android::uirenderer::renderthread::RenderThread::threadLoop()+479)
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #08 pc 000000000000f79a  /system/lib64/libutils.so (android::Thread::_threadLoop(void*)+314)
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #09 pc 00000000000947cb  /system/lib64/libc.so (__pthread_start(void*)+27)
+11-27 03:09:58.941  5696  5696 F DEBUG   :     #10 pc 000000000002b02d  /system/lib64/libc.so (__start_thread+61)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: FATAL EXCEPTION: Firebase Background Thread #3
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: Process: com.uncube.launcher3, PID: 5352
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: java.lang.OutOfMemoryError: Failed to allocate a 98432 byte allocation with 77160 free bytes and 75KB until OOM, max allowed footprint 402653184, growth limit 402653184
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at java.lang.StringFactory.newStringFromBytes(StringFactory.java:225)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at java.lang.StringFactory.newStringFromBytes(StringFactory.java:256)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at va.i.b(QueueFileLogStore.java:11)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at va.f.c(LogFileManager.java:3)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ta.d1.e(SessionReportingCoordinator.java:5)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ta.d1.f(SessionReportingCoordinator.java:5)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ta.d1.v(SessionReportingCoordinator.java:28)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ta.d1.x(SessionReportingCoordinator.java:36)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ta.p.d0(CrashlyticsController.java:38)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ta.b0.z(CrashlyticsCore.java:7)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ta.b0.c(CrashlyticsCore.java:1)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ta.q.run(R8$$SyntheticClass:7)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ua.e.f(CrashlyticsWorker.java:1)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ua.e.a(CrashlyticsWorker.java:1)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at ua.d.then(R8$$SyntheticClass:3)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at com.google.android.gms.tasks.zze.run(com.google.android.gms:play-services-tasks@@18.1.0:9)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at com.google.firebase.concurrent.b.b(CustomThreadFactory.java:13)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at com.google.firebase.concurrent.b.a(CustomThreadFactory.java:1)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at com.google.firebase.concurrent.a.run(R8$$SyntheticClass:5)
+11-27 03:11:33.194  5352  5381 E AndroidRuntime: 	at java.lang.Thread.run(Thread.java:764)
+> shell logcat -d -b events | grep -E 'am_crash|am_anr|am_kill|am_proc_died|am_finish_activity|am_destroy_activity|am_create_activity|am_resume_activity' | tail -24
+11-27 02:59:56.770  2018  2606 I am_proc_died: [0,3136,com.bluestacks.home,904,18]
+11-27 02:59:58.897  2018  2904 I am_kill : [0,3657,com.google.android.onetimeinitializer,904,empty #17]
+11-27 02:59:59.163  2018  4379 I am_proc_died: [0,3657,com.google.android.onetimeinitializer,904,18]
+11-27 03:00:04.019  2018  2084 I am_kill : [0,3751,com.google.android.play.games,904,empty #17]
+11-27 03:00:08.030  2018  2083 I am_proc_died: [0,3751,com.google.android.play.games,904,18]
+11-27 03:00:27.913  2018  2606 I am_kill : [0,4008,com.google.process.gapps,906,empty #17]
+11-27 03:00:28.137  2018  4380 I am_proc_died: [0,4008,com.google.process.gapps,906,18]
+11-27 03:00:28.398  2018  4379 I am_kill : [0,3260,com.location.provider,906,empty #17]
+11-27 03:00:28.965  2018  4381 I am_proc_died: [0,3260,com.location.provider,906,18]
+11-27 03:01:04.997  2018  2018 I am_kill : [0,4057,com.alphainventor.filemanager,906,empty #17]
+11-27 03:01:06.170  2018  4381 I am_proc_died: [0,4057,com.alphainventor.filemanager,906,18]
+11-27 03:01:46.772  2018  4380 I am_proc_died: [0,3696,com.google.android.partnersetup,906,18]
+11-27 03:01:49.786  2018  2904 I am_proc_died: [0,4261,com.numberbarn.app,904,18]
+11-27 03:01:49.832  2018  2904 I am_proc_died: [0,2852,com.google.process.gapps,906,18]
+11-27 03:01:51.189  2018  4381 I am_proc_died: [0,4162,com.google.android.verifier,906,18]
+11-27 03:01:52.225  2018  3291 I am_proc_died: [0,2785,com.google.process.gservices,904,18]
+11-27 03:01:53.181  2018  3291 I am_proc_died: [0,4331,com.upscrolled.app,906,18]
+11-27 03:02:38.563  2018  2606 I am_proc_died: [0,2596,com.uncube.launcher3,0,2]
+11-27 03:04:10.899  2018  4379 I am_create_activity: [0,86542842,150,com.mazawallet/.MainActivity,NULL,NULL,NULL,268435456]
+11-27 03:09:59.443  2018  5699 I am_crash: [2018,0,com.mazawallet,814235204,Native crash,Aborted,unknown,0]
+11-27 03:09:59.450  2018  5699 I am_finish_activity: [0,86542842,150,com.mazawallet/.MainActivity,force-crash]
+11-27 03:10:01.588  2018  2033 I am_resume_activity: [0,115208793,2,com.uncube.launcher3/com.bluestacks.launcher.activity.HomeActivity]
+11-27 03:10:01.590  2018  2606 I am_proc_died: [0,5492,com.mazawallet,199,2]
+11-27 03:11:34.316  2018  3776 I am_proc_died: [0,5352,com.uncube.launcher3,0,2]
+> shell logcat -d | grep -i mazawallet | tail -45
+11-27 03:00:20.904  2018  2033 I ActivityManager: Force stopping com.mazawallet appid=10068 user=-1: installPackageLI
+11-27 03:00:21.013  2018  2052 I PackageManager: Update package com.mazawallet code path from /data/app/com.mazawallet-m6jdqxaO6ySvoCVKz54mqA== to /data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==; Retain data and using new
+11-27 03:00:21.013  2018  2052 I PackageManager: Update package com.mazawallet resource path from /data/app/com.mazawallet-m6jdqxaO6ySvoCVKz54mqA== to /data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==; Retain data and using new
+11-27 03:00:21.084  2018  2052 I PackageManager.DexOptimizer: Running dexopt (dexoptNeeded=1) on: /data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==/base.apk pkg=com.mazawallet isa=x86_64 dexoptFlags=boot_complete,profile_guided,public,enable_hidden_api_checks targetFilter=speed-profile oatDir=/data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==/oat classLoaderContext=PCL[]
+11-27 03:00:22.709  2018  2052 W ActivityManager: Skipping broadcast of Intent { act=android.intent.action.PACKAGE_REMOVED dat=package:com.mazawallet flg=0x4000010 (has extras) }: user 10 and its parent (if any) are stopped
+11-27 03:00:22.709  2018  2052 I ActivityManager: Force stopping com.mazawallet appid=10068 user=0: pkg removed
+11-27 03:00:22.756  2018  2052 W ActivityManager: Skipping broadcast of Intent { act=android.intent.action.PACKAGE_ADDED dat=package:com.mazawallet flg=0x4000010 (has extras) }: user 10 and its parent (if any) are stopped
+11-27 03:00:22.756  2018  2052 W ActivityManager: Skipping broadcast of Intent { act=android.intent.action.PACKAGE_ADDED dat=package:com.mazawallet flg=0x4000010 pkg=com.android.vending (has extras) }: user 10 and its parent (if any) are stopped
+11-27 03:00:22.759  2018  2052 W ActivityManager: Skipping broadcast of Intent { act=android.intent.action.PACKAGE_REPLACED dat=package:com.mazawallet flg=0x4000010 (has extras) }: user 10 and its parent (if any) are stopped
+11-27 03:00:22.760  2018  2052 W ActivityManager: Skipping broadcast of Intent { act=android.intent.action.PACKAGE_REPLACED dat=package:com.mazawallet flg=0x4000010 pkg=com.android.vending (has extras) }: user 10 and its parent (if any) are stopped
+11-27 03:00:22.760  2018  2052 W ActivityManager: Skipping broadcast of Intent { act=android.intent.action.MY_PACKAGE_REPLACED flg=0x4000010 pkg=com.mazawallet (has extras) }: user 10 and its parent (if any) are stopped
+11-27 03:00:23.474  2289  2289 D BstCommandProcessor-PackageIntentReceiver: pkg is: com.mazawallet event is android.intent.action.PACKAGE_REMOVED
+11-27 03:00:23.489  2289  2289 D BstCommandProcessor-PackageIntentReceiver: pkg is: com.mazawallet event is android.intent.action.PACKAGE_ADDED
+11-27 03:00:26.084  2289  2289 D BstCommandProcessor-Application: in sendAppInstallRequest, pkgName: com.mazawallet updated: true
+11-27 03:00:26.234  2289  2289 D BstCommandProcessor-Application: Got app info - Package: com.mazawallet Activity: com.mazawallet.MainActivity
+11-27 03:00:27.574  2289  2289 D BstCommandProcessor-Application: in saveIcontoFile, iconFilePath : /mnt/windows/BstSharedFolder/com.mazawallet.png
+11-27 03:00:27.629  2289  2289 D BstCommandProcessor-Application: Icon file: com.mazawallet.png saved, returning 
+11-27 03:00:27.643  2289  2289 D BstCommandProcessor-CommandHandler: calling native onAppInstalled function, pkgName: com.mazawallet activity: com.mazawallet.MainActivity appLabel: MAZA Wallet, versionCode: 1, versionName: 1.0 iconFileName: com.mazawallet.png, source: user, isUpdate: true, isHomeApp: false, orientation: 
+11-27 03:00:27.654  2289  2289 D BstCommandProcessor-PackageIntentReceiver: pkg is: com.mazawallet event is android.intent.action.PACKAGE_REPLACED
+11-27 03:00:27.658  2018  2050 I HCALL   : hcallOnAppInstalledRpc({"pkg":"com.mazawallet","activity":"com.mazawallet.MainActivity","label":"MAZA Wallet","versionCode":1,"versionName":"1.0","iconFileName":"com.mazawallet.png","source":"user","isUpdate":true,"isHomeApp":false,"orientation":"","attemptId":""})
+11-27 03:00:28.158  2018  4380 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.PACKAGE_REMOVED dat=package:com.mazawallet flg=0x4000010 (has extras) } to com.android.vending/com.google.android.finsky.packagemonitor.impl.PackageMonitorReceiverImpl$RegisteredReceiver
+11-27 03:00:28.158  2018  2033 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.PACKAGE_REMOVED dat=package:com.mazawallet flg=0x4000010 (has extras) } to com.android.vending/com.google.android.finsky.packagemonitor.backgroundimpl.BackgroundPackageMonitorReceiverImpl$RegisteredReceiver
+11-27 03:00:28.158  2018  2033 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.PACKAGE_REMOVED dat=package:com.mazawallet flg=0x4000010 (has extras) } to com.bluestacks.gamecenter/.broadcast.PackageRemovedReceiver
+11-27 03:00:29.918  2018  2606 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.PACKAGE_REMOVED dat=package:com.mazawallet flg=0x4000010 (has extras) } to com.google.android.gms/.chimera.GmsIntentOperationService$PersistentTrustedReceiver
+11-27 03:00:29.925  2018  2606 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.PACKAGE_ADDED dat=package:com.mazawallet flg=0x4000010 (has extras) } to com.android.vending/com.google.android.finsky.packagemonitor.impl.PackageMonitorReceiverImpl$RegisteredReceiver
+11-27 03:00:29.925  2018  2033 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.PACKAGE_ADDED dat=package:com.mazawallet flg=0x4000010 (has extras) } to com.android.vending/com.google.android.finsky.packagemonitor.backgroundimpl.BackgroundPackageMonitorReceiverImpl$RegisteredReceiver
+11-27 03:00:30.063  2018  2904 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.PACKAGE_ADDED dat=package:com.mazawallet flg=0x4000010 (has extras) } to com.google.android.gms/.gass.chimera.PackageChangeBroadcastReceiver
+11-27 03:00:30.064  2018  2033 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.PACKAGE_ADDED dat=package:com.mazawallet flg=0x4000010 (has extras) } to com.google.android.gms/.chimera.GmsIntentOperationService$PersistentTrustedReceiver
+11-27 03:00:30.131  2018  4379 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.PACKAGE_REPLACED dat=package:com.mazawallet flg=0x4000010 (has extras) } to com.google.android.gms/.gass.chimera.PackageChangeBroadcastReceiver
+11-27 03:00:30.132  2018  2033 W BroadcastQueue: Background execution not allowed: receiving Intent { act=android.intent.action.PACKAGE_REPLACED dat=package:com.mazawallet flg=0x4000010 (has extras) } to com.google.android.gms/.chimera.GmsIntentOperationService$PersistentTrustedReceiver
+11-27 03:04:10.862  2018  4379 I ActivityManager: START u0 {flg=0x10000000 cmp=com.mazawallet/.MainActivity} from uid 2000
+11-27 03:04:10.866  2018  4379 D ActivityManager: TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet.MainActivity callingPackage: null  bstSpecialAppKeyboardHandlingEnabled = false
+11-27 03:04:11.431  2018  2033 D ActivityManager: TopActivityInfo, pkgName: com.mazawallet activityName: com.mazawallet/.MainActivity callingPackage:   bstSpecialAppKeyboardHandlingEnabled = false
+11-27 03:04:11.447  2018  2035 I ActivityManager: Start proc 5492:com.mazawallet/u0a68 for activity com.mazawallet/.MainActivity
+11-27 03:04:11.713  2018  2606 D WindowManager: calling BstHostCallManagerService onActivityDisplayed method, packageName: com.mazawallet, activityName: com.mazawallet.MainActivity
+11-27 03:04:11.717  2018  2606 D WindowManager: calling BstHostCallManagerService setAppConfigDbParams method, packageName: com.mazawallet, macrosDisabled: false, showFeedbackPopup: false, mouseCursorStyle: , nativeGamepad: false
+11-27 03:04:11.718  2018  2606 D WindowManager: bstSendTopDisplayedOnFocusChange packageName : com.mazawallet  activityName : com.mazawallet.MainActivity  mouseAction  :   lastSentMouseAction : 
+11-27 03:04:13.932  2018  4379 D InputMethodManagerService: packageName=com.mazawallet, activityName=.MainActivity
+11-27 03:09:57.558  2018  3776 D InputMethodManagerService: packageName=com.mazawallet, activityName=.MainActivity
+11-27 03:09:58.771  5492  5510 F libc    : Fatal signal 6 (SIGABRT), code -6 (SI_TKILL) in tid 5510 (RenderThread), pid 5492 (com.mazawallet)
+11-27 03:09:58.878  5696  5696 F DEBUG   : pid: 5492, tid: 5510, name: RenderThread  >>> com.mazawallet <<<
+11-27 03:09:59.449  2018  5699 W ActivityManager:   Force finishing activity com.mazawallet/.MainActivity
+11-27 03:09:59.953  2018  2033 W ActivityManager: Activity pause timeout for ActivityRecord{52889fa u0 com.mazawallet/.MainActivity t150 f}
+11-27 03:10:00.294  2018  3293 I WindowManager: WIN DEATH: Window{7770905 u0 com.mazawallet/com.mazawallet.MainActivity}
+11-27 03:10:01.590  2018  2606 I ActivityManager: Process com.mazawallet (pid 5492) has died: vis  +99TOP 
+## ROUND-DONE
