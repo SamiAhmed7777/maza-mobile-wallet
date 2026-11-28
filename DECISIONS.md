@@ -919,13 +919,63 @@ amount field. Nothing about the request itself changes.
   independently in Python's `decimal` module. 22 single-change mutants of
   the formatter and its wiring were each caught; the control passes.
 
+## D21 — Own-send settle echo suppression (M32, added 2026-11-28)
+
+The defect (found on device 2026-11-27, 3 of 3 sends): after a send, the app
+announced the account's own change as "MAZA received". A send spends the
+largest coin whole and pays the change to a new address; the sampled balance
+(the confirmed-unspent sum) reads ~0 until the change confirms, then settles
+BELOW the pre-send baseline — a strict increase between two consecutive
+samples, which the M14 receive rule announced. Captured shade text:
+"+46.49977740 MAZA - bench account" immediately after a send; nothing was
+received.
+
+- **INHERITED: the send itself is unchanged.** The fix touches only whether
+  the notification layer announces a sample. Amounts, fees, confirmation
+  expectations and the poll cadence (15 s, D16) are exactly as before.
+- **The suppression shape ("skip sends the account made itself"):** when the
+  APP completes a send, `SendEchoTracker` (crypto/, pure Java,
+  desktop-selftested) records a settle ceiling — the sampled balance cannot
+  exceed the last sample minus what the send moved out once the wallet's own
+  change settles. While the window is open: samples at or below the ceiling
+  never announce (the echo and the unconfirmed dip); a sample above it
+  announces ONLY the excess over max(stored sample, ceiling), so a real
+  receive landing while change settles still announces, with the echo
+  excluded. The stored sample always advances, so window expiry on an
+  unchanged balance cannot fire. Arming without a stored sample is refused
+  (fail-open to the old behavior; a wrong announce is never manufactured).
+- **The 30-minute window is an ENGINEERING CHOICE**, not an inherited or
+  consensus value (like D19/D20): it covers the unconfirmed-to-confirmed
+  settle of the change output (minutes on this chain) with margin. A second
+  send inside the window lowers the ceiling by what it moved out and re-arms
+  (each send only reduces the reachable settled balance).
+- **Scope honesty:** app-initiated sends only — the bench `/api/send` path
+  and the self-custody `/api/broadcast` path. Node-side money movement the
+  app did not initiate (operator funding sweeps, M20 reconciliation) is OUT
+  of scope: the app has no signal to tell it from a receive.
+- **Lifecycle:** the bench tracker survives reconnects on purpose (same
+  bench account across sessions; a settle in flight across a reconnect must
+  not announce afterwards); the seed tracker resets with the seed (a fresh
+  or imported seed's money has no relation to the old wallet's ceiling).
+- **Pins.** `SelfTest.sendEchoChecks` (32 static check sites, 28 per run,
+  incl. the judge-polish negative-ceiling rows) drives the decision table
+  on the desktop JVM; `tests/test_notify_wiring.py::SendEchoWiring` pins
+  the four wiring sites (arm-before-refresh on both send paths,
+  tracker-on-both-poll-sites, seed-reset) and the D21 row. The last-seen
+  balance fields are volatile (the send worker reads them at arm time while
+  the UI thread writes them — judge polish).
+- **RESIDUAL (device-gated):** the M32 DONE row needs a device send that
+  leaves the bench account WITHOUT the echo notification; that proof rides
+  the next device window (the 11-27 emulator/miner veto is in force).
+
 ## Status
 - Decisions locked 2026-11-15. No Payu-routing needed for these defaults — all
   inherited. Coin-policy changes (e.g. proposing a different confirmation
   default) would still route through Payu per standing directive.
-- D19 and D20 are the exceptions to "all inherited": a fiat price feed does
-  not exist in MazaCore, so D19's numbers and D20's display rules are stated
-  engineering choices.
+- D19, D20 and D21 are the exceptions to "all inherited": a fiat price feed
+  does not exist in MazaCore, so D19's numbers and D20's display rules are
+  stated engineering choices; D21's 30-minute echo-settle window is the same
+  class (MazaCore has no notification notion to inherit).
 - Repo: `github.com/SamiAhmed7777/maza-mobile-wallet` (created 2026-11-16).
 - Next: scaffold repo (default plan: `maza-mobile-wallet` under
   SamiAhmed7777, MazaPay-style lanes, Codex-graded commits) + light-client

@@ -326,6 +326,8 @@ public final class SelfTest {
 
         section("NotifyPolicy receive notifications (M14 decision table)");
         notifyPolicyChecks();
+        section("SendEchoTracker (M32: own-send settle echo never announces)");
+        sendEchoChecks();
 
         section("MerkleVerify merkle proof check (IDX-8 two-source verification)");
         merkleVerifyChecks();
@@ -1898,6 +1900,146 @@ public final class SelfTest {
             if (s.charAt(i) > 126) return false;
         }
         return true;
+    }
+
+    /** SendEchoTracker (M32): the wallet's own send-settle echo never
+     *  announces as a receive. The witnessed defect: a send dips the
+     *  sampled balance (change unconfirmed, ~0) then settles BELOW the
+     *  pre-send baseline - a strict increase that the old shouldFire rule
+     *  announced as "MAZA received" (3 of 3 sends on device). */
+    private static void sendEchoChecks() {
+        check("sendecho: settle window = 30 minutes (D21)",
+                SendEchoTracker.WINDOW_MS == 30L * 60L * 1000L);
+
+        SendEchoTracker t = new SendEchoTracker();
+        try {
+            t.onSend(Long.valueOf(100L), 0L, 1000L);
+            check("sendecho: onSend non-positive amount throws", false);
+        } catch (IllegalArgumentException e) {
+            check("sendecho: onSend non-positive amount throws", true);
+        }
+        try {
+            t.onSend(Long.valueOf(-1L), 100L, 1000L);
+            check("sendecho: onSend negative lastSample throws", false);
+        } catch (IllegalArgumentException e) {
+            check("sendecho: onSend negative lastSample throws", true);
+        }
+        check("sendecho: never-sampled session refuses to arm (fail open)",
+                !t.onSend(null, 100L, 1000L));
+        check("sendecho: refused arm leaves no pending settle",
+                !t.pending(1000L));
+
+        // The witnessed defect, replayed with round sats: 100 MAZA baseline,
+        // send 10 MAZA, dip to 0, settle to 90. Every settle shape is -1.
+        SendEchoTracker d = new SendEchoTracker();
+        check("sendecho: onSend arms from the last sample",
+                d.onSend(Long.valueOf(10000000000L), 1000000000L, 1000L));
+        check("sendecho: unconfirmed dip never fires",
+                d.onSample(Long.valueOf(10000000000L), 0L, 2000L) == -1L);
+        check("sendecho: own change settling never fires",
+                d.onSample(Long.valueOf(0L), 9000000000L, 3000L) == -1L);
+        check("sendecho: window live inside the settle window",
+                d.pending(3000L));
+
+        // External money above the ceiling announces ONLY the excess:
+        // ceiling = 100 - 10 = 90; a sample at 91 carries 1 external MAZA.
+        SendEchoTracker x = new SendEchoTracker();
+        x.onSend(Long.valueOf(10000000000L), 1000000000L, 1000L);
+        x.onSample(Long.valueOf(10000000000L), 0L, 2000L);
+        check("sendecho: excess above the ceiling announces the excess only",
+                x.onSample(Long.valueOf(0L), 9100000000L, 3000L) == 100000000L);
+        check("sendecho: second excess measured from the stored sample",
+                x.onSample(Long.valueOf(9100000000L), 9200000000L, 4000L)
+                        == 100000000L);
+        check("sendecho: drop back to the ceiling never fires",
+                x.onSample(Long.valueOf(9200000000L), 9000000000L, 5000L)
+                        == -1L);
+
+        // First sample of a session never fires, even inside a window.
+        SendEchoTracker f = new SendEchoTracker();
+        f.onSend(Long.valueOf(10000000000L), 1000000000L, 1000L);
+        check("sendecho: first sample inside a window never fires",
+                f.onSample(null, 9000000000L, 2000L) == -1L);
+
+        // Window expiry resumes the strict-increase rule; because every
+        // suppressed sample still updated the stored sample, expiry on an
+        // unchanged balance cannot fire.
+        SendEchoTracker w = new SendEchoTracker();
+        w.onSend(Long.valueOf(10000000000L), 1000000000L, 1000L);
+        w.onSample(Long.valueOf(10000000000L), 0L, 2000L);
+        w.onSample(Long.valueOf(0L), 9000000000L, 3000L);
+        long after = 1000L + SendEchoTracker.WINDOW_MS + 1L;
+        check("sendecho: window expired clears the pending settle",
+                !w.pending(after));
+        check("sendecho: expiry on an unchanged balance never fires",
+                w.onSample(Long.valueOf(9000000000L), 9000000000L, after)
+                        == -1L);
+        check("sendecho: strict increase after expiry fires the full delta",
+                w.onSample(Long.valueOf(9000000000L), 9500000000L, after + 1L)
+                        == 500000000L);
+
+        // A second send composes: the ceiling lowers by what the second
+        // send moved out, computed from the PENDING CEILING (not from a
+        // dipped sample), and re-arms the window.
+        SendEchoTracker s = new SendEchoTracker();
+        s.onSend(Long.valueOf(10000000000L), 1000000000L, 1000L);   // ceil 90
+        s.onSample(Long.valueOf(10000000000L), 0L, 2000L);          // dip
+        check("sendecho: second send re-arms while pending",
+                s.onSend(Long.valueOf(0L), 500000000L, 3000L));     // ceil 85
+        check("sendecho: second send's settle never fires",
+                s.onSample(Long.valueOf(0L), 8500000000L, 4000L) == -1L);
+
+        // A tracker with no pending settle behaves exactly like the old
+        // NotifyPolicy rule (first sample never, strict increase fires).
+        SendEchoTracker n = new SendEchoTracker();
+        check("sendecho: no pending - first sample never fires",
+                n.onSample(null, 5000000000L, 1000L) == -1L);
+        check("sendecho: no pending - strict increase fires the delta",
+                n.onSample(Long.valueOf(5000000000L), 6000000000L, 2000L)
+                        == 1000000000L);
+        check("sendecho: no pending - decrease never fires",
+                n.onSample(Long.valueOf(6000000000L), 5000000000L, 3000L)
+                        == -1L);
+
+        // resetForNewSeed: the seed tracker clears with the seed.
+        SendEchoTracker r = new SendEchoTracker();
+        r.onSend(Long.valueOf(10000000000L), 1000000000L, 1000L);
+        r.resetForNewSeed();
+        check("sendecho: resetForNewSeed clears the pending settle",
+                !r.pending(2000L));
+        check("sendecho: after reset a strict increase fires again",
+                r.onSample(Long.valueOf(9000000000L), 9500000000L, 3000L)
+                        == 500000000L);
+
+        // Defense-in-depth: loud on negative input.
+        SendEchoTracker g = new SendEchoTracker();
+        try {
+            g.onSample(Long.valueOf(100L), -1L, 1000L);
+            check("sendecho: negative newSats throws", false);
+        } catch (IllegalArgumentException e) {
+            check("sendecho: negative newSats throws", true);
+        }
+        try {
+            g.onSample(Long.valueOf(-1L), 100L, 1000L);
+            check("sendecho: negative prev throws", false);
+        } catch (IllegalArgumentException e) {
+            check("sendecho: negative prev throws", true);
+        }
+
+        // Judge polish: sentSats > lastSample gives a NEGATIVE ceiling
+        // (defensive - the backend refuses over-balance sends - but the
+        // degenerate path must stay safe: nothing above prev is
+        // distinguishable from a receive, so an unchanged balance still
+        // never fires and a strict increase fires the full delta).
+        SendEchoTracker neg = new SendEchoTracker();
+        check("sendecho: over-balance send arms with a negative ceiling",
+                neg.onSend(Long.valueOf(10000000000L), 20000000000L, 1000L));
+        check("sendecho: negative ceiling - unchanged balance never fires",
+                neg.onSample(Long.valueOf(10000000000L), 10000000000L, 2000L)
+                        == -1L);
+        check("sendecho: negative ceiling - increase fires the full delta",
+                neg.onSample(Long.valueOf(10000000000L), 11000000000L, 3000L)
+                        == 1000000000L);
     }
 
     private static void check(String name, boolean ok) {

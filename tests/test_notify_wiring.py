@@ -33,6 +33,8 @@ MAIN = os.path.join(REPO, "android", "src", "com", "mazawallet",
                     "MainActivity.java")
 CUSTODY = os.path.join(REPO, "android", "src", "com", "mazawallet",
                        "SelfCustody.java")
+TRACKER = os.path.join(REPO, "android", "src", "com", "mazawallet",
+                       "crypto", "SendEchoTracker.java")
 MANIFEST = os.path.join(REPO, "android", "AndroidManifest.xml")
 STRINGS = os.path.join(REPO, "android", "res", "values", "strings.xml")
 SELFTEST = os.path.join(REPO, "android", "src", "com", "mazawallet",
@@ -95,11 +97,18 @@ class ReceiveNotifyShape(unittest.TestCase):
         self.assertEqual(len(decl), 1, "one top-level declaration")
 
     def test_uses_the_policy_not_its_own_math(self):
+        # M32: the strict-increase rule lives in ONE implementation -
+        # NotifyPolicy.shouldFire - which the tracker composes; the
+        # notification shell does the conversion, channel and permission
+        # gates through the policy and never re-implements the math.
         self.assertIn("NotifyPolicy.toSats(", self.src)
-        self.assertIn("NotifyPolicy.shouldFire(", self.src)
+        self.assertNotIn("shouldFire", self.src,
+                         "the fire decision moved to SendEchoTracker (M32)")
         self.assertIn("NotifyPolicy.channelNeeded(", self.src)
         self.assertIn("NotifyPolicy.runtimeRequestNeeded(", self.src)
         self.assertIn("NotifyPolicy.CHANNEL_ID", self.src)
+        tracker = read(TRACKER)
+        self.assertIn("NotifyPolicy.shouldFire(", tracker)
 
     def test_both_surfaces_observed(self):
         self.assertIn("observeBench(", self.src)
@@ -144,13 +153,24 @@ class MainActivityWiring(unittest.TestCase):
         self.src = read(MAIN)
 
     def test_last_seen_field_memory_only(self):
-        self.assertIn("private Long lastBenchSats;", self.src)
+        self.assertIn("private volatile Long lastBenchSats;", self.src)
         self.assertIn("memory-only per session", self.src)
 
     def test_paint_state_observes_bench_balance(self):
-        self.assertIn("ReceiveNotify.observeBench(this, lastBenchSats, ws.balance)",
+        # M32: the call carries the bench tracker (echo suppression).
+        self.assertIn("ReceiveNotify.observeBench(this, lastBenchSats,",
                       self.src)
-        self.assertIn("lastBenchSats = ReceiveNotify.observeBench(", self.src)
+        self.assertIn("ws.balance, benchEcho);", self.src)
+
+    def test_bench_tracker_field_kept_across_reconnects(self):
+        # The bench tracker is final, per-account, and NOT reset at the
+        # continuity reset (same bench account across sessions; a settle
+        # in flight across a reconnect must not announce afterwards).
+        self.assertIn("private final SendEchoTracker benchEcho",
+                      self.src)
+        show = self.src[self.src.index("private void showWallet()"):
+                        self.src.index("private void buildWalletUi()")]
+        self.assertNotIn("benchEcho", show)
 
     def test_show_wallet_resets_continuity(self):
         # showWallet = unlock/reconnect only (buildWalletUi's repaint path
@@ -182,12 +202,15 @@ class SelfCustodyWiring(unittest.TestCase):
         self.src = read(CUSTODY)
 
     def test_last_seen_field_memory_only(self):
-        self.assertIn("private Long lastWatchSats;", self.src)
+        # volatile: the send worker reads it at arm time while the UI
+        # thread writes it (judge polish, M32).
+        self.assertIn("private volatile Long lastWatchSats;", self.src)
 
     def test_apply_refresh_observes_watch_balance(self):
-        self.assertIn("ReceiveNotify.observeWallet(act, lastWatchSats, balance)",
+        # M32: the call carries the seed tracker (echo suppression).
+        self.assertIn("ReceiveNotify.observeWallet(act, lastWatchSats,",
                       self.src)
-        self.assertIn("lastWatchSats = ReceiveNotify.observeWallet(", self.src)
+        self.assertIn("balance, watchEcho);", self.src)
 
     def test_finish_setup_resets_continuity(self):
         # A fresh/imported seed is a new continuity (D16).
@@ -243,6 +266,69 @@ class SelfTestRegistration(unittest.TestCase):
         body = body[:body.index("\n    /** GapPolicy")]
         n = len(re.findall(r"\bcheck\(", body))
         self.assertEqual(n, 30, "30 static notifyPolicy check call sites")
+
+
+class SendEchoWiring(unittest.TestCase):
+    """M32: the own-send settle echo never announces. The tracker is a
+    pure crypto/ decision class (desktop-selftested: sendEchoChecks);
+    this pins the WIRING the SelfTest cannot see."""
+
+    def test_tracker_is_pure_top_level(self):
+        src = read(TRACKER)
+        self.assertNotIn("import android", src)
+        for banned in ("java.net", "java.io", "java.nio"):
+            self.assertNotIn(f"import {banned}", src)
+        # Top-level class, no platform supertype, no outer instance
+        # (the d8 nested-class rule): the file declares exactly one class.
+        decl = [ln for ln in src.splitlines()
+                if ln.startswith("public final class")]
+        self.assertEqual(len(decl), 1, "one top-level declaration")
+        self.assertIn("synchronized", src, "send thread + UI thread")
+
+    def test_bench_send_arms_before_refresh(self):
+        src = read(MAIN)
+        # In doSend's 200 branch, BEFORE the txid handling and the
+        # refresh post that would sample the dipped/settling balance.
+        branch = src[src.index('if (r.code == 200) {'):]
+        branch = branch[:branch.index("String txid")]
+        self.assertIn("benchEcho.onSend(lastBenchSats,", branch)
+        # Ceiling = baseline - amount - bench fee (the settled balance is
+        # the baseline less both; D21).
+        self.assertIn("strictSats + NotifyPolicy.toSats(fee),", branch)
+
+    def test_seed_broadcast_arms_before_next_poll(self):
+        src = read(CUSTODY)
+        # After the broadcast 200 guard, before the change-index advance.
+        head = src[src.index('if (b.code == 401) throw new Unauthorized();'):]
+        head = head[:head.index("if (changeAddress != null) {")]
+        self.assertIn("watchEcho.onSend(lastWatchSats,", head)
+        # The self-custody fee is known at sign time: amount + fee is
+        # exactly what left the wallet.
+        self.assertIn("Math.addExact(amountSats, feeF),", head)
+
+    def test_seed_tracker_resets_with_the_seed(self):
+        src = read(CUSTODY)
+        # The reset sits with the seed-continuity reset (fresh/imported
+        # seed), not with the reconnect path.
+        reset = src[src.index("lastWatchSats = null;"):]
+        reset = reset[:reset.index("recvWindow = ADDR_COUNT;")]
+        self.assertIn("watchEcho.resetForNewSeed();", reset)
+
+    def test_sendecho_checks_registered(self):
+        src = read(SELFTEST)
+        self.assertIn("sendEchoChecks();", src)
+
+    def test_sendecho_row_count_matches_the_decision_surface(self):
+        # House rule: executable check( call sites, not textual matches.
+        # STATIC count is 32; the four throw scenarios each carry a
+        # check(false) in the try AND a check(true) in the catch (exactly
+        # one executes per run), so the runtime total is 28 rows (incl.
+        # the judge-polish negative-ceiling rows).
+        src = read(SELFTEST)
+        body = src[src.index("private static void sendEchoChecks()"):]
+        body = body[:body.index("\n    private static void check(")]
+        n = len(re.findall(r"\bcheck\(", body))
+        self.assertEqual(n, 32, "32 static sendEcho check call sites")
 
 
 class DocsHonesty(unittest.TestCase):

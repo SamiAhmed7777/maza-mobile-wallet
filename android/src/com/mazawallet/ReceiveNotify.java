@@ -9,6 +9,7 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 
 import com.mazawallet.crypto.NotifyPolicy;
+import com.mazawallet.crypto.SendEchoTracker;
 
 /**
  * M14: posts the local "MAZA received" notification. APP-ALIVE SCOPE
@@ -51,18 +52,22 @@ public final class ReceiveNotify {
     }
 
     /** One bench-account sample: fires on a strict increase over the last
-     *  sample; returns the satoshi value to store as the next last-seen
-     *  (the previous value unchanged when the balance is malformed - a bad
-     *  sample must neither fire nor reset the continuity). */
-    public static Long observeBench(Context ctx, Long prev, double balanceMaza) {
+     *  sample, EXCEPT the wallet's own send-settle echo (M32: echo is the
+     *  tracker's verdict); returns the satoshi value to store as the next
+     *  last-seen (the previous value unchanged when the balance is
+     *  malformed - a bad sample must neither fire nor reset the
+     *  continuity). The tracker is REQUIRED (both call sites wire one). */
+    public static Long observeBench(Context ctx, Long prev, double balanceMaza,
+                                    SendEchoTracker echo) {
         return observe(ctx, prev, balanceMaza, ID_BENCH,
-                ctx.getString(R.string.notify_src_bench));
+                ctx.getString(R.string.notify_src_bench), echo);
     }
 
     /** One self-custody watch-set sample (same contract as observeBench). */
-    public static Long observeWallet(Context ctx, Long prev, double balanceMaza) {
+    public static Long observeWallet(Context ctx, Long prev, double balanceMaza,
+                                     SendEchoTracker echo) {
         return observe(ctx, prev, balanceMaza, ID_WALLET,
-                ctx.getString(R.string.notify_src_wallet));
+                ctx.getString(R.string.notify_src_wallet), echo);
     }
 
     /** Asks for the Android 13+ POST_NOTIFICATIONS grant once per session.
@@ -85,15 +90,19 @@ public final class ReceiveNotify {
     // ------------------------------------------------------------------
 
     private static Long observe(Context ctx, Long prev, double balanceMaza,
-                                int id, String source) {
+                                int id, String source, SendEchoTracker echo) {
         long cur;
         try {
             cur = NotifyPolicy.toSats(balanceMaza);
         } catch (IllegalArgumentException e) {
             return prev; // malformed sample: no fire, no continuity reset
         }
-        if (NotifyPolicy.shouldFire(prev, cur) && enabled(ctx)) {
-            fire(ctx, cur - (prev == null ? 0L : prev.longValue()), id, source);
+        // M32: the tracker owns the fire decision (own-send settle echo
+        // suppressed; delta -1 = never announce). Malformed input never
+        // reaches it (toSats threw above; toSats output is >= 0).
+        long delta = echo.onSample(prev, cur, System.currentTimeMillis());
+        if (delta >= 0 && enabled(ctx)) {
+            fire(ctx, delta, id, source);
         }
         return Long.valueOf(cur);
     }

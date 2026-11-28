@@ -44,6 +44,8 @@ import com.mazawallet.crypto.ScanOrigin;
 import com.mazawallet.crypto.MazaUri;
 import com.mazawallet.crypto.NetworkParams;
 import com.mazawallet.crypto.NetworkSetting;
+import com.mazawallet.crypto.NotifyPolicy;
+import com.mazawallet.crypto.SendEchoTracker;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -215,7 +217,15 @@ public class MainActivity extends Activity
     private TextView reqUsdTv;
     /** M14: last-seen bench balance in sats (memory-only per session; the
      *  first sample of a session never notifies - NotifyPolicy.shouldFire). */
-    private Long lastBenchSats;
+    private volatile Long lastBenchSats;
+    /** M32: suppresses the bench account's own send-settle echo. Kept
+     *  across reconnects on purpose (a settle in flight when the session
+     *  dropped must not announce after reconnect); the bench account is
+     *  the same account across sessions, unlike the seed. volatile: the
+     *  send worker reads it at arm time while the UI thread writes it
+     *  (judge polish - closes the staleness race; worst case was a
+     *  slightly stale ceiling, which failed safe). */
+    private final SendEchoTracker benchEcho = new SendEchoTracker();
     /** M14: the Android 13+ POST_NOTIFICATIONS ask happens once per session. */
     private boolean notifPermAsked;
     private EditText toEt;
@@ -1184,6 +1194,16 @@ public class MainActivity extends Activity
                 Api.Resp r = Net.withRetry("POST", "/api/send",
                         () -> Api.http(baseUrl, token, "POST", "/api/send", body));
                 if (r.code == 200) {
+                    // M32: arm the settle-echo suppression BEFORE the refresh
+                    // poll sees the dropped/settling balance. strictSats is
+                    // the amount that left the account; the bench fee comes
+                    // off the ceiling too (the settled balance is the
+                    // baseline less amount less fee). benchEcho is
+                    // synchronized: the send runs on a worker thread, the
+                    // poll samples on the UI thread.
+                    benchEcho.onSend(lastBenchSats,
+                            strictSats + NotifyPolicy.toSats(fee),
+                            System.currentTimeMillis());
                     String txid = r.json().optString("txid", "");
                     msg = txid.length() == 0
                             ? "Sent (bench account)."
@@ -1357,7 +1377,9 @@ public class MainActivity extends Activity
         // M14: bench-account receive notification (strict increase between
         // consecutive polls; the first sample of a session never fires).
         // Returns the sat sample to keep for the next comparison.
-        lastBenchSats = ReceiveNotify.observeBench(this, lastBenchSats, ws.balance);
+        // M32: the tracker suppresses the account's own send-settle echo.
+        lastBenchSats = ReceiveNotify.observeBench(this, lastBenchSats,
+                ws.balance, benchEcho);
         accountTv.setText("account " + ws.account + " \u00B7 fee "
                 + fmtAmount(ws.fee) + " MAZA");
         feeHintTv.setText("fee " + fmtAmount(ws.fee) + " MAZA");

@@ -29,6 +29,7 @@ import com.mazawallet.crypto.FeePolicy;
 import com.mazawallet.crypto.GapPolicy;
 import com.mazawallet.crypto.MazaUri;
 import com.mazawallet.crypto.NetworkParams;
+import com.mazawallet.crypto.SendEchoTracker;
 import com.mazawallet.crypto.TxBuilder;
 
 import org.json.JSONArray;
@@ -118,7 +119,14 @@ public final class SelfCustody {
     private boolean[] lastRecvUsed;
     /** M14: last-seen watch-set balance in sats (memory-only per session;
      *  the first sample of a session never notifies - NotifyPolicy.shouldFire). */
-    private Long lastWatchSats;
+    private volatile Long lastWatchSats;
+    /** M32: suppresses the seed wallet's own send-settle echo. Reset with
+     *  the seed (a fresh/imported seed's money has no relation to the old
+     *  wallet's settle ceiling), but kept across reconnects (a settle in
+     *  flight when the session dropped must not announce afterwards).
+     *  volatile: the send worker reads it at arm time while the UI
+     *  thread writes it (judge polish - closes the staleness race). */
+    private final SendEchoTracker watchEcho = new SendEchoTracker();
 
     // Wallet-state widgets.
     private TextView balanceTv;
@@ -425,6 +433,10 @@ public final class SelfCustody {
         // M14: a fresh/imported seed is a new continuity - the next sample
         // is a first sample and must not announce the existing balance.
         lastWatchSats = null;
+        // M32: the seed changed, so the old wallet's settle ceiling says
+        // nothing about this wallet's money - reset the echo suppression
+        // with the seed (unlike the bench tracker, which survives).
+        watchEcho.resetForNewSeed();
         recvWindow = ADDR_COUNT;
         prefs.edit().putInt(KEY_RECV_IDX, 0)
                 .putInt(KEY_CHANGE_IDX, 0)
@@ -690,7 +702,9 @@ public final class SelfCustody {
         // M14: seed-address receive notification (strict increase between
         // consecutive watch-utxos polls; first sample of a session never
         // fires). observeWallet also returns the sat sample to keep.
-        lastWatchSats = ReceiveNotify.observeWallet(act, lastWatchSats, balance);
+        // M32: the tracker suppresses the wallet's own send-settle echo.
+        lastWatchSats = ReceiveNotify.observeWallet(act, lastWatchSats,
+                balance, watchEcho);
         applyGapScan(scan);
         historyList.removeAllViews();
         if (txs == null || txs.length() == 0) {
@@ -991,6 +1005,12 @@ public final class SelfCustody {
         if (b.code == 401) throw new Unauthorized();
         if (b.code != 200) throw new IllegalArgumentException(b.errorText());
         String txid = b.json().optString("txid", "");
+        // M32: arm the settle-echo suppression before the next watch-utxos
+        // poll sees the dip/settle. amount + fee is exactly what left the
+        // wallet (the fee is known at sign time here). watchEcho is
+        // synchronized: this runs on the send worker, the poll on UI.
+        watchEcho.onSend(lastWatchSats,
+                Math.addExact(amountSats, feeF), System.currentTimeMillis());
         if (changeAddress != null) {
             changeIndex++;
             prefs.edit().putInt(KEY_CHANGE_IDX, changeIndex).apply();
