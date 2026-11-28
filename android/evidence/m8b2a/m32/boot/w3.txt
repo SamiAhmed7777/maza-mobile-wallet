@@ -1,0 +1,8 @@
+echo W3 screen after CONNECT
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell dumpsys activity activities | grep -e mResumedActivity
+shell logcat -d | grep -e "MAZA " | tail -8
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

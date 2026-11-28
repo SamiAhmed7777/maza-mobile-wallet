@@ -1,0 +1,43 @@
+## W13 in-place update: push + pm install -r (build of commit b819df1)
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1688.34 6032.05
+> shell md5sum /data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==/base.apk
+1a287b66e3ee91a61a1fd8f66c7b51c4  /data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==/base.apk
+> push C:\Users\hello\maza-bench-lane\m32-b819df1.apk /sdcard/m32-b819df1.apk
+adb: error: cannot stat ':\Users\hello\maza-bench-lane\m32-b819df1.apk': No such file or directory
+> shell ls -l /sdcard/m32-b819df1.apk
+[e] ls: /sdcard/m32-b819df1.apk: No such file or directory
+> shell pm install -r /sdcard/m32-b819df1.apk
+[e] Error: Unable to open file: /sdcard/m32-b819df1.apk
+[e] Consider using a file under /data/local/tmp/
+[e] Error: Can't open file: /sdcard/m32-b819df1.apk
+[e] 
+[e] Exception occurred while executing:
+[e] java.lang.IllegalArgumentException: Error: Can't open file: /sdcard/m32-b819df1.apk
+[e] 	at com.android.server.pm.PackageManagerShellCommand.setParamsSize(PackageManagerShellCommand.java:328)
+[e] 	at com.android.server.pm.PackageManagerShellCommand.runInstall(PackageManagerShellCommand.java:906)
+[e] 	at com.android.server.pm.PackageManagerShellCommand.onCommand(PackageManagerShellCommand.java:158)
+[e] 	at android.os.ShellCommand.exec(ShellCommand.java:103)
+[e] 	at com.android.server.pm.PackageManagerService.onShellCommand(PackageManagerService.java:22047)
+[e] 	at android.os.Binder.shellCommand(Binder.java:634)
+[e] 	at android.os.Binder.onTransact(Binder.java:532)
+[e] 	at android.content.pm.IPackageManager$Stub.onTransact(IPackageManager.java:2805)
+[e] 	at com.android.server.pm.PackageManagerService.onTransact(PackageManagerService.java:3929)
+[e] 	at android.os.Binder.execTransact(Binder.java:731)
+> raw connect 127.0.0.1:5555
+connected to 127.0.0.1:5555
+> shell pm list packages com.mazawallet
+package:com.mazawallet
+> shell dumpsys package com.mazawallet | grep -e lastUpdateTime -e versionName -e codePath -e firstInstallTime
+    codePath=/data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==
+    versionName=1.0
+    firstInstallTime=2026-11-15 18:39:10
+    lastUpdateTime=2026-11-27 03:00:21
+> shell pm path com.mazawallet
+package:/data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==/base.apk
+> shell dumpsys notification | grep -e AppSettings: com.mazawallet
+[e] grep: com.mazawallet: No such file or directory
+[e] Failed to write while dumping service notification: Broken pipe
+## ROUND-DONE

@@ -1,0 +1,12 @@
+echo W12 pre-install identity + all notification records
+shell cat /proc/uptime
+shell pm path com.mazawallet
+shell dumpsys package com.mazawallet | grep -e lastUpdateTime -e versionName -e codePath -e firstInstallTime
+shell dumpsys notification | grep -c -e NotificationRecord
+shell dumpsys notification | grep -e NotificationRecord | head -6
+shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+shell dumpsys activity activities | grep -e mResumedActivity
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

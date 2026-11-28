@@ -1,0 +1,40 @@
+## W17 installed build checksum, temp removed, app start
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1895.43 6631.23
+> shell md5sum /data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==/base.apk
+e3c0f63458875c148e2d27245a5b57d0  /data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==/base.apk
+> shell sha256sum /data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==/base.apk
+2b8bf013bbc8e0e71e04eb191477997c5dd4aa3a6f3c96b0245a51e09cd4c3f1  /data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==/base.apk
+> shell rm -f /data/local/tmp/m32.apk
+> shell ls /data/local/tmp/
+dalvik-cache
+maza.apk
+r1
+r2
+req
+> shell dumpsys notification | grep -e com.mazawallet | head -3
+      AppSettings: com.mazawallet (10068) showBadge=true
+    post_frequency{user_id=0,pkg=com.mazawallet,day=1,count=6,muted=6/6,demoted=0}
+> shell am start -W -n com.mazawallet/.MainActivity
+Starting: Intent { cmp=com.mazawallet/.MainActivity }
+Status: ok
+Activity: com.mazawallet/.MainActivity
+ThisTime: 1571
+TotalTime: 1571
+WaitTime: 1658
+Complete
+> shell pidof com.mazawallet
+7538
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{454fdb5 u0 com.mazawallet/.MainActivity t167}
+> shell logcat -d | grep -c -e Fatal
+0
+> shell logcat -d -b crash | tail -4
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation="0"><node index="0" text="" resource-id="" class="android.widget.FrameLayout" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,0][1600,900]"><node index="0" text="" resource-id="" class="android.widget.LinearLayout" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,0][1600,900]"><node index="0" text="" resource-id="android:id/content" class="android.widget.FrameLayout" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,36][1600,900]"><node index="0" text="" resource-id="" class="android.widget.ScrollView" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="true" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,36][1600,900]"><node index="0" text="" resource-id="" class="android.widget.LinearLayout" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,36][1600,700]"><node index="0" text="" resource-id="" class="android.widget.LinearLayout" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[30,84][1570,156]"><node index="0" text="" resource-id="" class="android.widget.ImageView" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[30,84][102,156]" /><node index="1" text="MAZA Wallet" resource-id="" class="android.widget.TextView" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[120,98][1570,142]" /></node><node index="1" text="Connect to your bench server" resource-id="" class="android.widget.TextView" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[30,204][1570,233]" /><node index="2" text="" resource-id="" class="android.widget.LinearLayout" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[30,257][1570,670]"><node index="0" text="Server URL" resource-id="" class="android.widget.TextView" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[54,281][1546,308]" /><node index="1" text="https://mazatest.sami-host.me" resource-id="" class="android.widget.EditText" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="true" enabled="true" focusable="true" focused="false" scrollable="false" long-clickable="true" password="false" selected="false" bounds="[54,308][1546,376]" /><node index="2" text="Network: MAZA mainnet" resource-id="" class="android.widget.TextView" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[54,385][1546,410]" /><node index="3" text="Token" resource-id="" class="android.widget.TextView" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[54,428][1546,455]" /><node index="4" text="bench token" resource-id="" class="android.widget.EditText" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="true" enabled="true" focusable="true" focused="false" scrollable="false" long-clickable="true" password="true" selected="false" bounds="[54,455][1546,523]" /><node index="5" text="" resource-id="" class="android.widget.TextView" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[54,535][1546,562]" /><node index="6" text="CONNECT" resource-id="" class="android.widget.Button" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="true" enabled="true" focusable="true" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[54,574][1546,646]" /></node></node></node></node></node><node index="1" text="" resource-id="android:id/statusBarBackground" class="android.view.View" package="com.mazawallet" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,0][1600,36]" /></node></hierarchy>
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE

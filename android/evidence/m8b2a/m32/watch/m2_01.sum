@@ -1,0 +1,34 @@
+## m2_01 watch
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+2771.40 9922.74
+> shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+0
+> shell logcat -d | grep -e HCALL | tail -2
+11-28 02:34:06.282  2010  2043 I HCALL   : hcallCommonCommandRpc(5, , )
+11-28 02:34:38.140  2010  2043 I HCALL   : hcallOnTextEditModeChangedRpc(1)
+> shell logcat -d | grep -e "MAZA " | tail -3
+11-28 02:48:29.915  7538  8876 I MAZA    : 2026-11-28 02:48:29 #203 GET /api/state -> 200 (171ms)
+11-28 02:48:30.099  7538  8877 I MAZA    : 2026-11-28 02:48:30 #204 GET /api/watch/utxos -> 200 (175ms)
+11-28 02:48:30.436  7538  8877 I MAZA    : 2026-11-28 02:48:30 #205 GET /api/watch/history -> 200 (336ms)
+> shell dumpsys notification | grep -e com.mazawallet -e incoming_maza | head -8
+    NotificationRecord(0x0a0738bc: pkg=com.mazawallet user=UserHandle{0} id=2 tag=null importance=3 key=0|com.mazawallet|2|null|10068appImportanceLocked=false: Notification(channel=incoming_maza pri=0 contentView=null vibrate=null sound=nul
+      icon=Icon(typ=RESOURCE pkg=com.mazawallet id=0x7f020000) / com.mazawallet:drawable/ic_notify
+      key=0|com.mazawallet|2|null|10068
+      groupKey=0|com.mazawallet|2|null|10068
+          android.appInfo=ApplicationInfo (ApplicationInfo{95a3945 com.mazawallet})
+      effectiveNotificationChannel=NotificationChannel{mId='incoming_maza', mName=Incoming MAZA, mDescription=hasDescription , mImportance=3, mBypassDnd=false, mLockscreenVisibility=-1000, mSound=content://settings/system/notification_sound
+  mSoundNotificationKey=0|com.mazawallet|2|null|10068
+      AppSettings: com.mazawallet (10068) showBadge=true
+> shell ps | grep -e mazawallet | head -2
+u0_a68        7538  1818 3568052 135744 0                   0 S com.mazawallet
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{454fdb5 u0 com.mazawallet/.MainActivity t167}
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 12.0s xml-lines=1 -> m2_01.out

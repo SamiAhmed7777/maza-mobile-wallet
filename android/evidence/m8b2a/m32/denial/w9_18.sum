@@ -1,0 +1,29 @@
+## w9_18 watch
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+824.01 2698.84
+> shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+0
+> shell logcat -d | grep -e HCALL | tail -2
+11-28 02:10:47.088  2010  2043 I HCALL   : hcallSetAppConfigDbParamsRpc(com.mazawallet, 0, 0, , 0)
+11-28 02:10:47.233  2010  2043 I HCALL   : hcallCommonCommandRpc(5, , )
+> shell logcat -d | grep -e "MAZA " | tail -3
+11-28 02:16:03.862  3482  6463 I MAZA    : 2026-11-28 02:16:03 #170 GET /api/state -> 200 (178ms)
+11-28 02:16:04.036  3482  6464 I MAZA    : 2026-11-28 02:16:04 #171 GET /api/watch/utxos -> 200 (169ms)
+11-28 02:16:04.201  3482  6464 I MAZA    : 2026-11-28 02:16:04 #172 GET /api/watch/history -> 200 (164ms)
+> shell dumpsys notification | grep -e com.mazawallet -e incoming_maza | head -8
+      AppSettings: com.mazawallet (10068) importance=NONE showBadge=true
+        NotificationChannel{mId='incoming_maza', mName=Incoming MAZA, mDescription=hasDescription , mImportance=3, mBypassDnd=false, mLockscreenVisibility=-1000, mSound=content://settings/system/notification_sound, mLights=false, mLightColo
+    post_frequency{user_id=0,pkg=com.mazawallet,day=1,count=6,muted=6/6,demoted=0}
+> shell ps | grep -e mazawallet | head -2
+u0_a68        3482  1818 3582380 138720 0                   0 S com.mazawallet
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{6dc61a2 u0 com.mazawallet/.MainActivity t165}
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 10.6s xml-lines=1 -> w9_18.out

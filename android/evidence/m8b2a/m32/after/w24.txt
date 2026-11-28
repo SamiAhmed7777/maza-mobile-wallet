@@ -1,0 +1,16 @@
+echo W24 notification shade (redacted) + final identity
+shell cat /proc/uptime
+shell cmd statusbar expand-notifications
+sleep 2
+shell screencap -p /sdcard/w24_shade.png
+pull /sdcard/w24_shade.png C:\Users\hello\maza-bench-lane\cap\w24_shade.png
+shell rm -f /sdcard/w24_shade.png
+shell cmd statusbar collapse
+sleep 1
+shell dumpsys package com.mazawallet | grep -e lastUpdateTime -e codePath
+shell dumpsys notification | grep -e NotificationRecord
+shell dumpsys activity activities | grep -e mResumedActivity
+shell logcat -d | grep -c -e Fatal
+shell logcat -d -b crash | tail -3
+shell dmesg | grep -c -e EXT4-fs
+shell dmesg | grep -c -e I/O error

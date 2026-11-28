@@ -1,0 +1,26 @@
+## W6 turn Show notifications OFF (master switch), read back
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+353.10 894.63
+> shell pidof com.mazawallet
+3482
+> shell input tap 1541 324
+> shell uiautomator dump /sdcard/ui.xml
+[e] ERROR: null root node returned by UiTestAutomationBridge.
+> shell cat /sdcard/ui.xml
+[e] cat: /sdcard/ui.xml: No such file or directory
+> shell rm -f /sdcard/ui.xml
+> shell screencap -p /sdcard/w6_off.png
+> pull /sdcard/w6_off.png C:\Users\hello\maza-bench-lane\cap\w6_off.png
+[100%] sdcard/w6_off.png
+> shell rm -f /sdcard/w6_off.png
+> shell cmd appops get com.mazawallet POST_NOTIFICATION
+POST_NOTIFICATION: default
+> shell dumpsys notification | grep -i -e maza -e banned
+      AppSettings: com.mazawallet (10068) importance=NONE showBadge=true
+        NotificationChannel{mId='incoming_maza', mName=Incoming MAZA, mDescription=hasDescription , mImportance=3, mBypassDnd=false, mLockscreenVisibility=-1000, mSound=content://settings/system/notification_sound, mLights=false, mLightColor=0, mVibration=null, mUserLockedFields=0, mFgServiceShown=false, mVibrationEnabled=false, mShowBadge=true, mDeleted=false, mGroup='null', mAudioAttributes=AudioAttributes: usage=USAGE_NOTIFICATION content=CONTENT_TYPE_SONIFICATION flags=0x0 tags= bundle=null, mBlockableSystem=false}
+    post_frequency{user_id=0,pkg=com.mazawallet,day=1,count=6,muted=6/6,demoted=0}
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{2ad8b4a u0 com.android.settings/.Settings$AppNotificationSettingsActivity t166}
+## ROUND-DONE

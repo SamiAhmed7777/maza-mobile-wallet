@@ -1,0 +1,54 @@
+## W8 wallet back to front with notifications denied
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+502.80 1470.33
+> shell am start -W -n com.mazawallet/.MainActivity
+Starting: Intent { cmp=com.mazawallet/.MainActivity }
+Warning: Activity not started, its current task has been brought to the front
+Status: ok
+Activity: com.mazawallet/.MainActivity
+ThisTime: 303
+TotalTime: 303
+WaitTime: 327
+Complete
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{6dc61a2 u0 com.mazawallet/.MainActivity t165}
+> shell ps | grep -e mazawallet | head -3
+u0_a68        3482  1818 3580524 123352 0                   0 S com.mazawallet
+> shell cmd appops get com.mazawallet POST_NOTIFICATION
+POST_NOTIFICATION: default
+> shell dumpsys notification | grep -e AppSettings -e maza
+      AppSettings: com.upscrolled.app (10067) showBadge=true
+      AppSettings: com.google.android.play.games (10045) showBadge=true
+      AppSettings: com.android.printspooler (1010047) showBadge=true
+      AppSettings: android (1000) showBadge=true
+      AppSettings: com.android.contacts (10020) showBadge=true
+      AppSettings: com.google.android.gms (10004) showBadge=true
+      AppSettings: com.numberbarn.app (10063) showBadge=true
+      AppSettings: com.android.systemui (1010030) showBadge=true
+      AppSettings: com.android.chrome (10046) showBadge=true
+      AppSettings: com.android.printspooler (10047) showBadge=true
+      AppSettings: com.android.carrierdefaultapp (10052) showBadge=true
+      AppSettings: com.android.traceur (10061) showBadge=true
+      AppSettings: cn.ubia.ubox (10065) showBadge=true
+      AppSettings: com.android.systemui (10030) showBadge=true
+      AppSettings: com.venmo (10062) showBadge=true
+      AppSettings: com.android.phone (1001) showBadge=true
+      AppSettings: com.mazawallet (10068) importance=NONE showBadge=true
+        NotificationChannel{mId='incoming_maza', mName=Incoming MAZA, mDescription=hasDescription , mImportance=3, mBypassDnd=false, mLockscreenVisibility=-1000, mSound=content://settings/system/notification_sound, mLights=false, mLightColo
+      AppSettings: com.android.vending (10012) showBadge=true
+      AppSettings: com.android.providers.downloads (10016) showBadge=true
+    post_frequency{user_id=0,pkg=com.mazawallet,day=1,count=6,muted=6/6,demoted=0}
+> shell logcat -d | grep -e "MAZA " | tail -4
+11-28 02:10:44.455  3482  5360 I MAZA    : 2026-11-28 02:10:44 #96 GET /api/state -> 200 (184ms)
+11-28 02:10:44.632  3482  5361 I MAZA    : 2026-11-28 02:10:44 #97 GET /api/price -> 200 (168ms)
+11-28 02:10:44.638  3482  5362 I MAZA    : 2026-11-28 02:10:44 #98 GET /api/watch/utxos -> 200 (174ms)
+11-28 02:10:44.810  3482  5362 I MAZA    : 2026-11-28 02:10:44 #99 GET /api/watch/history -> 200 (171ms)
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 14.9s xml-lines=1 -> w8.out

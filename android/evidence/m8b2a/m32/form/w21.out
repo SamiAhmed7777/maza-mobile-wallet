@@ -1,0 +1,15 @@
+## W21 fill the send form (NO send yet)
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+2067.58 7222.07
+> shell input tap 800 266
+> shell input text M9MwxHDmDk4wArEvbBjGvrjR6U3eNcY31E
+> shell input tap 800 418
+> shell input text 0.1
+> shell uiautomator dump /sdcard/ui.xml
+[e] ERROR: null root node returned by UiTestAutomationBridge.
+> shell cat /sdcard/ui.xml
+[e] cat: /sdcard/ui.xml: No such file or directory
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE

@@ -1,0 +1,6 @@
+echo W14 push only: forward-slash local path, then size + sha256 on the device
+shell cat /proc/uptime
+push C:/Users/hello/maza-bench-lane/m32-b819df1.apk /data/local/tmp/m32.apk
+shell ls -l /data/local/tmp/m32.apk
+shell sha256sum /data/local/tmp/m32.apk
+shell dumpsys package com.mazawallet | grep -e lastUpdateTime -e codePath

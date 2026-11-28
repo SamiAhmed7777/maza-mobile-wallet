@@ -1,0 +1,32 @@
+## W24 notification shade (redacted) + final identity
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+2964.63 10666.44
+> shell cmd statusbar expand-notifications
+> shell screencap -p /sdcard/w24_shade.png
+> pull /sdcard/w24_shade.png C:\Users\hello\maza-bench-lane\cap\w24_shade.png
+[100%] sdcard/w24_shade.png
+> shell rm -f /sdcard/w24_shade.png
+> shell cmd statusbar collapse
+> shell dumpsys package com.mazawallet | grep -e lastUpdateTime -e codePath
+    codePath=/data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==
+    lastUpdateTime=2026-11-28 02:33:07
+> shell dumpsys notification | grep -e NotificationRecord
+    NotificationRecord(0x0a0738bc: pkg=com.mazawallet user=UserHandle{0} id=2 tag=null importance=3 key=0|com.mazawallet|2|null|10068appImportanceLocked=false: Notification(channel=incoming_maza pri=0 contentView=null vibrate=null sound=nul
+    NotificationRecord(0x0fba44fe: pkg=android user=UserHandle{-1} id=19 tag=null importance=3 key=-1|android|19|null|1000appImportanceLocked=false: Notification(channel=PHYSICAL_KEYBOARD pri=0 contentView=null vibrate=null sound=null defau
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{454fdb5 u0 com.mazawallet/.MainActivity t167}
+> shell logcat -d | grep -c -e Fatal
+1
+> shell logcat -d -b crash | tail -3
+11-28 02:34:34.235  2651  2739 E AndroidRuntime: 	at com.google.firebase.concurrent.b.a(CustomThreadFactory.java:1)
+11-28 02:34:34.235  2651  2739 E AndroidRuntime: 	at com.google.firebase.concurrent.a.run(R8$$SyntheticClass:5)
+11-28 02:34:34.235  2651  2739 E AndroidRuntime: 	at java.lang.Thread.run(Thread.java:764)
+> shell dmesg | grep -c -e EXT4-fs
+2
+> shell dmesg | grep -c -e I/O error
+[e] grep: error: No such file or directory
+## ROUND-DONE
+
+-- round rc=0 11.8s xml-lines=0 -> w24.out

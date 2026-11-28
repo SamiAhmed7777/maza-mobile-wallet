@@ -1,0 +1,17 @@
+echo W17 installed build checksum, temp removed, app start
+shell cat /proc/uptime
+shell md5sum /data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==/base.apk
+shell sha256sum /data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==/base.apk
+shell rm -f /data/local/tmp/m32.apk
+shell ls /data/local/tmp/
+shell dumpsys notification | grep -e com.mazawallet | head -3
+shell am start -W -n com.mazawallet/.MainActivity
+sleep 8
+shell pidof com.mazawallet
+shell dumpsys activity activities | grep -e mResumedActivity
+shell logcat -d | grep -c -e Fatal
+shell logcat -d -b crash | tail -4
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

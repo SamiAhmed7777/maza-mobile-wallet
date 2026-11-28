@@ -1,0 +1,3 @@
+REDACTED dst=C:\Users\hello\maza-bench-lane\cap\w6_off_red.png rect=430,180,740,575
+RAW sha256=f05aaf3882c94de8f814fd2342710f4a23e88a1a39def3318f476272a4218bab (original DELETED, raw-exists=False)
+NEW sha256=bac9379cc515c2c19010feef42d6264898afb5896df57ad8c941413345460cd3

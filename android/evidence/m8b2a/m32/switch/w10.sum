@@ -1,0 +1,21 @@
+## W10 denial: notification shade after the confirmed receive
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+931.01 3113.88
+> shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+0
+> shell dumpsys notification | grep -e com.mazawallet | head -6
+      AppSettings: com.mazawallet (10068) importance=NONE showBadge=true
+    post_frequency{user_id=0,pkg=com.mazawallet,day=1,count=6,muted=6/6,demoted=0}
+> shell cmd statusbar expand-notifications
+> shell screencap -p /sdcard/w10_shade.png
+> pull /sdcard/w10_shade.png C:\Users\hello\maza-bench-lane\cap\w10_shade.png
+[100%] sdcard/w10_shade.png
+> shell cmd statusbar collapse
+> shell rm -f /sdcard/w10_shade.png
+> shell ps | grep -e mazawallet | head -2
+u0_a68        3482  1818 3582380 134768 0                   0 S com.mazawallet
+## ROUND-DONE
+
+-- round rc=0 11.2s xml-lines=0 -> w10.out

@@ -1,0 +1,21 @@
+## W18 screen after CONNECT (new build)
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1958.81 6807.46
+> shell pidof com.mazawallet
+7538
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{454fdb5 u0 com.mazawallet/.MainActivity t167}
+> shell logcat -d | grep -e "MAZA " | tail -4
+11-28 02:34:48.192  7538  7681 I MAZA    : 2026-11-28 02:34:48 #15 GET /api/watch/history -> 200 (170ms)
+11-28 02:34:59.182  7538  7697 I MAZA    : 2026-11-28 02:34:59 #16 GET /api/state -> 200 (207ms)
+11-28 02:34:59.353  7538  7698 I MAZA    : 2026-11-28 02:34:59 #17 GET /api/watch/utxos -> 200 (165ms)
+11-28 02:34:59.516  7538  7698 I MAZA    : 2026-11-28 02:34:59 #18 GET /api/watch/history -> 200 (163ms)
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 11.2s xml-lines=1 -> w18.out

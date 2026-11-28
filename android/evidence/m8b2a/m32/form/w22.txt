@@ -1,0 +1,11 @@
+echo W22 read the filled form back (dump retry), IME state
+shell cat /proc/uptime
+sleep 2
+shell uiautomator dump /sdcard/ui.xml
+shell ls -l /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml
+shell dumpsys input_method | grep -e mInputShown -e mImeWindowVis
+shell dumpsys activity activities | grep -e mResumedActivity
+shell logcat -d | grep -e /api/send | tail -2

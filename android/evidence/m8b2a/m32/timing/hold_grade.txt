@@ -1,0 +1,4 @@
+# Excerpt of a private capture: the stand-in judge's stdout for the run-log line that opened this window.
+# Only the verdict line is here. Source file sha256: 6e6a21cb9bf20fe4da2435f76a0e635aadfac011c60bacff61af55a6132484c0
+
+GRADE=A urn=urn:ump:h466fhskjoobcd7a4ki2dcz4u5ghfez34zjhlslocc6fhjtsru4q

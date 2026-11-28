@@ -1,0 +1,9 @@
+echo W18 screen after CONNECT (new build)
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell dumpsys activity activities | grep -e mResumedActivity
+shell logcat -d | grep -e "MAZA " | tail -4
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

@@ -1,0 +1,22 @@
+# Source lines quoted in RUNLOG.md. Each was read with `git show b819df1:<path>`; line numbers are those of that commit.
+
+
+## android/src/com/mazawallet/MainActivity.java   (sha256 of the file at that commit: 5a70184eedb1588e4dcfa4425f7dad31c6d87ee3db8b3b4936af4001e85e2510)
+ 1190  // S-5: SPEND. Net's table gives /api/send exactly ONE attempt
+ 1194  Api.Resp r = Net.withRetry("POST", "/api/send",
+ 1195  () -> Api.http(baseUrl, token, "POST", "/api/send", body));
+
+## android/src/com/mazawallet/ReceiveNotify.java   (sha256 of the file at that commit: 9ba960479300a5eafbd46e6a6d217652c67b44864cba19a8fe906c8f5a5e3fac)
+   27  /** Distinct ids so a bench receive and a seed receive never overwrite
+   28  *  each other's notification. */
+   29  private static final int ID_BENCH = 1;
+   30  private static final int ID_WALLET = 2;
+  121  .setContentText("+" + fmtMaza(deltaSats) + " MAZA - " + source)
+  123  nm.notify(id, b.build());
+
+## android/src/com/mazawallet/crypto/SelfTest.java   (sha256 of the file at that commit: 5e2f602b97f46631cdb161404b409bcec485d99da1ea1f13a3f0d90d23714384)
+  329  section("SendEchoTracker (M32: own-send settle echo never announces)");
+
+## android/src/com/mazawallet/crypto/SendEchoTracker.java   (sha256 of the file at that commit: 7e80bdcc7d41558a0f57cdd7b6ddfe382f4f385760d19c8c632ce04a3ae85d30)
+   52  public final class SendEchoTracker {
+   54  public static final long WINDOW_MS = 30L * 60L * 1000L;

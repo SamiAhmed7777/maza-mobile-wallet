@@ -1,0 +1,46 @@
+## W11 restore: Show notifications back ON, wallet back to front
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+970.38 3265.95
+> shell am start -W -a android.settings.APP_NOTIFICATION_SETTINGS --es android.provider.extra.APP_PACKAGE com.mazawallet --ei android.provider.extra.APP_UID 10068
+Starting: Intent { act=android.settings.APP_NOTIFICATION_SETTINGS (has extras) }
+Warning: Activity not started, its current task has been brought to the front
+Status: ok
+Activity: com.android.settings/.Settings$AppNotificationSettingsActivity
+ThisTime: 2048
+TotalTime: 2048
+WaitTime: 2099
+Complete
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+> shell input tap 1541 324
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+> shell dumpsys notification | grep -e com.mazawallet | head -4
+      AppSettings: com.mazawallet (10068) showBadge=true
+    post_frequency{user_id=0,pkg=com.mazawallet,day=1,count=6,muted=6/6,demoted=0}
+> shell cmd appops get com.mazawallet POST_NOTIFICATION
+POST_NOTIFICATION: default
+> shell am start -W -n com.mazawallet/.MainActivity
+Starting: Intent { cmp=com.mazawallet/.MainActivity }
+Warning: Activity not started, its current task has been brought to the front
+Status: ok
+Activity: com.mazawallet/.MainActivity
+ThisTime: 380
+TotalTime: 380
+WaitTime: 395
+Complete
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{6dc61a2 u0 com.mazawallet/.MainActivity t165}
+> shell ps | grep -e mazawallet | head -2
+u0_a68        3482  1818 3582380 124360 0                   0 S com.mazawallet
+> shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+0
+## ROUND-DONE
+
+-- round rc=0 23.8s xml-lines=2 -> w11.out

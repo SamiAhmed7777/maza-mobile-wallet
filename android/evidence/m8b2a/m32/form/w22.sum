@@ -1,0 +1,20 @@
+## W22 read the filled form back (dump retry), IME state
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+2117.37 7397.06
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell ls -l /sdcard/ui.xml
+-rw-rw---- 1 root sdcard_rw 8991 2026-11-28 02:37 /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+> shell dumpsys input_method | grep -e mInputShown -e mImeWindowVis
+  mImeWindowVis=Active
+  mShowRequested=true mShowExplicitlyRequested=true mShowForced=false mInputShown=true
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{454fdb5 u0 com.mazawallet/.MainActivity t167}
+> shell logcat -d | grep -e /api/send | tail -2
+## ROUND-DONE
+
+-- round rc=0 12.5s xml-lines=1 -> w22.out

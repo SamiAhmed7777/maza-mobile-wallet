@@ -1,0 +1,32 @@
+## W25 read-only: what are the ext4 and Fatal lines
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+3019.75 10879.90
+> shell dmesg | grep -e EXT4-fs
+[    0.868973] EXT4-fs (sda1): mounted filesystem with ordered data mode. Opts: (null)
+[    2.039943] EXT4-fs (sdb1): mounted filesystem with ordered data mode. Opts: (null)
+> shell dmesg | grep -i -c -e error
+1
+> shell dmesg | grep -i -e error
+[    0.660525] platform regulatory.0: Direct firmware load for regulatory.db failed with error -2
+> shell dmesg | grep -i -e blk_update
+> shell dmesg | tail -4
+[ 2857.945354] logd: logdr: UID=2000 GID=2000 PID=9344 n tail=0 logMask=19 pid=0 start=0ns timeout=0ns
+[ 2858.031149] logd: logdr: UID=2000 GID=2000 PID=9350 n tail=0 logMask=19 pid=0 start=0ns timeout=0ns
+[ 2968.526684] logd: logdr: UID=2000 GID=2000 PID=9446 n tail=0 logMask=19 pid=0 start=0ns timeout=0ns
+[ 2968.614019] logd: logdr: UID=2000 GID=2000 PID=9451 n tail=0 logMask=10 pid=0 start=0ns timeout=0ns
+> shell logcat -d | grep -e Fatal
+11-28 02:34:34.243  2651  2739 E FlutterAdsFragment: Fatal exception in non ad network
+> shell logcat -d -b crash | tail -6
+11-28 02:34:34.235  2651  2739 E AndroidRuntime: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+11-28 02:34:34.235  2651  2739 E AndroidRuntime: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+11-28 02:34:34.235  2651  2739 E AndroidRuntime: 	at com.google.firebase.concurrent.b.b(CustomThreadFactory.java:13)
+11-28 02:34:34.235  2651  2739 E AndroidRuntime: 	at com.google.firebase.concurrent.b.a(CustomThreadFactory.java:1)
+11-28 02:34:34.235  2651  2739 E AndroidRuntime: 	at com.google.firebase.concurrent.a.run(R8$$SyntheticClass:5)
+11-28 02:34:34.235  2651  2739 E AndroidRuntime: 	at java.lang.Thread.run(Thread.java:764)
+> shell ps | grep -e mazawallet
+u0_a68        7538  1818 3569940 139996 0                   0 S com.mazawallet
+## ROUND-DONE
+
+-- round rc=0 8.1s xml-lines=0 -> w25.out

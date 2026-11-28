@@ -1,0 +1,15 @@
+echo W7 why is the wallet process gone; re-dump the switch
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell logcat -d -b events | grep -e am_proc_died -e am_kill -e am_crash -e am_anr | tail -8
+shell logcat -d | grep -e Fatal -e RenderThread -e totalDuration | tail -6
+shell logcat -d | grep -e "MAZA " | tail -5
+shell dumpsys activity oom | grep -e maza
+shell cat /proc/meminfo | head -5
+shell dumpsys activity activities | grep -e mResumedActivity
+sleep 1
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml
+shell dumpsys notification | grep -i -e maza -e banned

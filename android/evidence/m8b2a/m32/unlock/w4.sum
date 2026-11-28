@@ -1,0 +1,41 @@
+## W4 unlock with the bench PIN, then WALLET tab
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+237.86 456.73
+> shell input tap 800 375
+> qshell <redacted>
+> shell input tap 800 496
+> shell input tap 1440 858
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{6dc61a2 u0 com.mazawallet/.MainActivity t165}
+> shell cmd appops get com.mazawallet POST_NOTIFICATION
+POST_NOTIFICATION: default
+## ROUND-DONE
+
+-- round rc=0 22.2s xml-lines=1 -> /root/.hermes/cache/scratch/m8b2a-rn/.pin-rendered.tmp.out
+
+<!-- transcript (digits scrubbed before this file was written) -->
+## W4 unlock with the bench PIN, then WALLET tab
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+237.86 456.73
+> shell input tap 800 375
+> qshell <redacted>
+> shell input tap 800 496
+> shell input tap 1440 858
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{6dc61a2 u0 com.mazawallet/.MainActivity t165}
+> shell cmd appops get com.mazawallet POST_NOTIFICATION
+POST_NOTIFICATION: default
+## ROUND-DONE
+-- pinround rc=0 scrubbed-out=/root/.hermes/cache/scratch/m8b2a-rn/m32/win2/w4.out

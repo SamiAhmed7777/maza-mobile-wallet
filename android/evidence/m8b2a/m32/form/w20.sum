@@ -1,0 +1,17 @@
+## W20 SEND tab layout (new build), nothing typed
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+2026.79 7065.03
+> shell input tap 800 858
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{454fdb5 u0 com.mazawallet/.MainActivity t167}
+> shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+0
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 14.6s xml-lines=1 -> w20.out

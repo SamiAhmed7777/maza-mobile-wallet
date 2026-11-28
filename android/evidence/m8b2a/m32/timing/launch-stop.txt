@@ -1,0 +1,12 @@
+# Excerpt of host-side captures (the owner's PC). Only the lines matching an allow-list are here;
+# in the order: the boot error count, then the stop record. Full captures: lane private archive.
+
+## w_errcount.txt
+now 02:03:26
+guest error lines this boot: 0
+## w26_stop.out
+falling back to Stop-Process (the lane stop; writes no stop line of its own)
+  2026-11-28 02:02:59.644-0700 31248 36336 PLR    Pie64 [StartingAndroid] I: Player state: ready
+stopped-at: 2026-11-28 02:53:54
+## w26_stop.out
+  2026-11-28 02:02:15.286-0700 31248 10064 PLR    [Initializing] I: main: #################### Player state : launched with args: '--instance Pie64 ' by Parent PID 29100

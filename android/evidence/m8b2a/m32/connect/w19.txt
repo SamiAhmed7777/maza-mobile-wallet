@@ -1,0 +1,15 @@
+echo W19 unlock, WALLET tab, read the receive address
+shell cat /proc/uptime
+shell input tap 800 375
+sleep 0.9
+qshell input text [PIN]
+sleep 0.9
+shell input tap 800 496
+sleep 4
+shell input tap 1440 858
+sleep 4
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml
+shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc

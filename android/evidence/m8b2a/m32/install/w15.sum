@@ -1,0 +1,23 @@
+## W15 push via raw (adbrun push verb drops the first char of the local path)
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1812.84 6502.76
+> raw push C:/Users/hello/maza-bench-lane/m32-b819df1.apk /data/local/tmp/m32.apk
+[ 11%] /data/local/tmp/m32.apk
+[ 22%] /data/local/tmp/m32.apk
+[ 33%] /data/local/tmp/m32.apk
+[ 44%] /data/local/tmp/m32.apk
+[ 55%] /data/local/tmp/m32.apk
+[ 66%] /data/local/tmp/m32.apk
+[ 77%] /data/local/tmp/m32.apk
+[ 88%] /data/local/tmp/m32.apk
+[ 99%] /data/local/tmp/m32.apk
+[100%] /data/local/tmp/m32.apk
+> shell ls -l /data/local/tmp/m32.apk
+-rw-rw-rw- 1 shell shell 591033 2026-11-28 02:30 /data/local/tmp/m32.apk
+> shell sha256sum /data/local/tmp/m32.apk
+2b8bf013bbc8e0e71e04eb191477997c5dd4aa3a6f3c96b0245a51e09cd4c3f1  /data/local/tmp/m32.apk
+## ROUND-DONE
+
+-- round rc=0 8.1s xml-lines=0 -> w15.out

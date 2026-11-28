@@ -1,0 +1,6 @@
+w9_00 start=02:11:41 rc=0 end=02:11:52
+send at 02:11:52
+w9_01 start=02:11:59 rc=0 end=02:12:10
+w9_02 start=02:12:10 rc=0 end=02:12:21
+w9_03 start=02:12:21 rc=0 end=02:12:31
+TARGET-SEEN in w9_03 at 02:12:31

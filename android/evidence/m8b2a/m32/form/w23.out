@@ -1,0 +1,13 @@
+## W23 what is on screen: IME frame + redacted screenshot (no send)
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+2160.55 7564.72
+> shell dumpsys window | grep -A4 -e InputMethod}
+> shell screencap -p /sdcard/w23_form.png
+> pull /sdcard/w23_form.png C:\Users\hello\maza-bench-lane\cap\w23_form.png
+[100%] sdcard/w23_form.png
+> shell rm -f /sdcard/w23_form.png
+> shell logcat -d | grep -c -e /api/send
+0
+## ROUND-DONE

@@ -1,0 +1,27 @@
+## W2 reset appops, start the app, dump the first screen
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+72.77 53.75
+> shell cmd appops set com.mazawallet POST_NOTIFICATION default
+> shell cmd appops get com.mazawallet POST_NOTIFICATION
+POST_NOTIFICATION: default
+> shell am start -W -n com.mazawallet/.MainActivity
+Starting: Intent { cmp=com.mazawallet/.MainActivity }
+Status: ok
+Activity: com.mazawallet/.MainActivity
+ThisTime: 7603
+TotalTime: 7603
+WaitTime: 7695
+Complete
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{6dc61a2 u0 com.mazawallet/.MainActivity t165}
+> shell pidof com.mazawallet
+3482
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 40.1s xml-lines=1 -> w2.out

@@ -1,0 +1,16 @@
+echo S1 the app send: tap SEND once (0.1 MAZA, address verified in w22), then BALANCE tab
+shell cat /proc/uptime
+shell input tap 800 528
+sleep 6
+shell logcat -d | grep -e /api/send | tail -3
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml
+shell input tap 160 858
+sleep 4
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml
+shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc

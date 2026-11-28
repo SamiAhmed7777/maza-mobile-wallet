@@ -1,0 +1,413 @@
+[1/6] crypto selftest (gate — any FAIL aborts the build before packaging)
+Compiling android/src/com/mazawallet/crypto ...
+Running SelfTest ...
+
+-- LogRing (M24 console ring: scrub + eviction)
+PASS logring: plain status line passes through
+PASS logring: token=VALUE masked to keyword + ***
+PASS logring: Authorization header line masked
+PASS logring: PIN line masked
+PASS logring: mnemonic line masked
+PASS logring: keyword inside a word is not a hit (spinner)
+PASS logring: public txid survives scrub
+PASS logring: eviction keeps capacity + total count
+PASS logring: oldest entries evicted first
+PASS logring: snapshot oldest->newest with monotonic seq
+-- BIP39 (official Trezor vectors)
+PASS bip39 entropy 0x00.. -> mnemonic
+PASS bip39 entropy 0x7f.. -> mnemonic
+PASS bip39 seed(mnemonic, TREZOR)
+PASS bip39 seed(mnemonic, "")
+-- RIPEMD-160 (spec test vectors)
+PASS ripemd160("")
+PASS ripemd160("abc")
+PASS ripemd160(quick brown fox)
+-- Base58Check
+PASS base58check roundtrip
+PASS base58check leading zeros
+-- BIP32 (bip-0032 Test Vector 1)
+PASS bip32 xprv m
+PASS bip32 xprv m/0'
+PASS bip32 xprv m/0'/1
+-- MAZA profile (canonical mnemonic seed, coin 13)
+PASS maza address m/44'/13'/0'/0/0
+PASS maza address m/44'/13'/0'/0/1
+PASS maza address m/44'/13'/0'/0/2
+PASS maza WIF m/44'/13'/0'/0/0
+PASS maza p2pkh scriptPubKey
+-- MAZA testnet profile (S-6: chainparams.cpp CTestNetParams)
+PASS testnet params: pubkey 88 / wif 239 / hrp tmaza / id test
+PASS mainnet params unchanged: 50 / 9 / 224 / maza / main
+PASS testnet address m/44'/13'/0'/0/0
+PASS testnet address m/44'/13'/0'/0/1
+PASS testnet address m/44'/13'/0'/0/2
+PASS testnet WIF m/44'/13'/0'/0/0
+PASS isNetworkAddress: testnet addr matches TESTNET only
+PASS isNetworkAddress: mainnet addr matches MAINNET only
+PASS isNetworkAddress: malformed/garbage never throws, false
+PASS scanorigin fail-safe: parse() rejects testnet addr on mainnet
+PASS scanorigin fail-safe: parse() still accepts mainnet addr
+PASS scanorigin network-aware: TESTNET accepts testnet addr
+PASS scanorigin network-aware: TESTNET rejects mainnet addr
+PASS scanorigin network-aware: MAINNET rejects testnet addr
+PASS forId: round-trips both, FAILS LOUD on unknown
+PASS networkparams reflection: fields final, no public ctor
+PASS networksetting: null/absent resolves MAINNET (fail-safe)
+PASS networksetting: stored ids resolve both networks
+PASS networksetting: unknown id FAILS LOUD (no silent mainnet)
+PASS networksetting: endpoint keys per network
+PASS networksetting composition: resolve(test) -> pinned testnet addr
+-- BTC cross-check (same mnemonic, m/44'/0'/0'/0/0, version 0x00)
+PASS btc address m/44'/0'/0'/0/0
+-- TxBuilder (legacy P2PKH, SIGHASH_ALL)
+PASS txbuilder sign + verify
+-- SeedCryptAes (at-rest envelope)
+PASS seedcrypt blob = 12B IV + plain + 16B tag
+PASS seedcrypt random IV per encryption
+PASS seedcrypt round trip
+PASS seedcrypt tamper rejected
+PASS seedcrypt wrong key rejected
+-- Pbkdf2 (S-2a PIN verifier primitive)
+PASS pbkdf2 reproduces BIP39 TREZOR seed
+PASS pbkdf2 anchor A (210k iters, hashlib-cross-derived)
+PASS pbkdf2 salt sensitivity
+PASS pbkdf2 iteration sensitivity
+PASS pbkdf2 wrong-pin divergence
+-- LockPolicy (S-2a PIN lock state machine)
+PASS lock: starts unlocked
+PASS lock: inside window unlocked
+PASS lock: fires at inactivity deadline
+PASS lock: stays locked without activity
+PASS lock: activity alone cannot unlock
+PASS lock: activity extends deadline
+PASS lock: short background stays unlocked
+PASS lock: long background locks on resume
+PASS lock: manual lockNow engages
+PASS lock: wrong pin -> WRONG_PIN
+PASS lock: 5th consecutive wrong -> WRONG_PIN (backoff opens after)
+PASS lock: 6th attempt within backoff -> THROTTLED
+PASS lock: throttle window reported
+PASS lock: backoff expiry re-allows (30s base)
+PASS lock: accept unlocks and resets streak
+PASS lock: fresh 4 wrong then expiry keeps streak
+PASS lock: session with verifier starts locked
+PASS lock: session without verifier starts unlocked
+PASS lock: tap after deadline locks before it counts
+PASS lock: in-window tap still extends deadline
+-- LockPolicy autolock window (S-4 settings hook)
+PASS autolock: longer window defers the deadline
+PASS autolock: reported window is the new one
+PASS autolock: shorter window locks at the next gate check
+PASS autolock: a longer window can never unlock a locked session
+PASS autolock: selector values 5/10/30 min accepted
+PASS autolock: out-of-range windows refused
+PASS settings-resume-gate: fresh session with verifier starts locked
+PASS settings-resume-gate: correct verify returns ACCEPTED
+PASS settings-resume-gate: session open right after unlock
+PASS settings-resume-gate: in-session retune keeps the session open
+PASS settings-resume-gate: gate closes after the (new) window lapses
+PASS resume-policy: foreground expiry closes (no activity past window)
+PASS resume-policy: touch activity keeps the screen open
+PASS resume-policy: background/resume after expiry closes
+PASS resume-policy: restored without a live guard + verifier -> fail-closed CLOSE
+PASS resume-policy: restored without a live guard, PIN-less wallet -> STAY
+PASS resume-policy: live session, gate open -> STAY
+PASS resume-policy: active settings use then back-nav stays open
+PASS resume-policy: HOME from settings past the window locks on return
+-- PinGuard in-session retune (S-4 follow-up)
+PASS pin-retune: MIN and MAX window edges accepted
+PASS pin-retune: windows one ms outside the range refused
+PASS pin-retune: rejected window leaves the live window untouched
+PASS pin-retune: an open session stays open across the retune
+PASS pin-retune: the retuned window is what the gate enforces
+PASS pin-retune: a longer window never unlocks a locked session
+PASS pin-retune: a shorter window locks at the next gate check
+PASS pin-retune: the streak survives (5th failure opens the backoff)
+PASS pin-retune: an in-flight backoff deadline is not moved
+PASS pin-retune: background/resume applies the retuned window
+PASS pin-retune: retuning to the current window keeps the session open
+PASS pin-retune: a selector touch cannot rescue an expired session
+-- Biometric unlock policy (S-2b-ii decision table)
+PASS biometric: below the API tier -> no offer
+PASS biometric: not platform-ready (no HW / not enrolled) -> no offer
+PASS biometric: corrupt verifier store -> no offer (PIN-pad-only fail-closed)
+PASS biometric: all inputs healthy -> offer
+PASS biometric: user cancel holds the cover
+PASS biometric: negative button holds the cover
+PASS biometric: framework cancel (e.g. app cancellation) holds the cover
+PASS biometric: sensor unavailable holds the cover (no PIN-state change)
+PASS biometric: lockout stops the session offer
+PASS biometric: permanent lockout stops the session offer
+PASS biometric-s1: five wrong PINs open the backoff window
+PASS biometric-s1: accepted auth clears the backoff window (verify evaluates again, streak restarts)
+PASS biometric-s1: the rebuilt streak throttles again at the 5th wrong PIN
+PASS biometric-s1: correct PIN after the window is accepted
+PASS biometric-s2: fresh session with verifier is locked
+PASS biometric-s2: accepted auth opens the locked gate
+PASS biometric-s2: deadline was pushed by the unlock (lastActivity=2: open at 300001)
+PASS biometric-s2: gate still closes at lastActivity + window (300002)
+PASS biometric-s3: accepted auth on an open gate stays open
+-- ScanOrigin origin discipline (M8a QR scan policy)
+PASS scanorigin: derivation matches the pinned MAZA profile address
+PASS scanorigin: bare address accepted (address carried, no reason)
+PASS scanorigin: maza: URI accepted
+PASS scanorigin: scheme prefix is case-insensitive
+PASS scanorigin: surrounding whitespace trimmed
+PASS scanorigin: real bench-book mainnet address accepted
+PASS scanorigin: corrupted base58check checksum rejected
+PASS scanorigin: BTC version byte rejected (wrong coin)
+PASS scanorigin: maza: payment URI parses - amount lands in the result
+PASS scanorigin: https URL rejected - never fetched or opened
+PASS scanorigin: http URL rejected - never fetched or opened
+PASS scanorigin: bare www domain rejected
+PASS scanorigin: foreign URI scheme rejected (bitcoin: shown)
+PASS scanorigin: null/empty/whitespace rejected
+PASS scanorigin: oversized content rejected before any decode
+PASS scanorigin: multi-line content rejected
+PASS scanorigin: garbage rejected with reason and NO address
+PASS scanorigin: ok result carries no reason
+PASS scanflow: tap with camera permission opens the scan overlay
+PASS scanflow: tap without permission fires the runtime request
+PASS scanflow: granted runtime request opens the scan overlay
+PASS scanflow: denied runtime request shows the inline hint
+PASS scanflow: accepted scan fills the SEND field and closes
+PASS scanflow: rejected scan keeps the camera scanning
+PASS scanflow: rejected scan can never fill the SEND field
+PASS scanflow: accepted scan never leaves the overlay up
+PASS scanflow: all seven action codes distinct
+PASS scanflow: denied hint is non-empty ASCII naming the typed fallback
+-- Scan close order (M30 CANCEL freeze)
+PASS scanclose: close order is detach-overlay THEN schedule release
+PASS scanclose: send form usable BEFORE the release is scheduled
+PASS scanclose: release dispatches exactly once per close
+PASS scanclose: release thread genuinely blocked while form stays usable
+PASS scanclose: a blocking release never touches the main thread
+PASS scanclose: repeated close while wedged cannot double-release
+PASS scanclose: release-first order would leave the overlay stuck
+PASS lumarotate: 3x2 CCW mapping exact (judge blocker regression)
+PASS lumarotate: dimension swap (3x2 -> 2x3, row stride = new width)
+PASS lumarotate: 2x2 CCW = [[b,d],[a,c]]
+PASS lumarotate: 640x480 landscape rotates without OOB (blocker shape)
+PASS lumarotate: 640x480 corner pixel maps to the last source column
+PASS lumarotate: four CCW rotations restore the original bytes
+PASS lumarotate: wrong-length input rejected (fail loud)
+PASS lumarotate: odd 5x3 shape rotates cleanly (new dims 3x5)
+PASS lumarotate: rotate(n=2) = 180 degrees on a non-square matrix
+-- MazaUri payment-URI contract (M9, official desktop port)
+PASS mazauri: bare maza: parses (address, zero amount)
+PASS mazauri: maza:// normalizes and keeps the FULL address (upstream replace(0,11,..) would slice 4 chars - D14)
+PASS mazauri: one trailing slash trimmed (guiutil.cpp:154-157)
+PASS mazauri: amount 1.5 -> 150000000 sats
+PASS mazauri: amount 0.5 -> 50000000 sats
+PASS mazauri: amount .5 -> 50000000 (empty whole, left-justified)
+PASS mazauri: amount 5. -> 500000000 (empty fraction)
+PASS mazauri: EMPTY amount value = absent = 0 (guiutil.cpp:194)
+PASS mazauri: ASCII spaces ignored (removeSpaces) - '1 2' = 12
+PASS mazauri: thin space U+2009 ignored (bitcoinunits.h:115)
+PASS mazauri: label and message carried verbatim
+PASS mazauri: req-label/req-message/req-amount accepted
+PASS mazauri: duplicate amount - LAST wins (official loop)
+PASS mazauri: unknown plain parameter silently ignored
+PASS mazauri: percent-decoded KEY (%61mount = amount)
+PASS mazauri: percent-decoded VALUE (%41B%43 = ABC)
+PASS mazauri: UTF-8 percent-decode (%C3%A9 = U+00E9)
+PASS mazauri: '+' stays literal (QUrlQuery is not form encoding)
+PASS mazauri: req-<unknown> REJECTS the whole URI
+PASS mazauri: 9 fractional digits rejected (max precision 8)
+PASS mazauri: two dots rejected
+PASS mazauri: signed amount rejected (D14: upstream toLongLong would accept -1; a scan never prefills a signed amount)
+PASS mazauri: plus-signed amount rejected
+PASS mazauri: non-digit garbage rejected
+PASS mazauri: 19-digit amount rejected (63-bit guard, bitcoinunits.cpp:171)
+PASS mazauri: percent-encoded dot in amount still parses (%2E = '.')
+PASS mazauri: truncated percent-escape rejected (fail closed)
+PASS mazauri: malformed percent-escape rejected (fail closed)
+PASS mazauri: scheme with no address rejected
+PASS mazauri: maza:// with no address rejected
+PASS mazauri: foreign scheme refused at the URI layer
+PASS mazauri: null input rejected, never throws
+PASS mazauri: formatAmount 8dp no separators
+PASS mazauri: formatAmount(0) renders 0.00000000
+PASS mazauri: format = maza:ADDR?amount=1.50000000
+PASS mazauri: param order amount,label,message with ? then &
+PASS mazauri: negative formatAmount is a caller error (IllegalArgumentException)
+PASS mazauri: format -> parse round trip (address, amount, label, message)
+PASS mazauri: scan fills address AND amountSats in one result
+PASS mazauri: URI with an invalid address still rejected - the send-path contract stays authoritative
+PASS mazauri: bare-address scan result carries amountSats 0
+PASS mazauri: parseAmountText 1.5 -> 150000000 (same rules)
+PASS mazauri: parseAmountText .5 -> 50000000
+PASS mazauri: parseAmountText accepts exactly 8 fraction digits
+PASS mazauri: parseAmountText rejects 9 fraction digits
+PASS mazauri: parseAmountText rejects a signed amount (D14)
+PASS mazauri: parseAmountText rejects non-numeric text
+PASS mazauri: parseAmountText rejects hex-float 0x1p3 (M28-a)
+PASS mazauri: parseAmountText rejects float suffix 5f (M28-a)
+PASS mazauri: parseAmountText rejects double suffix 5d (M28-a)
+PASS mazauri: parseAmountText rejects exponent 1e2 (M28-a)
+PASS mazauri: parseAmountText rejects leading plus (M28-a)
+PASS mazauri: parseAmountText plain integer still accepted (M28-a)
+PASS mazauri: parseAmountText EMPTY -> 0L, not null (the screen treats sats <= 0 as invalid / no request)
+PASS mazauri: parseAmountText null -> null (never throws)
+PASS mazauri: receive-screen compose (format of typed 0.25) re-parses to the same address + 25000000 sats
+-- GapPolicy BIP44 gap limit (M11 watch window)
+PASS gappolicy: GAP is the BIP44 standard look-ahead (20)
+PASS gappolicy: NO_INDEX is -1
+PASS gappolicy: windowFor unused = floor
+PASS gappolicy: windowFor used@0 grows past the floor
+PASS gappolicy: windowFor used@19 = 40 (frontier + GAP)
+PASS gappolicy: windowFor used@4 = 25
+PASS gappolicy: windowFor floor dominates when larger
+PASS gappolicy: windowFor monotone in usage
+PASS gappolicy: windowFor rejects highestUsed < -1
+PASS gappolicy: windowFor rejects floor < 1
+PASS gappolicy: firstUnused empty = 0
+PASS gappolicy: firstUnused skips a used head
+PASS gappolicy: firstUnused all-used = NO_INDEX
+PASS gappolicy: firstUnused rejects limit > length
+PASS gappolicy: nextAfter plain advance
+PASS gappolicy: nextAfter skips the used neighbor
+PASS gappolicy: nextAfter wraps past the end without reuse
+PASS gappolicy: nextAfter all-used = NO_INDEX
+PASS gappolicy: nextAfter rejects from out of range
+PASS gappolicy: nextAfter rejects limit > length
+PASS gappolicy: highestUsed none = -1
+PASS gappolicy: highestUsed finds the last used index
+PASS gappolicy: 21-receive scenario grows the window to 40
+PASS gappolicy: 21-receive scenario advances to index 20
+PASS gappolicy: used display advances to first unused
+PASS gappolicy: persisted window never shrinks
+-- FeePolicy per-tx fees (M10, MazaCore GetMinimumFee mirror)
+PASS feepolicy: FALLBACK_RATE_PER_K = 10000 (wallet.h:49)
+PASS feepolicy: MIN_RELAY_RATE_PER_K = 1000 (validation.h:53)
+PASS feepolicy: DUST_RATE_PER_K = 3000 (policy.h:46)
+PASS feepolicy: MAX_TX_SIZE_BYTES = 100000 (MAX_STANDARD_TX_SIZE)
+PASS feepolicy: MAX_FEE_SATS = 0.1 MAZA (validation.h:56)
+PASS feepolicy: P2PKH dust size 182 = 34 out + 148 in (policy.cpp:27-30)
+PASS feepolicy: getFee 0 bytes = 0
+PASS feepolicy: getFee 1 byte at 10000 = 10
+PASS feepolicy: getFee 226 B at 10000 = 2260 (typical 1-in/2-out payment)
+PASS feepolicy: getFee 1000 B at 10000 = 10000
+PASS feepolicy: getFee 1999 B at 10000 = 19990
+PASS feepolicy: getFee truncates (1 B at 1500 = 1)
+PASS feepolicy: getFee truncates (1999 B at 1500 = 2998)
+PASS feepolicy: getFee minRelay 226 B = 226
+PASS feepolicy: getFee rejects negative size
+PASS feepolicy: getFee rejects over-standard size
+PASS feepolicy: getFee accepts exactly MAX_STANDARD_TX_SIZE
+PASS feepolicy: feeForSize 226 B = 2260 (per-tx, not flat)
+PASS feepolicy: feeForSize 0 B = 0
+PASS feepolicy: feeForSize 100000 B = 1000000 (under the cap)
+PASS feepolicy: feeForSize tracks the fallback rate (floor never dominates at 10 sat/B)
+PASS feepolicy: dust threshold = 546 sats (policy.cpp:30 literal)
+-- NotifyPolicy receive notifications (M14 decision table)
+PASS notifypolicy: COIN = 1e8 sats
+PASS notifypolicy: channel id is the app's single channel
+PASS notifypolicy: runtime perm gate = API 33 (Android 13)
+PASS notifypolicy: channel gate = API 26 (Android 8.0)
+PASS notifypolicy: toSats(0) = 0
+PASS notifypolicy: toSats(0.5) = 5e7 sats
+PASS notifypolicy: toSats(1) = 1e8 sats
+PASS notifypolicy: toSats 1e-8 precision = 1 sat
+PASS notifypolicy: toSats 8dp = exact (0.12345678)
+PASS notifypolicy: toSats negative throws
+PASS notifypolicy: toSats NaN throws (json.loads NaN rule)
+PASS notifypolicy: first sample (null prev) never fires
+PASS notifypolicy: equal balance never fires
+PASS notifypolicy: decrease never fires (send/fee)
+PASS notifypolicy: strict increase fires
+PASS notifypolicy: 1-sat increase fires
+PASS notifypolicy: decrease-then-recover fires again (new receive)
+PASS notifypolicy: negative prev throws
+PASS notifypolicy: negative new throws
+PASS notifypolicy: API 28 ungranted needs no runtime ask
+PASS notifypolicy: API 33 ungranted needs the runtime ask
+PASS notifypolicy: API 33 granted needs no ask
+PASS notifypolicy: API 34 granted needs no ask
+PASS notifypolicy: API 24 needs no channel (legacy path)
+PASS notifypolicy: API 26 needs a channel
+PASS notifypolicy: API 34 needs a channel
+-- SendEchoTracker (M32: own-send settle echo never announces)
+PASS sendecho: settle window = 30 minutes (D21)
+PASS sendecho: onSend non-positive amount throws
+PASS sendecho: onSend negative lastSample throws
+PASS sendecho: never-sampled session refuses to arm (fail open)
+PASS sendecho: refused arm leaves no pending settle
+PASS sendecho: onSend arms from the last sample
+PASS sendecho: unconfirmed dip never fires
+PASS sendecho: own change settling never fires
+PASS sendecho: window live inside the settle window
+PASS sendecho: excess above the ceiling announces the excess only
+PASS sendecho: second excess measured from the stored sample
+PASS sendecho: drop back to the ceiling never fires
+PASS sendecho: first sample inside a window never fires
+PASS sendecho: window expired clears the pending settle
+PASS sendecho: expiry on an unchanged balance never fires
+PASS sendecho: strict increase after expiry fires the full delta
+PASS sendecho: second send re-arms while pending
+PASS sendecho: second send's settle never fires
+PASS sendecho: no pending - first sample never fires
+PASS sendecho: no pending - strict increase fires the delta
+PASS sendecho: no pending - decrease never fires
+PASS sendecho: resetForNewSeed clears the pending settle
+PASS sendecho: after reset a strict increase fires again
+PASS sendecho: negative newSats throws
+PASS sendecho: negative prev throws
+PASS sendecho: over-balance send arms with a negative ceiling
+PASS sendecho: negative ceiling - unchanged balance never fires
+PASS sendecho: negative ceiling - increase fires the full delta
+-- MerkleVerify merkle proof check (IDX-8 two-source verification)
+PASS merkle: single-tx block (empty branch, root == txid)
+PASS merkle: single-tx wrong root rejected
+PASS merkle: pos beyond width rejected (empty branch, pos 1)
+PASS merkle: 2-tx pos 0 (left climb)
+PASS merkle: 2-tx pos 1 (right climb at leaf)
+PASS merkle: 3-tx pos 2 (odd-node duplication climb)
+PASS merkle: 4-tx pos 0
+PASS merkle: 4-tx pos 1
+PASS merkle: 4-tx pos 2
+PASS merkle: 4-tx pos 3
+PASS merkle: tampered sibling rejected
+PASS merkle: wrong pos rejected
+PASS merkle: wrong root rejected
+PASS merkle: pos >= 2**len rejected (4 >= 2**2)
+PASS merkle: malformed short sibling rejected
+PASS merkle: malformed non-hex sibling rejected
+PASS merkle: malformed short txid rejected
+PASS merkle: malformed non-hex txid rejected
+PASS merkle: null branch rejected
+PASS merkle: negative pos rejected
+PASS merkle: malformed short root rejected
+PASS merkle: uppercase root accepted
+PASS merkle: LIVE indexer proof verifies (block 41433, pos 0)
+PASS merkle: LIVE tampered sibling rejected
+PASS merkle: LIVE wrong pos rejected
+PASS merkle: LIVE wrong root rejected
+PASS merkle: LIVE odd-pos proof verifies (block 41430, pos 1)
+-- Settings screens WCAG contrast (S-4)
+PASS wcag dark: text on background >= 4.5:1
+PASS wcag dark: text on card >= 4.5:1
+PASS wcag dark: muted on background >= 4.5:1
+PASS wcag dark: muted on card >= 4.5:1
+PASS wcag dark: accent on background >= 4.5:1
+PASS wcag dark: accent on card >= 4.5:1
+PASS wcag dark: danger on background >= 4.5:1
+PASS wcag dark: danger on card >= 4.5:1
+PASS wcag light: text on background >= 4.5:1
+PASS wcag light: text on card >= 4.5:1
+PASS wcag light: muted on background >= 4.5:1
+PASS wcag light: muted on card >= 4.5:1
+PASS wcag light: accent on background >= 4.5:1
+PASS wcag light: accent on card >= 4.5:1
+PASS wcag light: danger on background >= 4.5:1
+PASS wcag light: danger on card >= 4.5:1
+
+ALL 375 CHECKS PASSED
+[2/6] aapt2 compile
+[3/6] aapt2 link
+[4/6] javac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[5/6] d8
+[6/6] apksigner
+SIGNED OK: /root/.hermes/cache/scratch/m8b2a-rn/m32/m32-b819df1.apk (591033 bytes)

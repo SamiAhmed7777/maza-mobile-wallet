@@ -1,0 +1,24 @@
+w9_00 start=02:11:41 rc=0 end=02:11:52
+send at 02:11:52
+w9_01 start=02:11:59 rc=0 end=02:12:10
+w9_02 start=02:12:10 rc=0 end=02:12:21
+w9_03 start=02:12:21 rc=0 end=02:12:31
+TARGET-SEEN in w9_03 at 02:12:31
+w9_04 start=02:13:23 rc=0 end=02:13:34
+w9_05 start=02:13:34 rc=0 end=02:13:44
+w9_06 start=02:13:44 rc=0 end=02:13:55
+w9_07 start=02:13:55 rc=0 end=02:14:06
+w9_08 start=02:14:06 rc=0 end=02:14:18
+w9_09 start=02:14:18 rc=0 end=02:14:29
+w9_10 start=02:14:29 rc=0 end=02:14:42
+w9_11 start=02:14:42 rc=0 end=02:14:54
+w9_12 start=02:14:55 rc=0 end=02:15:07
+w9_13 start=02:15:07 rc=0 end=02:15:20
+w9_14 start=02:15:20 rc=0 end=02:15:32
+w9_15 start=02:15:32 rc=0 end=02:15:42
+w9_16 start=02:15:42 rc=0 end=02:15:53
+w9_17 start=02:15:53 rc=0 end=02:16:04
+w9_18 start=02:16:04 rc=0 end=02:16:15
+w9_19 start=02:16:15 rc=0 end=02:16:28
+w9_20 start=02:16:28 rc=0 end=02:16:39
+w9_21 start=02:16:39 rc=0 end=02:16:50

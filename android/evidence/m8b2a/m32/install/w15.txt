@@ -1,0 +1,5 @@
+echo W15 push via raw (adbrun push verb drops the first char of the local path)
+shell cat /proc/uptime
+raw push C:/Users/hello/maza-bench-lane/m32-b819df1.apk /data/local/tmp/m32.apk
+shell ls -l /data/local/tmp/m32.apk
+shell sha256sum /data/local/tmp/m32.apk

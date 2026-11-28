@@ -1,0 +1,22 @@
+## S1 the app send: tap SEND once (0.1 MAZA, address verified in w22), then BALANCE tab
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+2311.39 8149.77
+> shell input tap 800 528
+> shell logcat -d | grep -e /api/send | tail -3
+11-28 02:41:00.778  7538  8072 I MAZA    : 2026-11-28 02:41:00 #100 POST /api/send -> 200 (465ms)
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+> shell input tap 160 858
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+> shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+0
+## ROUND-DONE
+
+-- round rc=0 22.7s xml-lines=2 -> s1.out

@@ -1,0 +1,11 @@
+echo W16 pm install -r (in place), verify
+shell cat /proc/uptime
+shell pm install -r /data/local/tmp/m32.apk
+sleep 20
+raw connect 127.0.0.1:5555
+shell pm list packages com.mazawallet
+shell dumpsys package com.mazawallet | grep -e lastUpdateTime -e versionName -e codePath -e firstInstallTime
+shell pm path com.mazawallet
+shell dumpsys notification | grep -e AppSettings: com.mazawallet
+shell ps | grep -e mazawallet | head -2
+shell dumpsys activity activities | grep -e mResumedActivity

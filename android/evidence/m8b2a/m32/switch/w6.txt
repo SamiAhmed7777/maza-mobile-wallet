@@ -1,0 +1,14 @@
+echo W6 turn Show notifications OFF (master switch), read back
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell input tap 1541 324
+sleep 2
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml
+shell screencap -p /sdcard/w6_off.png
+pull /sdcard/w6_off.png C:\Users\hello\maza-bench-lane\cap\w6_off.png
+shell rm -f /sdcard/w6_off.png
+shell cmd appops get com.mazawallet POST_NOTIFICATION
+shell dumpsys notification | grep -i -e maza -e banned
+shell dumpsys activity activities | grep -e mResumedActivity

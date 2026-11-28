@@ -1,0 +1,272 @@
+# DERIVED - every row below is recomputed by scripts/m32_pack.py from the .out capture named in it.
+
+## Denial watch (Part A): one row per round. posts = output of `logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc` in that capture;
+records = notification ids the service holds for com.mazawallet in that capture; blocked = the capture holds `importance=NONE` for the app;
+watch-set balance = the amounts the screen showed on the WALLET tab (the self-custody watch set).
+round   | posts | recs   | blocked | pid   | watch-set balance on screen
+w9_00   | 0     | none   | yes    | 3482  | 2.2999
+w9_01   | 0     | none   | yes    | 3482  | 2.2999
+w9_02   | 0     | none   | yes    | 3482  | 2.2999
+w9_03   | 0     | none   | yes    | 3482  | 2.3999
+w9_04   | 0     | none   | yes    | 3482  | 2.3999
+w9_05   | 0     | none   | yes    | 3482  | 2.3999
+w9_06   | 0     | none   | yes    | 3482  | 2.3999
+w9_07   | 0     | none   | yes    | 3482  | 2.3999
+w9_08   | 0     | none   | yes    | 3482  | 2.3999
+w9_09   | 0     | none   | yes    | 3482  | 2.3999
+w9_10   | 0     | none   | yes    | 3482  | 2.3999
+w9_11   | 0     | none   | yes    | 3482  | 2.3999
+w9_12   | 0     | none   | yes    | 3482  | 2.3999
+w9_13   | 0     | none   | yes    | 3482  | 2.3999
+w9_14   | 0     | none   | yes    | 3482  | 2.3999
+w9_15   | 0     | none   | yes    | 3482  | 2.3999
+w9_16   | 0     | none   | yes    | 3482  | 2.3999
+w9_17   | 0     | none   | yes    | 3482  | 2.3999
+w9_18   | 0     | none   | yes    | 3482  | 2.3999
+w9_19   | 0     | none   | yes    | 3482  | 2.3999
+w9_20   | 0     | none   | yes    | 3482  | 2.3999
+w9_21   | 0     | none   | yes    | 3482  | 2.3999
+
+## M32 watch (Part B), batch 1 and batch 2. bench balance = the amount on the BALANCE tab; sync = its "Last sync" time;
+line = notification host calls printed in that capture (the log line itself); records as above.
+round   | posts | line  | recs   | pid   | bench balance  | sy | last sync
+m1_01   | 0     | 0     | none   | 7538  | 45.9993774     |    | 02:41:39
+m1_02   | 1     | 2     | 2      | 7538  | 45.9993774     |    | 02:41:39
+m1_03   | 1     | 1     | 2      | 7538  | 45.9993774     |    | 02:41:54
+m1_04   | 1     | 1     | 2      | 7538  | 45.9993774     |    | 02:42:09
+m1_05   | 1     | 1     | 2      | 7538  | 45.9993774     |    | 02:42:09
+m1_06   | 1     | 1     | 2      | 7538  | ?              |    | ?
+m1_07   | 1     | 1     | 2      | 7538  | 45.9993774     |    | 02:42:40
+m1_08   | 1     | 1     | 2      | 7538  | 45.9993774     |    | 02:42:55
+m1_09   | 1     | 1     | 2      | 7538  | 45.9993774     |    | 02:42:55
+m1_10   | 1     | 1     | 2      | 7538  | 45.9993774     |    | 02:43:10
+m1_11   | 1     | 1     | 2      | 7538  | 45.9993774     |    | 02:43:25
+m1_12   | 1     | 1     | 2      | 7538  | 45.9993774     |    | 02:43:25
+m2_01   | 0     | 0     | 2      | 7538  | 45.9993774     |    | 02:48:29
+m2_02   | 0     | 0     | 2      | 7538  | 45.9993774     |    | 02:48:45
+m2_03   | 0     | 0     | 2      | 7538  | 45.9993774     |    | 02:49:00
+m2_04   | 0     | 0     | 2      | 7538  | ?              |    | ?
+m2_05   | 0     | 0     | 2      | 7538  | 45.9993774     |    | 02:49:15
+m2_06   | 0     | 0     | 2      | 7538  | 45.9993774     |    | 02:49:31
+m2_07   | 0     | 0     | 2      | 7538  | 45.9993774     |    | 02:49:46
+m2_08   | 0     | 0     | 2      | 7538  | 45.9993774     |    | 02:49:46
+m2_09   | 0     | 0     | 2      | 7538  | 45.9993774     |    | 02:50:01
+
+## Facts (name: value <- capture the value was parsed from)
+adb_pull_line: if ($line.StartsWith('pull ')) { $i = $line.IndexOf(' ', 6); & $adb -s $dev pull $line.Substring(6, $i - 6) $line.Substring($i + 1) 2>&1 | ForEach-Object { Emit $_ }; continue }
+adb_push_line: if ($line.StartsWith('push ')) { $i = $line.IndexOf(' ', 6); & $adb -s $dev push $line.Substring(6, $i - 6) $line.Substring($i + 1) 2>&1 | ForEach-Object { Emit $_ }; continue }
+adb_push_no: 26
+addr6: MJemD27bi8hSMLyxEUi7Tz6DKkiv4Yb4P4
+addr6_index: 6
+addr7: M9MwxHDmDk4wArEvbBjGvrjR6U3eNcY31E
+addr7_index: 7
+apk_md5: e3c0f63458875c148e2d27245a5b57d0
+apk_sha: 2b8bf013bbc8e0e71e04eb191477997c5dd4aa3a6f3c96b0245a51e09cd4c3f1
+apk_size: 591033
+badge_line: AppSettings: com.mazawallet (10068) showBadge=true
+bench_acct: mobile-play
+bench_bal: 45.9993774
+bench_cet: 2026-11-28 11:52:19
+bench_conf: 12, 44, 296, 298, 312, 17151
+bench_pst: 02:52:19
+bench_utxos: 6
+bench_watch: 2.4999
+boot_secs: 44 seconds
+build_bytes: 591033
+build_checks: ALL 375 CHECKS PASSED
+close_path: falling back to Stop-Process (the lane stop; writes no stop line of its own)
+cmp_equal: True
+cmp_lines: 16
+cmp_recheck: True
+dev_equal: True
+dev_push: [100%] /data/local/tmp/m32.apk
+dev_sha: 2b8bf013bbc8e0e71e04eb191477997c5dd4aa3a6f3c96b0245a51e09cd4c3f1
+dev_size: 591033
+dex_line: 0751112f95b860c3276acd9037062bc4ac16a3dd533a817d54f978fb781c2ca3  ./classes.dex
+err_boot: 2026-11-28 02:02:15.286
+err_when: 02:03:26
+err_zero: guest error lines this boot: 0
+et_blob: 7e80bdcc7d41558a0f57cdd7b6ddfe382f4f385760d19c8c632ce04a3ae85d30
+et_class: 52: public final class SendEchoTracker {
+et_window: 54: public static final long WINDOW_MS = 30L * 60L * 1000L;
+fee4: 0.0001
+fee5: 0.0001
+hold_grade: A
+hold_hm: 01:52
+hold_min: 5
+hold_urn: urn=urn:ump:h466fhskjoobcd7a4ki2dcz4u5ghfez34zjhlslocc6fhjtsru4q
+inst_md5: e3c0f63458875c148e2d27245a5b57d0
+inst_md5_ok: True
+inst_result: Success
+inst_sha: 2b8bf013bbc8e0e71e04eb191477997c5dd4aa3a6f3c96b0245a51e09cd4c3f1
+inst_sha_ok: True
+launched: 2026-11-28 02:02:15.286
+loop_date: 2026-11-28 02:04:35
+loop_full: b819df1a665ab454df32fc89d70cb44f417e6f96
+loop_grade: A
+loop_short: b819df1
+loop_subject: M32: the app's own send-settle change no longer announces as "MAZA received"
+loop_urn: urn:ump:zgx2sv7syeahfrfqy2h32h2qjq2a5po2ys64ynpgwpo53q3udx4a
+m1_bals: [(), ('45.9993774',)]
+m1_counts: ['0', '1']
+m1_counts_after: ['1']
+m1_counts_before: ['0']
+m1_end: 02:43:39
+m1_first_post_round: m1_02
+m1_ids: [(), ('2',)]
+m1_pids: ['7538']
+m1_posts: [('11-28 02:41:41.279', 'com.mazawallet', 'MAZA received', '+0.10000000 MAZA - self-custody wallet')]
+m1_recs_after: [('2',)]
+m1_recs_before: [()]
+m1_start: 02:41:32
+m2_bals: [(), ('45.9993774',)]
+m2_counts: ['0']
+m2_end: 02:50:09
+m2_ids: [('2',)]
+m2_pids: ['7538']
+m2_posts: []
+m2_start: 02:48:32
+ma_blob: 5a70184eedb1588e4dcfa4425f7dad31c6d87ee3db8b3b4936af4001e85e2510
+new_code: /data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==
+new_first: 2026-11-15 18:39:10
+new_update: 2026-11-28 02:33:07
+new_version: 1.0
+no_player: INFO: No tasks are running which match the specified criteria.
+null_root: ['m1_06.out', 'm2_04.out', 'w21.out', 'w6.out']
+old: [('locked', '0.5', '21:58:26', '11-27 22:00:16.066', '+0.50000000 MAZA - self-custody wallet', 110), ('backgrounded', '0.2', '22:09:43', '11-27 22:11:24.134', '+46.29967740 MAZA - bench account', 101), ('backgrounded', '0.2', '22:09:43', '11-27 22:11:25.335', '+0.20000000 MAZA - self-custody wallet', 102), ('denial-not-done', '0.1', '22:14:14', '11-27 22:16:44.454', '+46.19957740 MAZA - bench account', 150), ('denial-not-done', '0.1', '22:14:14', '11-27 22:16:46.200', '+0.10000000 MAZA - self-custody wallet', 152)]
+old_code: /data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==
+old_echo: [('backgrounded', '0.2', '22:09:43', '11-27 22:11:24.134', '+46.29967740 MAZA - bench account', 101), ('denial-not-done', '0.1', '22:14:14', '11-27 22:16:44.454', '+46.19957740 MAZA - bench account', 150)]
+old_echo_txt: 101 seconds after the 0.2 MAZA send; 150 seconds after the 0.1 MAZA send
+old_first: 2026-11-15 18:39:10
+old_ids_backgrounded: ['1', '2']
+old_ids_denial-not-done: ['1', '2']
+old_ids_locked: ['1', '2']
+old_md5: 1a287b66e3ee91a61a1fd8f66c7b51c4
+old_update: 2026-11-27 03:00:21
+pc_equal: True
+pc_sha: 2B8BF013BBC8E0E71E04EB191477997C5DD4AA3A6F3C96B0245A51E09CD4C3F1
+pid_old: 3482
+ready: 2026-11-28 02:02:59.644
+rebuild_equal_whole: False
+rebuild_sha: b008b772958b5d098daff5b50fab486ad99378fa67765ad42652c0a7f2567a79
+rn_blob: 9ba960479300a5eafbd46e6a6d217652c67b44864cba19a8fe906c8f5a5e3fac
+s1_bal: ['0.00000000']
+s1_count: 0
+s1_http: 200
+s1_post_hms: 02:41:00.778
+s1_post_time: 11-28 02:41:00.778
+s1_req_no: 100
+s1_result: Sent (bench account): 7b23db..7850
+s1_sync: 02:41:09
+s1_sync_full: 2026-11-28 02:41:09
+s1_tap: 02:40:52
+s5_amt: 0.1
+send4_amt: 0.1
+send4_cet: 2026-11-28 11:11:55
+send4_http: 200
+send4_post_watch: 2.2999
+send4_pre_bal: 46.1995774
+send4_pre_watch: 2.2999
+send4_pst: 02:11:55
+send4_to: MJemD27bi8hSMLyxEUi7Tz6DKkiv4Yb4P4
+send4_tx: 73bfda3b33b16171ba75fd2a68f02a79a41bfed0c7f36a940341bd6537e574c5
+send_btn: [24,492][1576,564]
+send_btn_xy: (800,528)
+src_bench: 29: private static final int ID_BENCH = 1;
+src_c1: 27: /** Distinct ids so a bench receive and a seed receive never overwrite
+src_c2: 28: *  each other's notification. */
+src_comment: Distinct ids so a bench receive and a seed receive never overwrite each other's notification.
+src_notify: 123: nm.notify(id, b.build());
+src_q: [('android/src/com/mazawallet/ReceiveNotify.java', 29, 'private static final int ID_BENCH = 1;'), ('android/src/com/mazawallet/ReceiveNotify.java', 30, 'private static final int ID_WALLET = 2;'), ('android/src/com/mazawallet/ReceiveNotify.java', 123, 'nm.notify(id, b.build());'), ('android/src/com/mazawallet/ReceiveNotify.java', 121, '.setContentText("+" + fmtMaza(deltaSats) + " MAZA - " + source)'), ('android/src/com/mazawallet/ReceiveNotify.java', 27, '/** Distinct ids so a bench receive and a seed receive never overwrite'), ('android/src/com/mazawallet/ReceiveNotify.java', 28, "*  each other's notification. */"), ('android/src/com/mazawallet/MainActivity.java', 1190, "// S-5: SPEND. Net's table gives /api/send exactly ONE attempt"), ('android/src/com/mazawallet/MainActivity.java', 1194, 'Api.Resp r = Net.withRetry("POST", "/api/send",'), ('android/src/com/mazawallet/MainActivity.java', 1195, '() -> Api.http(baseUrl, token, "POST", "/api/send", body));'), ('android/src/com/mazawallet/crypto/SendEchoTracker.java', 52, 'public final class SendEchoTracker {'), ('android/src/com/mazawallet/crypto/SendEchoTracker.java', 54, 'public static final long WINDOW_MS = 30L * 60L * 1000L;'), ('android/src/com/mazawallet/crypto/SelfTest.java', 329, 'section("SendEchoTracker (M32: own-send settle echo never announces)");')]
+src_send_call: 1194: Api.Resp r = Net.withRetry("POST", "/api/send",
+src_send_call2: 1195: () -> Api.http(baseUrl, token, "POST", "/api/send", body));
+src_send_comment: S-5: SPEND. Net's table gives /api/send exactly ONE attempt
+src_send_no: 1190
+src_text: 121: .setContentText("+" + fmtMaza(deltaSats) + " MAZA - " + source)
+src_wallet: 30: private static final int ID_WALLET = 2;
+st_blob: 5e2f602b97f46631cdb161404b409bcec485d99da1ea1f13a3f0d90d23714384
+st_files: [('android/src/com/mazawallet/ReceiveNotify.java', '9ba960479300a5eafbd46e6a6d217652c67b44864cba19a8fe906c8f5a5e3fac'), ('android/src/com/mazawallet/MainActivity.java', '5a70184eedb1588e4dcfa4425f7dad31c6d87ee3db8b3b4936af4001e85e2510'), ('android/src/com/mazawallet/crypto/SendEchoTracker.java', '7e80bdcc7d41558a0f57cdd7b6ddfe382f4f385760d19c8c632ce04a3ae85d30'), ('android/src/com/mazawallet/crypto/SelfTest.java', '5e2f602b97f46631cdb161404b409bcec485d99da1ea1f13a3f0d90d23714384')]
+st_pass_key: PASS sendecho: own change settling never fires
+st_pass_n: 28
+st_section: 329: section("SendEchoTracker (M32: own-send settle echo never announces)");
+state_bal: 46.0994774
+state_cet: 2026-11-28 11:18:57
+state_conf: 7, 259, 261, 275, 17114
+state_pst: 02:18:57
+state_utxos: 5
+state_watch: 2.3999
+stopped: 2026-11-28 02:53:54
+sync_full: {'m1_01': '2026-11-28 02:41:39', 'm1_02': '2026-11-28 02:41:39', 'm1_03': '2026-11-28 02:41:54', 'm1_04': '2026-11-28 02:42:09', 'm1_05': '2026-11-28 02:42:09', 'm1_06': '?', 'm1_07': '2026-11-28 02:42:40', 'm1_08': '2026-11-28 02:42:55', 'm1_09': '2026-11-28 02:42:55', 'm1_10': '2026-11-28 02:43:10', 'm1_11': '2026-11-28 02:43:25', 'm1_12': '2026-11-28 02:43:25', 'm2_01': '2026-11-28 02:48:29', 'm2_02': '2026-11-28 02:48:45', 'm2_03': '2026-11-28 02:49:00', 'm2_04': '?', 'm2_05': '2026-11-28 02:49:15', 'm2_06': '2026-11-28 02:49:31', 'm2_07': '2026-11-28 02:49:46', 'm2_08': '2026-11-28 02:49:46', 'm2_09': '2026-11-28 02:50:01'}
+tap_xy: (1541,324)
+targets: 0
+temp_gone: True
+tok_class: safe
+tok_connect: CONNECT-TAPPED
+tok_len: 32
+tok_typed: 32
+w10_count: 0
+w11_after_banner: False
+w11_after_on: True
+w11_after_x: after the tap     Switch   'ON' checked=true
+w11_before: OFF
+w11_before_off: True
+w11_before_x: before the tap    Switch   'OFF' checked=false
+w11_dumps: 2
+w11_none: False
+w12_recs: ['> shell dumpsys notification | grep -c -e NotificationRecord', '> shell dumpsys notification | grep -e NotificationRecord | ', 'NotificationRecord(0x0fba44fe: pkg=android user=UserHandle{-']
+w13_err: adb: error: cannot stat ':\Users\hello\maza-bench-lane\m32-b819df1.apk'
+w14_err: adb: error: cannot stat ':/Users/hello/maza-bench-lane/m32-b819df1.apk'
+w17_crash: 0
+w17_none: False
+w17_pid: 7538
+w18_bal: ['46.0994774']
+w18_tok: True
+w19_unlocked: True
+w1_ops: POST_NOTIFICATION: ignore
+w20_count: 0
+w21_api: 0
+w21_err: ERROR: null root node returned by UiTestAutomationBridge.
+w21_typed: True
+w22_addr_ok: True
+w22_amt_ok: True
+w22_api: 0
+w22_ime: mInputShown=true
+w23_api: 0
+w23_ocr: ['tesseract rc=0', '2:38 O', 'MAZA Wallet', 'SEND - BENCH ACCOUNT', '; redacted', "Spends the bench server's held funds (server-side, ¢", 'M9MwxHDmDk4wAr EvbBjGvr jR6', '0.1|', 'fee 0.0001 MAZA', 'BALANCE RECEIVE SEND HISTORY WALLET']
+w24_code: /data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==
+w24_front: True
+w24_ids: ['2']
+w24_other: ('android', '19')
+w24_update: 2026-11-28 02:33:07
+w25_blk: 0
+w25_err: [    0.660525] platform regulatory.0: Direct firmware load for regulatory.db failed with error -2
+w25_ext4: ['EXT4-fs (sda1): mounted filesystem with ordered data mode. Opts: (null)', 'EXT4-fs (sdb1): mounted filesystem with ordered data mode. Opts: (null)']
+w25_fatal: 11-28 02:34:34.243  2651  2739 E FlutterAdsFragment: Fatal exception in non ad network
+w25_fatal_pid: 2651
+w25_pid: 7538
+w2_ops: POST_NOTIFICATION: default
+w3_bal: ['46.1995774']
+w3_lock: True
+w4_unlocked: True
+w5_sw: ON
+w6_ocr: ['tesseract rc=0', '2:08 @', 'Settings', 'A) MAZA Wallet redacted', 'sd', '@ At your request, Android is blocki']
+w7_banner: At your request, Android is blocking this app's notifications from appearing on this device
+w7_none: True
+w7_poll_first: 02:08:57.536
+w7_poll_last: 02:08:57.536
+w7_poll_n: 1
+w8_front: True
+w8_none: True
+w8_unlocked: True
+w9_after_bals: [('2.3999',)]
+w9_before_bals: [('2.2999',)]
+w9_change_round: w9_03
+w9_change_times: ['start=02:12:21', 'rc=0', 'end=02:12:31']
+w9_counts: ['0']
+w9_first_start: 02:11:59
+w9_last_end: 02:16:50
+w9_nones: [True]
+w9_pids: ['3482']
+w9_recs: [()]
+w9_rounds: 22
+window: 51 minutes 39 seconds

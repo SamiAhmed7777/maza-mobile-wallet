@@ -1,0 +1,7 @@
+echo W23 what is on screen: IME frame + redacted screenshot (no send)
+shell cat /proc/uptime
+shell dumpsys window | grep -A4 -e InputMethod}
+shell screencap -p /sdcard/w23_form.png
+pull /sdcard/w23_form.png C:\Users\hello\maza-bench-lane\cap\w23_form.png
+shell rm -f /sdcard/w23_form.png
+shell logcat -d | grep -c -e /api/send

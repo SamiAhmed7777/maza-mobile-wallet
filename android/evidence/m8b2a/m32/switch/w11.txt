@@ -1,0 +1,21 @@
+echo W11 restore: Show notifications back ON, wallet back to front
+shell cat /proc/uptime
+shell am start -W -a android.settings.APP_NOTIFICATION_SETTINGS --es android.provider.extra.APP_PACKAGE com.mazawallet --ei android.provider.extra.APP_UID 10068
+sleep 3
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml
+shell input tap 1541 324
+sleep 2
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml
+shell dumpsys notification | grep -e com.mazawallet | head -4
+shell cmd appops get com.mazawallet POST_NOTIFICATION
+shell am start -W -n com.mazawallet/.MainActivity
+sleep 3
+shell dumpsys activity activities | grep -e mResumedActivity
+shell ps | grep -e mazawallet | head -2
+shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc

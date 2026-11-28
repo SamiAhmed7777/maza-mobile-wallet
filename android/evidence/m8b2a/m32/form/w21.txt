@@ -1,0 +1,14 @@
+echo W21 fill the send form (NO send yet)
+shell cat /proc/uptime
+shell input tap 800 266
+sleep 0.8
+shell input text M9MwxHDmDk4wArEvbBjGvrjR6U3eNcY31E
+sleep 0.8
+shell input tap 800 418
+sleep 0.8
+shell input text 0.1
+sleep 0.8
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

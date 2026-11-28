@@ -1,0 +1,11 @@
+echo W2 reset appops, start the app, dump the first screen
+shell cat /proc/uptime
+shell cmd appops set com.mazawallet POST_NOTIFICATION default
+shell cmd appops get com.mazawallet POST_NOTIFICATION
+shell am start -W -n com.mazawallet/.MainActivity
+sleep 8
+shell dumpsys activity activities | grep -e mResumedActivity
+shell pidof com.mazawallet
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

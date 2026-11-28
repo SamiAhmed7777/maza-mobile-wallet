@@ -1,0 +1,10 @@
+echo W20 SEND tab layout (new build), nothing typed
+shell cat /proc/uptime
+shell input tap 800 858
+sleep 4
+shell dumpsys activity activities | grep -e mResumedActivity
+shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

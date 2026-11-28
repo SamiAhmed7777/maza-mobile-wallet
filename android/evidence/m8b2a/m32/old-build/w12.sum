@@ -1,0 +1,27 @@
+## W12 pre-install identity + all notification records
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1395.50 4897.50
+> shell pm path com.mazawallet
+package:/data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==/base.apk
+> shell dumpsys package com.mazawallet | grep -e lastUpdateTime -e versionName -e codePath -e firstInstallTime
+    codePath=/data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==
+    versionName=1.0
+    firstInstallTime=2026-11-15 18:39:10
+    lastUpdateTime=2026-11-27 03:00:21
+> shell dumpsys notification | grep -c -e NotificationRecord
+1
+> shell dumpsys notification | grep -e NotificationRecord | head -6
+    NotificationRecord(0x0fba44fe: pkg=android user=UserHandle{-1} id=19 tag=null importance=3 key=-1|android|19|null|1000appImportanceLocked=false: Notification(channel=PHYSICAL_KEYBOARD pri=0 contentView=null vibrate=null sound=null defau
+> shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+0
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{6dc61a2 u0 com.mazawallet/.MainActivity t165}
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 12.4s xml-lines=1 -> w12.out

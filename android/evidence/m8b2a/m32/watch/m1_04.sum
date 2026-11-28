@@ -1,0 +1,34 @@
+## m1_04 watch
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+2383.29 8420.80
+> shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+1
+> shell logcat -d | grep -e HCALL | tail -2
+11-28 02:35:43.457  2010  2043 I HCALL   : hcallOnTextEditModeChangedRpc(1)
+11-28 02:41:41.279  2010  2043 I HCALL   : hcallOnAppNotificationReceivedRpc({"packageName":"com.mazawallet","appName":"MAZA Wallet","contentTitle":"MAZA received","contentText":"+0.10000000 MAZA - self-custody wallet","mSecsFromEpochUTC":1
+> shell logcat -d | grep -e "MAZA " | tail -3
+11-28 02:42:09.807  7538  8313 I MAZA    : 2026-11-28 02:42:09 #122 GET /api/state -> 200 (168ms)
+11-28 02:42:09.974  7538  8314 I MAZA    : 2026-11-28 02:42:09 #123 GET /api/watch/utxos -> 200 (162ms)
+11-28 02:42:10.141  7538  8314 I MAZA    : 2026-11-28 02:42:10 #124 GET /api/watch/history -> 200 (165ms)
+> shell dumpsys notification | grep -e com.mazawallet -e incoming_maza | head -8
+    NotificationRecord(0x0a0738bc: pkg=com.mazawallet user=UserHandle{0} id=2 tag=null importance=3 key=0|com.mazawallet|2|null|10068appImportanceLocked=false: Notification(channel=incoming_maza pri=0 contentView=null vibrate=null sound=nul
+      icon=Icon(typ=RESOURCE pkg=com.mazawallet id=0x7f020000) / com.mazawallet:drawable/ic_notify
+      key=0|com.mazawallet|2|null|10068
+      groupKey=0|com.mazawallet|2|null|10068
+          android.appInfo=ApplicationInfo (ApplicationInfo{95a3945 com.mazawallet})
+      effectiveNotificationChannel=NotificationChannel{mId='incoming_maza', mName=Incoming MAZA, mDescription=hasDescription , mImportance=3, mBypassDnd=false, mLockscreenVisibility=-1000, mSound=content://settings/system/notification_sound
+  mSoundNotificationKey=0|com.mazawallet|2|null|10068
+      AppSettings: com.mazawallet (10068) showBadge=true
+> shell ps | grep -e mazawallet | head -2
+u0_a68        7538  1818 3568052 142556 0                   0 S com.mazawallet
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{454fdb5 u0 com.mazawallet/.MainActivity t167}
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 10.9s xml-lines=1 -> m1_04.out

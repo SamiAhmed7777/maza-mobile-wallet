@@ -1,0 +1,51 @@
+## W7 why is the wallet process gone; re-dump the switch
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+402.12 1081.20
+> shell pidof com.mazawallet
+3482
+> shell logcat -d -b events | grep -e am_proc_died -e am_kill -e am_crash -e am_anr | tail -8
+11-28 02:04:36.109  2010  3129 I am_kill : [0,2822,com.bluestacks.home,904,empty #17]
+11-28 02:04:36.178  2010  3129 I am_proc_died: [0,2822,com.bluestacks.home,904,18]
+11-28 02:04:36.601  2010  2021 I am_kill : [0,3543,com.google.android.onetimeinitializer,904,empty #17]
+11-28 02:04:36.658  2010  2021 I am_proc_died: [0,3543,com.google.android.onetimeinitializer,904,18]
+11-28 02:04:59.419  2010  2021 I am_kill : [0,3768,com.google.android.play.games,904,empty #17]
+11-28 02:04:59.448  2010  2021 I am_proc_died: [0,3768,com.google.android.play.games,904,18]
+11-28 02:08:21.812  2010  5091 I am_kill : [0,3582,com.google.android.partnersetup,906,empty #17]
+11-28 02:08:21.879  2010  2179 I am_proc_died: [0,3582,com.google.android.partnersetup,906,18]
+> shell logcat -d | grep -e Fatal -e RenderThread -e totalDuration | tail -6
+11-28 02:07:29.384  5109  5128 I chatty  : uid=1000(system) RenderThread expire 3 lines
+11-28 02:07:29.473  5109  5128 I chatty  : uid=1000(system) RenderThread expire 4 lines
+11-28 02:07:29.580  2010  2899 I chatty  : uid=1000(system) RenderThread expire 14 lines
+11-28 02:07:30.060  5109  5128 I chatty  : uid=1000(system) RenderThread expire 13 lines
+11-28 02:07:30.285  2010  2899 I chatty  : uid=1000(system) RenderThread expire 9 lines
+11-28 02:07:30.398  5109  5128 I chatty  : uid=1000(system) RenderThread expire 9 lines
+> shell logcat -d | grep -e "MAZA " | tail -5
+11-28 02:08:42.491  3482  5256 I MAZA    : 2026-11-28 02:08:42 #72 GET /api/watch/utxos -> 200 (165ms)
+11-28 02:08:42.661  3482  5256 I MAZA    : 2026-11-28 02:08:42 #73 GET /api/watch/history -> 200 (170ms)
+11-28 02:08:57.536  3482  5261 I MAZA    : 2026-11-28 02:08:57 #74 GET /api/state -> 200 (171ms)
+11-28 02:08:57.730  3482  5262 I MAZA    : 2026-11-28 02:08:57 #75 GET /api/watch/utxos -> 200 (189ms)
+11-28 02:08:57.964  3482  5262 I MAZA    : 2026-11-28 02:08:57 #76 GET /api/watch/history -> 200 (233ms)
+> shell dumpsys activity oom | grep -e maza
+    Proc # 2: prev  B/ /LAST trm: 0 3482:com.mazawallet/u0a68 (previous)
+  mPreviousProcess: ProcessRecord{97612ea 3482:com.mazawallet/u0a68}
+> shell cat /proc/meminfo | head -5
+MemTotal:        4034588 kB
+MemFree:          562316 kB
+MemAvailable:    3083572 kB
+Buffers:           18720 kB
+Cached:          2570972 kB
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{2ad8b4a u0 com.android.settings/.Settings$AppNotificationSettingsActivity t166}
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+> shell dumpsys notification | grep -i -e maza -e banned
+      AppSettings: com.mazawallet (10068) importance=NONE showBadge=true
+        NotificationChannel{mId='incoming_maza', mName=Incoming MAZA, mDescription=hasDescription , mImportance=3, mBypassDnd=false, mLockscreenVisibility=-1000, mSound=content://settings/system/notification_sound, mLights=false, mLightColo
+    post_frequency{user_id=0,pkg=com.mazawallet,day=1,count=6,muted=6/6,demoted=0}
+## ROUND-DONE
+
+-- round rc=0 12.3s xml-lines=1 -> w7.out

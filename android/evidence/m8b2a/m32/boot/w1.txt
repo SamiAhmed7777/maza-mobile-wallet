@@ -1,0 +1,9 @@
+echo W1 boot check after relaunch (hold line 01:52 PST)
+shell cat /proc/uptime
+shell getprop sys.boot_completed
+shell pm list packages com.mazawallet
+shell dumpsys package com.mazawallet | grep -e versionName -e lastUpdateTime
+shell cmd appops get com.mazawallet POST_NOTIFICATION
+shell dumpsys activity activities | grep -e mResumedActivity
+shell pidof com.mazawallet
+shell logcat -d | grep -c -e "Fatal signal"

@@ -1,0 +1,13 @@
+echo W8 wallet back to front with notifications denied
+shell cat /proc/uptime
+shell am start -W -n com.mazawallet/.MainActivity
+sleep 4
+shell dumpsys activity activities | grep -e mResumedActivity
+shell ps | grep -e mazawallet | head -3
+shell cmd appops get com.mazawallet POST_NOTIFICATION
+shell dumpsys notification | grep -e AppSettings -e maza
+shell logcat -d | grep -e "MAZA " | tail -4
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

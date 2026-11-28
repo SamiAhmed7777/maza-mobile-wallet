@@ -1,0 +1,25 @@
+## W3 screen after CONNECT
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+165.33 176.96
+> shell pidof com.mazawallet
+3482
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{6dc61a2 u0 com.mazawallet/.MainActivity t165}
+> shell logcat -d | grep -e "MAZA " | tail -8
+11-28 02:04:42.322  3482  4892 I MAZA    : 2026-11-28 02:04:42 #14 GET /api/watch/utxos -> 200 (162ms)
+11-28 02:04:42.487  3482  4892 I MAZA    : 2026-11-28 02:04:42 #15 GET /api/watch/history -> 200 (163ms)
+11-28 02:04:53.965  3482  4923 I MAZA    : 2026-11-28 02:04:53 #16 GET /api/state -> 200 (172ms)
+11-28 02:04:54.139  3482  4924 I MAZA    : 2026-11-28 02:04:54 #17 GET /api/watch/utxos -> 200 (165ms)
+11-28 02:04:54.303  3482  4924 I MAZA    : 2026-11-28 02:04:54 #18 GET /api/watch/history -> 200 (163ms)
+11-28 02:05:09.144  3482  4942 I MAZA    : 2026-11-28 02:05:09 #19 GET /api/state -> 200 (170ms)
+11-28 02:05:09.312  3482  4943 I MAZA    : 2026-11-28 02:05:09 #20 GET /api/watch/utxos -> 200 (163ms)
+11-28 02:05:09.483  3482  4943 I MAZA    : 2026-11-28 02:05:09 #21 GET /api/watch/history -> 200 (171ms)
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 11.8s xml-lines=1 -> w3.out

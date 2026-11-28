@@ -1,0 +1,12 @@
+echo w9_04 watch
+shell cat /proc/uptime
+shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+shell logcat -d | grep -e HCALL | tail -2
+shell logcat -d | grep -e "MAZA " | tail -3
+shell dumpsys notification | grep -e com.mazawallet -e incoming_maza | head -8
+shell ps | grep -e mazawallet | head -2
+shell dumpsys activity activities | grep -e mResumedActivity
+shell uiautomator dump /sdcard/ui.xml
+sleep 1
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

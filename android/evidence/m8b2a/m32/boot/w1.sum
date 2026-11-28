@@ -1,0 +1,22 @@
+## W1 boot check after relaunch (hold line 01:52 PST)
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+29.21 45.94
+> shell getprop sys.boot_completed
+1
+> shell pm list packages com.mazawallet
+package:com.mazawallet
+> shell dumpsys package com.mazawallet | grep -e versionName -e lastUpdateTime
+    versionName=1.0
+    lastUpdateTime=2026-11-27 03:00:21
+> shell cmd appops get com.mazawallet POST_NOTIFICATION
+POST_NOTIFICATION: ignore
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{1b6c485 u0 com.bluestacks.gamecenter/.AppCenterActivity t164}
+> shell pidof com.mazawallet
+> shell logcat -d | grep -c -e "Fatal signal"
+[e] grep: signal: No such file or directory
+## ROUND-DONE
+
+-- round rc=0 8.6s xml-lines=0 -> w1.out

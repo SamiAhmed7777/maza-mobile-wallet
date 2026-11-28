@@ -1,0 +1,11 @@
+echo W10 denial: notification shade after the confirmed receive
+shell cat /proc/uptime
+shell logcat -d | grep -c -e hcallOnAppNotificationReceivedRpc
+shell dumpsys notification | grep -e com.mazawallet | head -6
+shell cmd statusbar expand-notifications
+sleep 2
+shell screencap -p /sdcard/w10_shade.png
+pull /sdcard/w10_shade.png C:\Users\hello\maza-bench-lane\cap\w10_shade.png
+shell cmd statusbar collapse
+shell rm -f /sdcard/w10_shade.png
+shell ps | grep -e mazawallet | head -2

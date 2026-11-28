@@ -1,0 +1,27 @@
+## W16 pm install -r (in place), verify
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1836.42 6581.46
+> shell pm install -r /data/local/tmp/m32.apk
+Success
+> raw connect 127.0.0.1:5555
+connected to 127.0.0.1:5555
+> shell pm list packages com.mazawallet
+package:com.mazawallet
+> shell dumpsys package com.mazawallet | grep -e lastUpdateTime -e versionName -e codePath -e firstInstallTime
+    codePath=/data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==
+    versionName=1.0
+    firstInstallTime=2026-11-15 18:39:10
+    lastUpdateTime=2026-11-28 02:33:07
+> shell pm path com.mazawallet
+package:/data/app/com.mazawallet-TlqPW5KxiVy7PzddKGux5w==/base.apk
+> shell dumpsys notification | grep -e AppSettings: com.mazawallet
+[e] grep: com.mazawallet: No such file or directory
+[e] Failed to write while dumping service notification: Broken pipe
+> shell ps | grep -e mazawallet | head -2
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{60abbc u0 com.uncube.launcher3/com.bluestacks.launcher.activity.HomeActivity t2}
+## ROUND-DONE
+
+-- round rc=0 46.4s xml-lines=0 -> w16.out

@@ -1,0 +1,10 @@
+echo W25 read-only: what are the ext4 and Fatal lines
+shell cat /proc/uptime
+shell dmesg | grep -e EXT4-fs
+shell dmesg | grep -i -c -e error
+shell dmesg | grep -i -e error
+shell dmesg | grep -i -e blk_update
+shell dmesg | tail -4
+shell logcat -d | grep -e Fatal
+shell logcat -d -b crash | tail -6
+shell ps | grep -e mazawallet

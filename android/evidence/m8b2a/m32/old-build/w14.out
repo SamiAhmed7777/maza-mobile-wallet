@@ -1,0 +1,15 @@
+## W14 push only: forward-slash local path, then size + sha256 on the device
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1790.78 6418.66
+> push C:/Users/hello/maza-bench-lane/m32-b819df1.apk /data/local/tmp/m32.apk
+adb: error: cannot stat ':/Users/hello/maza-bench-lane/m32-b819df1.apk': No such file or directory
+> shell ls -l /data/local/tmp/m32.apk
+[e] ls: /data/local/tmp/m32.apk: No such file or directory
+> shell sha256sum /data/local/tmp/m32.apk
+[e] sha256sum: /data/local/tmp/m32.apk: No such file or directory
+> shell dumpsys package com.mazawallet | grep -e lastUpdateTime -e codePath
+    codePath=/data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==
+    lastUpdateTime=2026-11-27 03:00:21
+## ROUND-DONE

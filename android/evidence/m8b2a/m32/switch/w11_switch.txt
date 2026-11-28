@@ -1,0 +1,3 @@
+before the tap    Switch   'OFF' checked=false
+before the tap    TextView "At your request, Android is blocking this app's notifications from app" checked=false
+after the tap     Switch   'ON' checked=true

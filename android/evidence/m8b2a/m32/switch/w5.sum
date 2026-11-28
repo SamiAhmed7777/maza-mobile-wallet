@@ -1,0 +1,26 @@
+## W5 open the app notification settings screen (Show notifications switch)
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+303.27 707.01
+> shell pidof com.mazawallet
+3482
+> shell cmd appops get com.mazawallet POST_NOTIFICATION
+POST_NOTIFICATION: default
+> shell am start -W -a android.settings.APP_NOTIFICATION_SETTINGS --es android.provider.extra.APP_PACKAGE com.mazawallet --ei android.provider.extra.APP_UID 10068
+Starting: Intent { act=android.settings.APP_NOTIFICATION_SETTINGS (has extras) }
+Status: ok
+Activity: com.android.settings/.Settings$AppNotificationSettingsActivity
+ThisTime: 3177
+TotalTime: 3177
+WaitTime: 3441
+Complete
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{2ad8b4a u0 com.android.settings/.Settings$AppNotificationSettingsActivity t166}
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 16.3s xml-lines=1 -> w5.out
