@@ -1,0 +1,29 @@
+## M14-A2 Settings on top of the unlocked wallet, settle 40s
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+2786.84 10677.60
+> shell am start -W -a android.settings.SETTINGS
+Starting: Intent { act=android.settings.SETTINGS }
+Status: ok
+Activity: com.android.settings/.Settings
+ThisTime: 583
+TotalTime: 583
+WaitTime: 637
+Complete
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{7614edb u0 com.android.settings/.Settings t162}
+> shell pidof com.mazawallet
+5011
+> shell dumpsys activity oom | grep -e maza
+    Proc # 0: prev  B/ /LAST trm: 0 5011:com.mazawallet/u0a68 (previous)
+  mPreviousProcess: ProcessRecord{edbad0 5011:com.mazawallet/u0a68}
+> shell logcat -d -b events | grep -e am_on_paused_called | tail -2
+11-27 21:52:28.983  2708  2708 I am_on_paused_called: [0,com.bluestacks.launcher.activity.HomeActivity,performPause]
+11-27 22:08:31.964  5011  5011 I am_on_paused_called: [0,com.mazawallet.MainActivity,performPause]
+> shell logcat -d | grep -e "MAZA " | tail -4
+11-27 22:08:51.802  5011  6386 I MAZA    : 2026-11-27 22:08:51 #527 GET /api/watch/history -> 200 (215ms)
+11-27 22:09:06.627  5011  6387 I MAZA    : 2026-11-27 22:09:06 #528 GET /api/state -> 200 (170ms)
+11-27 22:09:06.937  5011  6388 I MAZA    : 2026-11-27 22:09:06 #529 GET /api/watch/utxos -> 200 (304ms)
+11-27 22:09:07.106  5011  6388 I MAZA    : 2026-11-27 22:09:07 #530 GET /api/watch/history -> 200 (168ms)
+## ROUND-DONE

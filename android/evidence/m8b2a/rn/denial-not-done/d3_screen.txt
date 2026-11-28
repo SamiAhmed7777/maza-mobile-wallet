@@ -1,0 +1,27 @@
+# parsed from d3.out by scripts/uidump.py
+FrameLayout    [0,36][1600,900] (800,468) content
+LinearLayout   [0,36][1600,900] (800,468) content_parent
+ViewGroup      [0,36][1600,132] (800,84) action_bar
+TextView       [36,63][148,104] (92,83) Settings
+FrameLayout    [0,132][1600,900] (800,516) content_frame
+FrameLayout    [0,132][1600,900] (800,516) main_content
+LinearLayout   [0,132][1600,900] (800,516) container_material
+FrameLayout    [0,132][1600,900] (800,516) list_container
+RecyclerView   [0,132][1600,900] (800,516) list
+LinearLayout   [0,132][1600,276] (800,204) entity_header
+LinearLayout   [24,168][1576,240] (800,204) entity_header_content
+ImageView      [108,168][180,240] (144,204) entity_header_icon
+TextView       [204,187][1552,220] (878,203) MAZA Wallet | entity_header_title
+LinearLayout   [0,276][1600,372] (800,324) switch_bar
+TextView       [120,305][1506,342] (813,323) Show notifications | switch_text
+Switch         [1506,288][1576,360] (1541,324) ON | switch_widget
+TextView       [120,420][293,453] (206,436) Incoming MAZA | title
+LinearLayout   [1478,396][1480,477] (1479,436) two_target_divider
+LinearLayout   [1480,396][1600,477] (1540,436) widget_frame
+CheckBox       [1516,396][1564,477] (1540,436) Incoming MAZA | checkboxWidget
+LinearLayout   [30,531][120,579] (75,555) icon_frame
+ImageView      [36,537][72,573] (54,555) icon
+TextView       [120,526][213,555] (166,540) Advanced | title
+TextView       [120,555][319,584] (219,569) Allow notification dot | summary
+View           [0,0][1600,36] (800,18) statusBarBackground
+-- 25 labelled nodes

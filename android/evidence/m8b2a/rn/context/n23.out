@@ -1,0 +1,19 @@
+## N23 who resumed the wallet after HOME
+> shell logcat -d -b events | grep -e am_on_resume_called -e am_on_paused_called -e am_set_resumed_activity | tail -12
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+11-27 21:22:17.548  2011  2026 I am_set_resumed_activity: [0,com.bluestacks.gamecenter/.AppCenterActivity,minimalResumeActivityLocked]
+11-27 21:22:18.512  2708  2708 I am_on_paused_called: [0,com.bluestacks.launcher.activity.HomeActivity,performPause]
+11-27 21:22:20.794  2634  2634 I am_on_resume_called: [0,com.bluestacks.gamecenter.AppCenterActivity,RESUME_ACTIVITY]
+11-27 21:29:03.038  2634  2634 I am_on_paused_called: [0,com.bluestacks.gamecenter.AppCenterActivity,performPause]
+11-27 21:29:03.133  2011  2699 I am_set_resumed_activity: [0,com.mazawallet/.MainActivity,minimalResumeActivityLocked]
+11-27 21:29:03.614  5011  5011 I am_on_resume_called: [0,com.mazawallet.MainActivity,RESUME_ACTIVITY]
+11-27 21:51:29.841  5011  5011 I am_on_paused_called: [0,com.mazawallet.MainActivity,performPause]
+11-27 21:51:29.854  2011  2022 I am_set_resumed_activity: [0,com.uncube.launcher3/com.bluestacks.launcher.activity.HomeActivity,resumeTopActivityInnerLocked]
+11-27 21:51:29.995  2708  2708 I am_on_resume_called: [0,com.bluestacks.launcher.activity.HomeActivity,RESUME_ACTIVITY]
+11-27 21:52:28.983  2708  2708 I am_on_paused_called: [0,com.bluestacks.launcher.activity.HomeActivity,performPause]
+11-27 21:52:28.990  2011  2022 I am_set_resumed_activity: [0,com.mazawallet/.MainActivity,resumeTopActivityInnerLocked]
+11-27 21:52:29.006  5011  5011 I am_on_resume_called: [0,com.mazawallet.MainActivity,RESUME_ACTIVITY]
+> shell logcat -d -b system | grep -e "START u0" -e "Displayed" -e "moveTaskToFront" -e "Launch" | tail -10
+[e] grep: u0: No such file or directory
+## ROUND-DONE

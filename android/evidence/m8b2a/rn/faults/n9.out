@@ -1,0 +1,33 @@
+## N9 app logcat + connectivity
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+508.35 1862.32
+> shell which curl wget nc
+/system/xbin/wget
+/system/xbin/nc
+> shell dumpsys connectivity | grep -e Active -e everValidated -e validated -e "NetworkAgentInfo" | head -10
+Active default network: 100
+  NetworkAgentInfo{ ni{[type: WIFI[], state: CONNECTED/CONNECTED, reason: (unspecified), extra: 08:00:27:0e:38:b3, failover: false, available: true, roaming: false]}  network{100}  nethandle{432902426637}  lp{{InterfaceName: eth0 LinkAddresses: [fe80::d261:9e54:3818:9949/64,10.0.2.15/24,]  Routes: [fe80::/64 -> :: eth0,10.0.2.0/24 -> 0.0.0.0 eth0,0.0.0.0/0 -> 10.0.2.2 eth0,] DnsAddresses: [8.8.8.8,10.0.2.3,] UsePrivateDns: false PrivateDnsServerName: null Domains: null MTU: 0 TcpBufferSizes: 524288,1048576,3145728,524288,1048576,2097152}}  nc{[ Transports: WIFI|ETHERNET Capabilities: NOT_METERED&INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN&NOT_ROAMING&FOREGROUND&NOT_CONGESTED&NOT_SUSPENDED Unwanted:  LinkUpBandwidth>=100000Kbps LinkDnBandwidth>=100000Kbps]}  Score{30}  everValidated{false}  lastValidated{false}  created{true} lingering{false} explicitlySelected{false} acceptUnvalidated{false} everCaptivePortalDetected{false} lastCaptivePortalDetected{false} clat{null} }
+    1 NetworkAgentInfo [WIFI () - 100] CONNECTED/CONNECTED
+> shell logcat -d -t 600 | grep -i -e maza -e UnknownHost -e SocketTimeout -e SSLHandshake -e ConnectException | tail -40
+11-27 21:09:15.353  5076  5216 I MAZA    : 2026-11-27 21:09:15 #2 POST /api/unlock -> 200 (672ms)
+11-27 21:09:15.353  5076  5216 I MAZA    : 2026-11-27 21:09:15 #3 unlock ok
+11-27 21:09:15.380  5076  5076 W MAZA    : 2026-11-27 21:09:15 #4 seed migration deferred; will retry on next read
+11-27 21:09:15.494  2165  2920 D InputMethodManagerService: packageName=com.mazawallet, activityName=.MainActivity
+11-27 21:09:15.688  5076  5225 I MAZA    : 2026-11-27 21:09:15 #5 GET /api/qr.png -> 200 (209ms)
+11-27 21:09:15.990  5076  5231 I MAZA    : 2026-11-27 21:09:15 #6 GET /api/state -> 200 (502ms)
+11-27 21:09:16.009  5076  5101 F libc    : Fatal signal 6 (SIGABRT), code -6 (SI_TKILL) in tid 5101 (RenderThread), pid 5076 (com.mazawallet)
+11-27 21:09:16.033  5076  5230 I MAZA    : 2026-11-27 21:09:16 #7 GET /api/qr.png -> 200 (548ms)
+11-27 21:09:16.038  5237  5237 F DEBUG   : pid: 5076, tid: 5101, name: RenderThread  >>> com.mazawallet <<<
+11-27 21:09:16.190  5076  5234 I MAZA    : 2026-11-27 21:09:16 #8 GET /api/watch/utxos -> 200 (192ms)
+11-27 21:09:16.196  5076  5232 I MAZA    : 2026-11-27 21:09:16 #9 GET /api/qr.png -> 200 (199ms)
+11-27 21:09:16.231  2165  5240 W ActivityManager:   Force finishing activity com.mazawallet/.MainActivity
+11-27 21:09:16.257  2165  2917 I WindowManager: WIN DEATH: Window{bc05d31 u0 com.mazawallet/com.mazawallet.MainActivity}
+11-27 21:09:16.260  2165  2808 I ActivityManager: Process com.mazawallet (pid 5076) has died: vis  TOP 
+> shell settings get global private_dns_mode
+off
+> shell cat /proc/net/route | head -4
+Iface	Destination	Gateway 	Flags	RefCnt	Use	Metric	Mask		MTU	Window	IRTT                                                       
+eth0	0002000A	00000000	0001	0	0	0	00FFFFFF	0	0	0                                                                               
+## ROUND-DONE

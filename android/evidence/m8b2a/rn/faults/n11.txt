@@ -1,0 +1,6 @@
+echo N11 post-connect state + app log
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell logcat -d -t 400 | grep -e "MAZA " | tail -14
+shell logcat -d -t 400 | grep -e "Fatal" -e "RenderThread" -e "totalDuration" | tail -6
+shell dumpsys activity activities | grep -e mResumedActivity

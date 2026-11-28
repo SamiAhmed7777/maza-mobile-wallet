@@ -1,0 +1,5 @@
+echo N15 third boot probe
+raw devices
+shell cat /proc/uptime
+shell getprop sys.boot_completed
+shell pm path com.mazawallet

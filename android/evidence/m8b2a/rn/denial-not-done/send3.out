@@ -1,0 +1,5 @@
+[2026-11-28 07:14:14 CET] before: bench balance=46.2996774 | watch set: balance=2.1999 utxos=3 confirmations=[2, 16, 16855]
+[2026-11-28 07:14:14 CET] POST /api/send to=MNoGtBkYiWuZq8L8WUtYvCUakg8h1sqRaa amount=0.1 -> HTTP 200 {"txid": "13cd66fbc136e7ad1f1a3615683963d1dfcd89427bfdc37a13431879c724e1de"}
+[2026-11-28 07:14:18 CET] after: watch set: balance=2.1999 utxos=3 confirmations=[2, 16, 16855]
+[2026-11-28 07:14:19 CET] GET /api/state -> 200 balance=0 account=mobile-play bench_address=MWRVvgWrLRqyEEQSm7J8NuYor1X9J4J9Fa
+[2026-11-28 07:14:19 CET] watch set: balance=2.1999 utxos=3 confirmations=[2, 16, 16855]

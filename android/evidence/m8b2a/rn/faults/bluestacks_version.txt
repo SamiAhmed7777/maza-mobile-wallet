@@ -1,0 +1,4 @@
+# Excerpt: BlueStacks program files (version, last write) during the fault window.
+BlueStacks executables (version + last write):
+  HD-Player.exe  2025-03-24 03:27  v5.22.51.1038
+  BstkSVC.exe  2025-03-24 03:00  v6.1.36.156792

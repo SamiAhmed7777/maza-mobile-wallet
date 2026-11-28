@@ -1,0 +1,14 @@
+# OCR of l1_locked.png (sha256 3e054a9049c450d869f666abaace71d4930722274852448eb0c60c85881d83ba): tesseract 5.3.4, --psm 6, on a 2x grayscale upscale. Unedited machine output.
+10:00
+Fri, Nov 27
+3
+@ MAZA Wallet
+MAZA received
++0.50000000 MAZA - self-custody wallet
+@ MAZA Wallet
+MAZA received
++46.49977740 MAZA - bench account
+Qf Android System
+Configure physical keyboard
+Tap to select language and layout
+Manage notifications CLEAR ALL

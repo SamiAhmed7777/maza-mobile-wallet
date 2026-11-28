@@ -1,0 +1,22 @@
+## N22 poll while backgrounded
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1905.69 7203.15
+> shell pidof com.mazawallet
+5011
+> shell logcat -d | grep -e "MAZA " | tail -9
+11-27 21:53:08.350  5011  5943 I MAZA    : 2026-11-27 21:53:08 #318 GET /api/price -> 200 (168ms)
+11-27 21:53:08.353  5011  5944 I MAZA    : 2026-11-27 21:53:08 #319 GET /api/watch/utxos -> 200 (171ms)
+11-27 21:53:08.524  5011  5944 I MAZA    : 2026-11-27 21:53:08 #320 GET /api/watch/history -> 200 (170ms)
+11-27 21:53:23.355  5011  5945 I MAZA    : 2026-11-27 21:53:23 #321 GET /api/state -> 200 (172ms)
+11-27 21:53:23.523  5011  5946 I MAZA    : 2026-11-27 21:53:23 #322 GET /api/watch/utxos -> 200 (166ms)
+11-27 21:53:23.688  5011  5946 I MAZA    : 2026-11-27 21:53:23 #323 GET /api/watch/history -> 200 (163ms)
+11-27 21:53:38.522  5011  5947 I MAZA    : 2026-11-27 21:53:38 #324 GET /api/state -> 200 (164ms)
+11-27 21:53:38.689  5011  5948 I MAZA    : 2026-11-27 21:53:38 #325 GET /api/watch/utxos -> 200 (163ms)
+11-27 21:53:38.857  5011  5948 I MAZA    : 2026-11-27 21:53:38 #326 GET /api/watch/history -> 200 (167ms)
+> shell dumpsys activity processes | grep -i -e "mazawallet" | grep -e "PERS" -e "FORE" -e "BACK" -e "CACHED" -e "PREV" -e "LAST" -e "SERVICE" -e "VIS" -e "TOP" | head -3
+    Proc # 0: fore  T/A/TOP  trm: 0 5011:com.mazawallet/u0a68 (top-activity)
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{b977cc8 u0 com.mazawallet/.MainActivity t161}
+## ROUND-DONE

@@ -1,0 +1,29 @@
+# Excerpt: every loop tick of loop 24a7311de928 since the hold line (written about 20:10 PST),
+# taken at package build time; a tick that lands later is not in here.
+# Line selection by scripts/rn_pack.py: from each tick output file, the lines of its own answer
+# that state the decision (cut at 700 characters); from the backlog run log, for a tick that
+# answered [SILENT], the entry it wrote there (header and next three non-empty lines, cut at 200).
+## 2026-11-27_20-39-25.md
+**Why no item pick:** Sami's go ("reopen as needed", group thread 54, ~20:0x) is on record and the interactive lane's window is LIVE — it is relaunching the emulator now for M14-ii + the m8b2a evidence package. Its line is the newest interactive line in the backlog, so this loop must not drive the emulator, must not relaunch the miner, and must not write the repo (lane territory: `android/evidence/m8b2a/`). The stand-down carries forward until the lane's close line lands.
+## 2026-11-27_21-21-36.md
+- **No repo work**: the interactive lane's ~20:1x window line (Sami's "reopen as needed" go) is still the newest interactive line — no CLOSE line yet — so the loop stays off emulator/miner/m8b2a territory; every open backlog item is either device-lane-gated (M8b-ii-a/b, M10-ii, M11-ii, M14-ii, S-1/S-6-ii proofs, M30 re-proof) or decision-gated (M31, M7, IDX-7b, beta width, M5 tap-and-run, AVX must-not-pick, M13 parked).
+[SILENT]
+## 2026-11-27_22-03-15.md
+**Stand-down still engaged:** the interactive lane's ~20:1x window line (thread 54) remains the newest interactive line — no CLOSE line yet (~1h40m elapsed). Emulator relaunch + M14-ii + the m8b2a evidence package stay ITS scope; the loop stayed off emulator/miner/m8b2a/repo territory as required.
+## 2026-11-27_22-44-44.md
+[SILENT]
+backlog run log, line 159:
+- 2026-11-27 ~22:4x PST (loop 24a7311de928): MAINTENANCE-ONLY TICK
+(148th; NO repo change - the interactive lane's ~20:1x window line is
+STILL the newest INTERACTIVE line (no CLOSE line yet, ~2h40m elapsed,
+ZERO captures landed - the m8b2a evidence dir untouched ~18h, mtime
+## 2026-11-27_23-27-51.md
+[SILENT]
+backlog run log, line 98:
+- 2026-11-27 ~23:1x PST (loop 24a7311de928): MAINTENANCE-ONLY TICK
+(149th; NO repo change - the interactive lane's ~20:1x window line is
+STILL the newest INTERACTIVE line (no CLOSE line yet, ~3h15m elapsed;
+the window is demonstrably LIVE this tick: the lane's M14-ii rn/
+## 2026-11-28_00-05-23.md
+Summary of the tick: the interactive lane's ~20:1x window line is still the newest interactive line (no CLOSE yet, ~3h50m), and the lane is demonstrably live — its `m8b2a/rn/` packaging (RUNLOG.md + SHA256SUMS + locked/ captures) landed at 23:47:49, ~12 min before census, inside its declared territory only. So per the conflict guard the loop stayed off the emulator, the miner (anchored pgrep rc=1, still paused), and the repo. Veto probe: TOTAL_PENDING=0; M31 answer (asked at the 127th tick, msg 409) still pending. Reconcile: HEAD == origin cc1e6a8. All watches green (samihost bench/bench-testnet/indexer/mazad active, NRestarts=0, bench journal clean; front door 200/401; indexer public health
+[SILENT]

@@ -1,0 +1,6 @@
+# Excerpt: last reading of the boot-2 error counter, taken during the ADB reboot attempt.
+# Process and memory lines are left out.
+now 21:20:57
+boot launched at: 2026-11-27 21:03:17.783 ; log lines since launch: 978
+guest error lines this boot: 0
+guest kernel last line: [  817.590859] reboot: Restarting system with command 'adb'

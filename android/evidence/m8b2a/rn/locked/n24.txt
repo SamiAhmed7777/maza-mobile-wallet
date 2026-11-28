@@ -1,0 +1,4 @@
+echo N24 wallet screen after return to front
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

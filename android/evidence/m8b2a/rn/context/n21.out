@@ -1,0 +1,26 @@
+## N21 why is the wallet process gone
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1850.91 6986.60
+> shell pidof com.mazawallet
+5011
+> shell logcat -d -b events | grep -e am_kill -e am_proc_died -e am_low_memory -e am_proc_start | tail -8
+11-27 21:52:40.585  2011  2593 I am_kill : [0,4109,com.numberbarn.app,906,empty for 1800s]
+11-27 21:52:40.667  2011  2593 I am_proc_died: [0,4167,com.upscrolled.app,906,18]
+11-27 21:52:40.669  2011  2702 I am_proc_died: [0,3963,com.google.android.verifier,904,18]
+11-27 21:52:40.672  2011  2262 I am_proc_died: [0,4109,com.numberbarn.app,906,18]
+11-27 21:52:48.947  2011  5873 I am_kill : [0,4422,com.android.keychain,904,empty for 1801s]
+11-27 21:52:48.997  2011  2263 I am_proc_died: [0,4422,com.android.keychain,904,18]
+11-27 21:52:54.033  2011  2263 I am_kill : [0,4552,com.android.chrome,904,empty for 1801s]
+11-27 21:52:54.107  2011  2695 I am_proc_died: [0,4552,com.android.chrome,904,18]
+> shell logcat -d | grep -i -e "mazawallet" | grep -i -e kill -e died -e "Force" -e "Fatal" -e "anr " | tail -8
+> shell dumpsys activity oom | grep -e maza
+    Proc # 0: fore  T/A/TOP  trm: 0 5011:com.mazawallet/u0a68 (top-activity)
+  mPreviousProcess: ProcessRecord{edbad0 5011:com.mazawallet/u0a68}
+> shell dumpsys meminfo | grep -e "Free RAM" -e "Used RAM" -e "Lost RAM" -e "ZRAM"
+[e] grep: RAM: No such file or directory
+[e] grep: RAM: No such file or directory
+[e] grep: RAM: No such file or directory
+[e] Failed to write while dumping service meminfo: Broken pipe
+## ROUND-DONE

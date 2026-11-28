@@ -1,0 +1,12 @@
+## N14 after guest reboot, second look
+> raw devices
+List of devices attached
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+emulator-5554	offline
+
+> shell cat /proc/uptime
+[e] error: device offline
+> shell getprop sys.boot_completed
+[e] error: device offline
+## ROUND-DONE

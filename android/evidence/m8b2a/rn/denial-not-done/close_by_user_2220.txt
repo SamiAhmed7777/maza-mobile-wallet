@@ -1,0 +1,19 @@
+# Excerpt of the BlueStacks Player.log lines for the 22:20 close. Line selection by scripts/rn_pack.py
+# from the lane diagnosis run of 22:28:55 PST (read-only). The full output is in the private archive.
+== time: 2026-11-27 22:28:55
+2026-11-27 22:20:18.384-0700 24580 39812 PLR    Pie64 [Ready] I: Topbar: Close clicked
+2026-11-27 22:20:24.381-0700 24580 39812 PLR    Pie64 [Ready] I: plrStopPlayer: reason Close_by_user, Player state: Ready -> Player state: Stopping
+2026-11-27 22:20:27.114-0700 24580 13888 PLR    Pie64 [Stopping] I: Exiting: plrCoreSvcThreadEntry
+2026-11-27 22:20:27.206-0700 24580 39812 PLR    Pie64 [Stopping] I: Player state : Exiting err: 0, coreSvcErr: 0
+2026-11-27 22:20:26.126-0700 24580 22088 AGA    Pie64 [Stopping] I: Closing Socket connection : com.bluestacks.gamecenter (pid 2634, tid 3337)
+2026-11-27 22:20:26.125-0700 24580 38108 AGA    Pie64 [Stopping] I: Closing Socket connection : system_server (pid 2011, tid 2076)
+2026-11-27 22:20:26.669-0700 24580 35216 SER    Pie64 [Stopping] I: GUEST: [ 3506.030083] reboot: Power down
+2026-11-27 22:20:26.797-0700 24580 13888 VMMGR  Pie64 [Stopping] I: OnStateChanged: Stopping
+2026-11-27 22:20:27.099-0700 24580 13888 VMMGR  Pie64 [Stopping] I: OnStateChanged: PoweredOff
+2026-11-27 22:20:27.099-0700 24580 13888 VMMGR  Pie64 [Stopping] I: Exited event loop.
+2026-11-27 22:20:27.100-0700 24580 13888 PLR    Pie64 [Stopping] I: VM is powered off
+2026-11-27 22:20:27.114-0700 24580 13888 PLR    Pie64 [Stopping] I: Exiting: plrCoreSvcThreadEntry
+2026-11-27 22:20:27.199-0700 24580 39812 PLR    Pie64 [Stopping] I: main exec loop exited
+2026-11-27 22:20:27.206-0700 24580 39812 LSG    Pie64 [Stopping] I: lsgStopStreaming
+2026-11-27 22:20:27.206-0700 24580 39812 PLR    Pie64 [Stopping] I: Releasing global instance lock
+2026-11-27 22:20:27.206-0700 24580 39812 PLR    Pie64 [Stopping] I: Player state : Exiting err: 0, coreSvcErr: 0

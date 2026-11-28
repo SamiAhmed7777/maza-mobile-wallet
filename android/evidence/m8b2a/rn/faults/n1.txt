@@ -1,0 +1,7 @@
+echo N1 pm retry
+shell pm list packages -3
+shell df /data /system
+shell ls -la /system/bin/cmd /system/bin/pm
+shell settings get secure user_setup_complete
+shell getprop sys.boot_completed
+shell dumpsys activity activities | grep -E "mResumedActivity|mFocusedActivity"

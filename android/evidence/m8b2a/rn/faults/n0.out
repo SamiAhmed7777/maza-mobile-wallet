@@ -1,0 +1,14 @@
+## N0 boot probe
+> raw devices
+List of devices attached
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+emulator-5554	device
+
+> shell getprop sys.boot_completed
+1
+> shell getprop ro.build.version.sdk
+28
+> shell pm list packages -3
+[e] /system/bin/pm[2]: /system/bin/cmd: I/O error
+## ROUND-DONE

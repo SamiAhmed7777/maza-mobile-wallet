@@ -1,0 +1,3 @@
+echo N23 who resumed the wallet after HOME
+shell logcat -d -b events | grep -e am_on_resume_called -e am_on_paused_called -e am_set_resumed_activity | tail -12
+shell logcat -d -b system | grep -e "START u0" -e "Displayed" -e "moveTaskToFront" -e "Launch" | tail -10

@@ -1,0 +1,2 @@
+[2026-11-28 07:51:35 CET] GET /api/state -> 200 balance=46.1995774 account=mobile-play bench_address=MWRVvgWrLRqyEEQSm7J8NuYor1X9J4J9Fa
+[2026-11-28 07:51:35 CET] watch set: balance=2.2999 utxos=4 confirmations=[34, 36, 50, 16889]

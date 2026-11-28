@@ -1,0 +1,19 @@
+## M14-A1 background the app (HOME), settle 40s, before-capture of the shade
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1767.31 6777.50
+> shell input keyevent 3
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{90e7146 u0 com.uncube.launcher3/com.bluestacks.launcher.activity.HomeActivity t2}
+> shell pidof com.mazawallet
+5011
+> shell logcat -d -t 200 | grep -e "MAZA " | tail -4
+> shell cmd statusbar expand-notifications
+> shell screencap -p /sdcard/a1_before.png
+> pull /sdcard/a1_before.png C:\Users\hello\maza-bench-lane\cap\a1_before.png
+[ 80%] sdcard/a1_before.png
+[100%] sdcard/a1_before.png
+> shell cmd statusbar collapse
+> shell rm -f /sdcard/a1_before.png
+## ROUND-DONE

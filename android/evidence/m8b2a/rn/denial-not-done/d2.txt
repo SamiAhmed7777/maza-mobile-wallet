@@ -1,0 +1,14 @@
+echo M14-D2 denial path: after the confirmed receive, notifications blocked
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell cmd appops get com.mazawallet POST_NOTIFICATION
+shell dumpsys activity activities | grep -e mResumedActivity
+shell logcat -d | grep -e "MAZA " | tail -6
+shell logcat -d | grep -e HCALL | tail -3
+shell dumpsys notification
+shell cmd statusbar expand-notifications
+sleep 2
+shell screencap -p /sdcard/d2_blocked.png
+pull /sdcard/d2_blocked.png C:\Users\hello\maza-bench-lane\cap\d2_blocked.png
+shell cmd statusbar collapse
+shell rm -f /sdcard/d2_blocked.png

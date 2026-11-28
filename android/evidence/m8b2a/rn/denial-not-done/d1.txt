@@ -1,0 +1,7 @@
+echo M14-D1 denial path: block notifications for the wallet (API 28 equivalent of revoking POST_NOTIFICATIONS)
+shell cat /proc/uptime
+shell cmd appops set com.mazawallet POST_NOTIFICATION ignore
+shell cmd appops get com.mazawallet POST_NOTIFICATION
+shell pidof com.mazawallet
+shell dumpsys activity activities | grep -e mResumedActivity
+shell dumpsys activity oom | grep -e maza

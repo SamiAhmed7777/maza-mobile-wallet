@@ -1,0 +1,4 @@
+echo N20 current screen after unlock round
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

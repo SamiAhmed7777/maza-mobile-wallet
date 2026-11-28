@@ -1,0 +1,26 @@
+## ROUND-RN1 poll-while-locked evidence, then unlock + WALLET tab (seed wallet surface)
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+1353.74 5144.14
+> shell logcat -d -t 300 | grep -e "MAZA " | tail -6
+11-27 21:44:12.411  5011  5449 I MAZA    : 2026-11-27 21:44:12 #198 GET /api/state -> 200 (205ms)
+11-27 21:44:12.590  5011  5450 I MAZA    : 2026-11-27 21:44:12 #199 GET /api/watch/utxos -> 200 (176ms)
+11-27 21:44:12.761  5011  5450 I MAZA    : 2026-11-27 21:44:12 #200 GET /api/watch/history -> 200 (170ms)
+11-27 21:44:27.922  5011  5451 I MAZA    : 2026-11-27 21:44:27 #201 GET /api/state -> 200 (507ms)
+11-27 21:44:28.093  5011  5454 I MAZA    : 2026-11-27 21:44:28 #202 GET /api/watch/utxos -> 200 (167ms)
+11-27 21:44:28.261  5011  5454 I MAZA    : 2026-11-27 21:44:28 #203 GET /api/watch/history -> 200 (167ms)
+> shell input tap 800 375
+> qshell <redacted>
+> shell input tap 800 496
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell input tap 1440 858
+> shell uiautomator dump /sdcard/ui.xml
+UI hierchary dumped to: /sdcard/ui.xml
+> shell cat /sdcard/ui.xml
+> shell rm -f /sdcard/ui.xml
+## ROUND-DONE
+
+-- round rc=0 22.2s xml-lines=2 -> /root/.hermes/cache/scratch/m8b2a-rn/.pin-rendered.tmp.out

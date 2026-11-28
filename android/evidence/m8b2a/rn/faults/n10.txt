@@ -1,0 +1,13 @@
+echo N10 state + relaunch app
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell dumpsys activity activities | grep -e mResumedActivity -e mFocusedActivity
+shell logcat -d | grep -c -e "Fatal signal"
+shell logcat -d | grep -e " MAZA " | tail -6
+shell am start -W -n com.mazawallet/.MainActivity
+sleep 9
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell logcat -d -t 200 | grep -e "Fatal signal" -e "MAZA " | tail -8
+shell pidof com.mazawallet
+shell rm -f /sdcard/ui.xml

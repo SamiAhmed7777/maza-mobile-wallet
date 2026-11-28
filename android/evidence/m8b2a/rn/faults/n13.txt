@@ -1,0 +1,5 @@
+echo N13 after guest reboot
+raw devices
+shell cat /proc/uptime
+shell getprop sys.boot_completed
+shell pidof com.mazawallet

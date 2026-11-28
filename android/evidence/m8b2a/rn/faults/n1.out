@@ -1,0 +1,16 @@
+## N1 pm retry
+> shell pm list packages -3
+[e] error: exec '/system/bin/sh' failed: I/O error
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+> shell df /data /system
+[e] error: exec '/system/bin/sh' failed: I/O error
+> shell ls -la /system/bin/cmd /system/bin/pm
+[e] error: exec '/system/bin/sh' failed: I/O error
+> shell settings get secure user_setup_complete
+[e] error: exec '/system/bin/sh' failed: I/O error
+> shell getprop sys.boot_completed
+[e] error: exec '/system/bin/sh' failed: I/O error
+> shell dumpsys activity activities | grep -E "mResumedActivity|mFocusedActivity"
+[e] error: exec '/system/bin/sh' failed: I/O error
+## ROUND-DONE

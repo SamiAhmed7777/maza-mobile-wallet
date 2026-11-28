@@ -1,0 +1,18 @@
+echo M14-L1 notification capture while LOCKED
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell dumpsys activity activities | grep -e mResumedActivity
+shell logcat -d | grep -e "MAZA " | tail -4
+shell dumpsys notification
+shell cmd statusbar expand-notifications
+sleep 2
+shell screencap -p /sdcard/l1_locked.png
+pull /sdcard/l1_locked.png C:\Users\hello\maza-bench-lane\cap\l1_locked.png
+shell cmd statusbar collapse
+sleep 1
+shell screencap -p /sdcard/l1_locked_cover.png
+pull /sdcard/l1_locked_cover.png C:\Users\hello\maza-bench-lane\cap\l1_locked_cover.png
+shell rm -f /sdcard/l1_locked.png /sdcard/l1_locked_cover.png
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

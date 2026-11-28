@@ -1,0 +1,23 @@
+# parsed from n24.out by scripts/uidump.py
+FrameLayout    [0,36][1600,900] (800,468) content
+TextView       [24,72][1576,116] (800,94) My Wallet
+TextView       [24,122][1576,149] (800,135) Self-custody · keys never leave this device
+TextView       [45,188][1555,213] (800,200) BALANCE
+TextView       [45,216][1555,273] (800,244) 1.4999 MAZA
+TextView       [45,276][1555,303] (800,289) 1 MAZA ≈ $0.00179137 · FreiXLite MAZA_BTC · 6m old
+TextView       [45,363][1555,388] (800,375) RECEIVE ADDRESS
+TextView       [45,391][1555,416] (800,403) index 4
+TextView       [45,419][1555,448] (800,433) MRQswDmXBiGqqmtPzHh2ViMkEL7uNDaaPy
+Button         [45,457][1555,529] (800,493) NEXT
+Button         [0,816][320,900] (160,858) BALANCE
+Button         [320,816][640,900] (480,858) RECEIVE
+Button         [640,816][960,900] (800,858) SEND
+Button         [960,816][1280,900] (1120,858) HISTORY
+Button         [1280,816][1600,900] (1440,858) WALLET
+TextView       [126,134][1564,178] (845,156) MAZA Wallet
+TextView       [36,240][1564,284] (800,262) Wallet locked
+TextView       [36,290][1564,317] (800,303) Enter your PIN to continue.
+EditText       [36,341][1564,409] (800,375) <password len=17>
+Button         [36,460][1564,532] (800,496) UNLOCK
+View           [0,0][1600,36] (800,18) statusBarBackground
+-- 21 labelled nodes

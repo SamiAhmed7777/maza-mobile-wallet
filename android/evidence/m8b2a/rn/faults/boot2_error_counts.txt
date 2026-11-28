@@ -1,0 +1,27 @@
+# Boot 2 (launched 21:03:17): every reading of the guest error counter. Process and memory lines are left out.
+now 21:04:45
+boot launched at: 2026-11-27 21:03:17.783 ; log lines since launch: 807
+player-state lines: 21:03:17 Player state : launched with args: '--instance Pie64 ' by Parent PID 13328 | 21:03:21 Player state: starting kernel | 21:03:26 Player state: starting android | 21:03:45 Player state: ready
+guest error lines this boot: 0
+guest kernel last line: [    9.965232] init: Could not find service hosting interface android.hardware.vibrator@1.0::IVibrator/default
+now 21:05:59
+boot launched at: 2026-11-27 21:03:17.783 ; log lines since launch: 815
+player-state lines: 21:03:17 Player state : launched with args: '--instance Pie64 ' by Parent PID 13328 | 21:03:21 Player state: starting kernel | 21:03:26 Player state: starting android | 21:03:45 Player state: ready
+guest error lines this boot: 0
+guest kernel last line: [    9.965232] init: Could not find service hosting interface android.hardware.vibrator@1.0::IVibrator/default
+now 21:07:31
+guest error lines this boot: 0
+now 21:11:56
+guest error lines this boot: 0
+now 21:19:10
+guest error lines this boot: 0
+guest kernel last line: [  817.590859] reboot: Restarting system with command 'adb'
+now 21:20:57
+boot launched at: 2026-11-27 21:03:17.783 ; log lines since launch: 978
+guest error lines this boot: 0
+guest kernel last line: [  817.590859] reboot: Restarting system with command 'adb'
+now 21:28:33
+boot launched at: 2026-11-27 21:21:52.111 ; log lines since launch: 817
+guest error lines this boot: 0
+now 21:38:42
+guest error lines this boot: 0

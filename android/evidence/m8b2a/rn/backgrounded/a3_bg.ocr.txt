@@ -1,0 +1,14 @@
+# OCR of a3_bg.png (sha256 450c7ecc5ad42e0b255ba56ddd85ca7399820958ec07f92dfc449fe853b427ac): tesseract 5.3.4, --psm 6, on a 2x grayscale upscale. Unedited machine output.
+10:12
+Fri, Nov 27
+3
+@ MAZA Wallet
+MAZA received
++0.20000000 MAZA - self-custody wallet
+@ MAZA Wallet
+MAZA received
++46.29967740 MAZA - bench account
+Qf Android System
+Configure physical keyboard
+Tap to select language and layout
+Manage notifications CLEAR ALL

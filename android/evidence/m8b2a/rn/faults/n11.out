@@ -1,0 +1,26 @@
+## N11 post-connect state + app log
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+671.53 2504.73
+> shell pidof com.mazawallet
+> shell logcat -d -t 400 | grep -e "MAZA " | tail -14
+11-27 21:14:18.959  5448  5552 I MAZA    : 2026-11-27 21:14:18 #2 POST /api/unlock -> 200 (496ms)
+11-27 21:14:18.959  5448  5552 I MAZA    : 2026-11-27 21:14:18 #3 unlock ok
+11-27 21:14:18.975  5448  5448 W MAZA    : 2026-11-27 21:14:18 #4 seed migration deferred; will retry on next read
+11-27 21:14:19.257  5448  5559 I MAZA    : 2026-11-27 21:14:19 #5 GET /api/qr.png -> 200 (198ms)
+11-27 21:14:19.576  5448  5565 I MAZA    : 2026-11-27 21:14:19 #6 GET /api/state -> 200 (510ms)
+11-27 21:14:19.594  5448  5564 I MAZA    : 2026-11-27 21:14:19 #7 GET /api/qr.png -> 200 (528ms)
+11-27 21:14:19.754  5448  5567 I MAZA    : 2026-11-27 21:14:19 #8 GET /api/price -> 200 (172ms)
+11-27 21:14:19.780  5448  5566 I MAZA    : 2026-11-27 21:14:19 #9 GET /api/qr.png -> 200 (199ms)
+11-27 21:14:20.111  5448  5568 I MAZA    : 2026-11-27 21:14:20 #10 GET /api/watch/utxos -> 200 (527ms)
+11-27 21:14:20.277  5448  5568 I MAZA    : 2026-11-27 21:14:20 #11 GET /api/watch/history -> 200 (165ms)
+> shell logcat -d -t 400 | grep -e "Fatal" -e "RenderThread" -e "totalDuration" | tail -6
+11-27 21:14:20.674  5448  5469 F OpenGLRenderer: Impossible totalDuration 0
+11-27 21:14:20.674  5448  5469 F libc    : Fatal signal 6 (SIGABRT), code -6 (SI_TKILL) in tid 5469 (RenderThread), pid 5448 (com.mazawallet)
+11-27 21:14:20.709  5571  5571 F DEBUG   : pid: 5448, tid: 5469, name: RenderThread  >>> com.mazawallet <<<
+11-27 21:14:20.709  5571  5571 F DEBUG   : Abort message: 'Impossible totalDuration 0'
+11-27 21:14:20.726  5571  5571 F DEBUG   :     #07 pc 000000000012912f  /system/lib64/libhwui.so (android::uirenderer::renderthread::RenderThread::threadLoop()+479)
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{51adf62 u0 com.bluestacks.gamecenter/.AppCenterActivity t157}
+## ROUND-DONE

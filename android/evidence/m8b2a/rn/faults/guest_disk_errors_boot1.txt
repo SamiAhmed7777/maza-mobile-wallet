@@ -1,0 +1,67 @@
+# Excerpt: guest kernel error lines of boot 1 (launched 20:14:54) and the Nov 15-16 precedent.
+# Line selection by scripts/rn_pack.py from the host diagnosis captures (private archive).
+## boot 1, 2026-11-27
+  2026-11-27 20:19:07.329-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  244.928761] print_req_error: I/O error, dev sdb, sector 252312408
+  2026-11-27 20:19:07.331-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  244.930724] Buffer I/O error on device sdb1, logical block 31538795
+  2026-11-27 20:19:07.332-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  244.932154] print_req_error: I/O error, dev sdb, sector 198331152
+  2026-11-27 20:20:37.236-0700 36668 34700 SER    Pie64 [Ready] I: GUEST: [  334.834247] print_req_error: I/O error, dev sdb, sector 198333448
+  2026-11-27 20:21:13.126-0700 36668 34700 SER    Pie64 [Ready] I: GUEST: [  370.725632] print_req_error: I/O error, dev sdb, sector 109592152
+  2026-11-27 20:22:03.774-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  421.374026] print_req_error: I/O error, dev sdb, sector 198104480
+  2026-11-27 20:22:03.774-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  421.374815] print_req_error: I/O error, dev sdb, sector 197885920
+  2026-11-27 20:23:12.912-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  490.512899] print_req_error: I/O error, dev sda, sector 9152456
+  2026-11-27 20:23:12.913-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  490.513673] print_req_error: I/O error, dev sda, sector 9156608
+  2026-11-27 20:23:12.914-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  490.514422] print_req_error: I/O error, dev sda, sector 9532808
+  2026-11-27 20:23:12.915-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  490.515797] print_req_error: I/O error, dev sda, sector 8705928
+  2026-11-27 20:23:12.919-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  490.518879] print_req_error: I/O error, dev sda, sector 9161632
+  2026-11-27 20:23:18.183-0700 36668 32588 SER    Pie64 [Ready] I: GUEST: [  495.781211] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #262147: comm android.hardwar: reading direc
+  2026-11-27 20:23:18.186-0700 36668 32588 SER    Pie64 [Ready] I: GUEST: [  495.785327] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #262147: comm android.hardwar: reading direc
+  2026-11-27 20:23:18.189-0700 36668 32588 SER    Pie64 [Ready] I: GUEST: [  495.788540] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #262147: comm android.hardwar: reading direc
+  2026-11-27 20:23:18.192-0700 36668 32588 SER    Pie64 [Ready] I: GUEST: [  495.790897] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #264821: comm android.hardwar: reading direc
+  2026-11-27 20:23:18.194-0700 36668 32588 SER    Pie64 [Ready] I: GUEST: [  495.793117] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #264821: comm android.hardwar: reading direc
+  2026-11-27 20:23:23.304-0700 36668 34700 SER    Pie64 [Ready] I: GUEST: [  500.901568] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #262147: comm android.hardwar: reading direc
+  2026-11-27 20:23:23.307-0700 36668 34700 SER    Pie64 [Ready] I: GUEST: [  500.905029] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #262147: comm android.hardwar: reading direc
+  2026-11-27 20:23:23.309-0700 36668 34700 SER    Pie64 [Ready] I: GUEST: [  500.907948] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #262147: comm android.hardwar: reading direc
+  2026-11-27 20:23:23.311-0700 36668 34700 SER    Pie64 [Ready] I: GUEST: [  500.910156] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #264821: comm android.hardwar: reading direc
+  2026-11-27 20:23:23.324-0700 36668 34700 SER    Pie64 [Ready] I: GUEST: [  500.923166] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #264821: comm android.hardwar: reading direc
+print_req_error lines this boot: 13
+  first: 2026-11-27 20:19:07.329-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  244.928761] print_req_error: I/O error, dev sdb, sector 252312408
+  last:  2026-11-27 20:30:13.841-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [  911.440843] print_req_error: I/O error, dev sdb, sector 63282680
+distinct devices/sectors:
+    sdb sector 252312408  x1
+    sdb sector 198331152  x1
+    sdb sector 198333448  x1
+    sdb sector 109592152  x1
+    sdb sector 198104480  x1
+    sdb sector 197885920  x1
+    sda sector 9152456  x1
+    sda sector 9156608  x1
+    sda sector 9532808  x1
+    sda sector 8705928  x1
+    sda sector 9161632  x1
+    sdb sector 63282680  x2
+EXT4 error lines: first / last:
+  count=996
+  first: 2026-11-27 20:23:18.183
+  last:  2026-11-27 20:36:08.361
+EXT4 error lines per minute:
+  2026-11-27 20:23  x46
+  2026-11-27 20:24  x57
+  2026-11-27 20:25  x53
+  2026-11-27 20:26  x41
+  2026-11-27 20:27  x45
+  2026-11-27 20:28  x64
+  2026-11-27 20:29  x35
+  2026-11-27 20:30  x92
+  2026-11-27 20:31  x104
+  2026-11-27 20:32  x99
+  2026-11-27 20:33  x110
+  2026-11-27 20:34  x120
+  2026-11-27 20:35  x110
+  2026-11-27 20:36  x20
+## Nov 15-16 episode in the same log (precedent)
+  error lines on Nov 15-16: 22
+  first: 2026-11-15 23:47:01.806-0700 21616 16208 SER    Pie64 [StartingKernel] I: GUEST: [   97.044735] print_req_error: I/O error, dev sda, sector 8391736
+  first: 2026-11-15 23:47:01.806-0700 21616 16208 SER    Pie64 [StartingKernel] I: GUEST: [   97.045408] print_req_error: I/O error, dev sda, sector 8391744
+  last:  2026-11-15 23:48:56.548-0700 21616 16208 SER    Pie64 [StartingKernel] I: GUEST: [  211.787629] print_req_error: I/O error, dev sda, sector 8391456
+  distinct Nov-15 kernel error shapes:
+      22  print_req_error: I/O error, dev sda, sector N

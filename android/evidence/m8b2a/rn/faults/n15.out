@@ -1,0 +1,14 @@
+## N15 third boot probe
+> raw devices
+List of devices attached
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+emulator-5554	device
+
+> shell cat /proc/uptime
+389.84 1343.77
+> shell getprop sys.boot_completed
+1
+> shell pm path com.mazawallet
+package:/data/app/com.mazawallet-V-nPHHzLocdis6_rzUelqg==/base.apk
+## ROUND-DONE

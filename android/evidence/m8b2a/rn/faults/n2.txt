@@ -1,0 +1,7 @@
+echo N2 guest retry x3
+shell id
+sleep 12
+shell id
+sleep 12
+shell id
+shell getprop sys.boot_completed

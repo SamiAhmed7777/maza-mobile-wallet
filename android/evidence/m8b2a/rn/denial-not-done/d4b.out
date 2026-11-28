@@ -1,0 +1,18 @@
+## M14-D4b re-read state after the Show-notifications tap
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+[e] error: device 'emulator-5554' not found
+> shell pidof com.mazawallet
+[e] error: device 'emulator-5554' not found
+> shell dumpsys activity activities | grep -e mResumedActivity
+[e] error: device 'emulator-5554' not found
+> shell cmd appops get com.mazawallet POST_NOTIFICATION
+[e] error: device 'emulator-5554' not found
+> shell uiautomator dump /sdcard/ui.xml
+[e] error: device 'emulator-5554' not found
+> shell cat /sdcard/ui.xml
+[e] error: device 'emulator-5554' not found
+> shell rm -f /sdcard/ui.xml
+[e] error: device 'emulator-5554' not found
+## ROUND-DONE

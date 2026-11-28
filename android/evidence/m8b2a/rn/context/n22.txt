@@ -1,0 +1,6 @@
+echo N22 poll while backgrounded
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell logcat -d | grep -e "MAZA " | tail -9
+shell dumpsys activity processes | grep -i -e "mazawallet" | grep -e "PERS" -e "FORE" -e "BACK" -e "CACHED" -e "PREV" -e "LAST" -e "SERVICE" -e "VIS" -e "TOP" | head -3
+shell dumpsys activity activities | grep -e mResumedActivity

@@ -1,0 +1,14 @@
+# OCR of d2_blocked.png (sha256 0879c30b7a89b9017bf2104e58d73576535f31cd1c621d0b4ba8735563104863): tesseract 5.3.4, --psm 6, on a 2x grayscale upscale. Unedited machine output.
+10:17
+Fri, Nov 27
+3
+@ MAZA Wallet
+MAZA received
++0.10000000 MAZA - self-custody wallet
+@ MAZA Wallet
+MAZA received
++46.19957740 MAZA - bench account
+Qf Android System
+Configure physical keyboard
+Tap to select language and layout
+Manage notifications CLEAR ALL

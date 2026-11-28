@@ -1,0 +1,11 @@
+echo N18 history + wallet tab
+shell cat /proc/uptime
+shell input tap 1120 858
+sleep 4
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell input tap 1440 858
+sleep 6
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml

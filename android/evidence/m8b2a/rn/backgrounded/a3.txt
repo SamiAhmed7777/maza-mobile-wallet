@@ -1,0 +1,16 @@
+echo M14-A3 notification capture while BACKGROUNDED (Settings on top)
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell dumpsys activity activities | grep -e mResumedActivity
+shell logcat -d -b events | grep -e am_on_resume_called -e am_on_paused_called | tail -3
+shell logcat -d | grep -e HCALL | tail -3
+shell dumpsys notification
+shell cmd statusbar expand-notifications
+sleep 2
+shell screencap -p /sdcard/a3_bg.png
+pull /sdcard/a3_bg.png C:\Users\hello\maza-bench-lane\cap\a3_bg.png
+shell cmd statusbar collapse
+sleep 1
+shell dumpsys activity activities | grep -e mResumedActivity
+shell dumpsys activity oom | grep -e maza
+shell rm -f /sdcard/a3_bg.png

@@ -1,0 +1,7 @@
+echo N21 why is the wallet process gone
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell logcat -d -b events | grep -e am_kill -e am_proc_died -e am_low_memory -e am_proc_start | tail -8
+shell logcat -d | grep -i -e "mazawallet" | grep -i -e kill -e died -e "Force" -e "Fatal" -e "anr " | tail -8
+shell dumpsys activity oom | grep -e maza
+shell dumpsys meminfo | grep -e "Free RAM" -e "Used RAM" -e "Lost RAM" -e "ZRAM"

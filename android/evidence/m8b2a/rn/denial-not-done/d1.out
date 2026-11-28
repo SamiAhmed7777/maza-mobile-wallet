@@ -1,0 +1,16 @@
+## M14-D1 denial path: block notifications for the wallet (API 28 equivalent of revoking POST_NOTIFICATIONS)
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+3108.84 11933.49
+> shell cmd appops set com.mazawallet POST_NOTIFICATION ignore
+> shell cmd appops get com.mazawallet POST_NOTIFICATION
+POST_NOTIFICATION: ignore
+> shell pidof com.mazawallet
+5011
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{7614edb u0 com.android.settings/.Settings t162}
+> shell dumpsys activity oom | grep -e maza
+    Proc # 0: prev  B/ /LAST trm: 0 5011:com.mazawallet/u0a68 (previous)
+  mPreviousProcess: ProcessRecord{edbad0 5011:com.mazawallet/u0a68}
+## ROUND-DONE

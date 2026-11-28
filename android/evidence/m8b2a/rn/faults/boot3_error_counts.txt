@@ -1,0 +1,6 @@
+# Boot 3 (launched 21:21:52): the guest error counter read after the window was closed, so it covers the whole boot.
+now 22:43:43
+boot launched at: 2026-11-27 21:21:52.111 ; log lines since launch: 1090
+player-state lines: 21:21:52 Player state : launched with args: '--instance Pie64 ' by Parent PID 39552 | 21:21:58 Player state: starting kernel | 21:22:02 Player state: starting android | 21:22:22 Player state: ready | 22:20:24 Player state: Stopping | 22:20:27 Player state : Exiting err: 0, coreSvcErr: 0
+guest error lines this boot: 0
+guest kernel last line: [ 3506.030083] reboot: Power down

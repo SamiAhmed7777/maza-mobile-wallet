@@ -1,0 +1,4 @@
+21:59:17 try 1: [2026-11-28 06:59:17 CET] watch set: balance=1.4999 utxos=1 confirmations=[16839]
+21:59:35 try 2: [2026-11-28 06:59:34 CET] watch set: balance=1.4999 utxos=1 confirmations=[16839]
+21:59:52 try 3: [2026-11-28 06:59:52 CET] watch set: balance=1.4999 utxos=1 confirmations=[16839]
+22:00:11 try 4: [2026-11-28 07:00:11 CET] watch set: balance=1.9999 utxos=2 confirmations=[1, 16840]

@@ -1,0 +1,12 @@
+## N2 guest retry x3
+> shell id
+[e] error: exec '/system/bin/sh' failed: I/O error
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+> shell id
+[e] error: exec '/system/bin/sh' failed: I/O error
+> shell id
+[e] error: exec '/system/bin/sh' failed: I/O error
+> shell getprop sys.boot_completed
+[e] error: exec '/system/bin/sh' failed: I/O error
+## ROUND-DONE

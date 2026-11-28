@@ -1,0 +1,3 @@
+[2026-11-28 06:58:26 CET] before: bench balance=46.9998774 | watch set: balance=1.4999 utxos=1 confirmations=[16839]
+[2026-11-28 06:58:26 CET] POST /api/send to=MRQswDmXBiGqqmtPzHh2ViMkEL7uNDaaPy amount=0.5 -> HTTP 200 {"txid": "316bc75dc9969b7dfe8dbbbddcf3f73ba0a928f6d1a0f28098062daa88e90149"}
+[2026-11-28 06:58:30 CET] after: watch set: balance=1.4999 utxos=1 confirmations=[16839]

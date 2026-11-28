@@ -1,0 +1,10 @@
+# Excerpt: host event-log answers during the fault window, and memory pressure as ratios.
+# Line selection by scripts/rn_pack.py. Memory figures are reduced to ratios (machine privacy).
+now 20:51:28
+System+Application warnings/errors, 20:10 - 20:46 today (grouped by provider, id):
+  none returned
+storage / power / hardware events of ANY id, last 48h (grouped):
+  none returned
+low-memory (Resource-Exhaustion 2004) events, last 24h:
+  none returned
+commit charge with the emulator off (20:51): 80% of the commit limit | during the episodes (21:16): 92% of the commit limit, free memory 12% of physical | lowest free reading of the night (21:19): 4% of physical

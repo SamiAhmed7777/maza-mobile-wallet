@@ -1,0 +1,17 @@
+# Script exit status of every round that kept one (round.py prints this line when it ends).
+# A status of 0 means the script ran to its end; it does not mean the device answered.
+a1     rc=0 51.2s xml-lines=0
+a2     rc=0 49.0s xml-lines=0
+a3     rc=0 12.5s xml-lines=0
+d1     rc=0 8.0s xml-lines=0
+d2     rc=0 11.0s xml-lines=0
+d3     rc=0 12.9s xml-lines=1
+d4     rc=0 11.4s xml-lines=0
+d4b    rc=0 9.1s xml-lines=0
+l1     rc=0 15.7s xml-lines=1
+n20    rc=0 9.0s xml-lines=1
+n21    rc=0 9.2s xml-lines=0
+n22    rc=0 8.1s xml-lines=0
+n23    rc=0 7.7s xml-lines=0
+n24    rc=0 9.4s xml-lines=1
+r_a0   rc=0 16.2s xml-lines=1

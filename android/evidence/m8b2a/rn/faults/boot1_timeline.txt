@@ -1,0 +1,7 @@
+# Excerpt: Player.log lines quoted by the lane stop round, and that round's stop time.
+# Line selection by scripts/rn_pack.py.
+  2026-11-27 03:50:02.634-0700 31652 23784 PLR    Pie64 [Stopping] I: Player state : Exiting err: 0, coreSvcErr: 0
+  2026-11-27 20:14:55.357-0700 36668 21808 PLR    [Initializing] I: main: #################### Player state : launched with args: '--instance Pie64 ' by Parent PID 18916
+  2026-11-27 20:16:03.412-0700 36668 14676 PLR    Pie64 [StartingAndroid] I: Player state: ready
+  2026-11-27 20:40:58.452-0700 36668 18940 SER    Pie64 [Ready] I: GUEST: [ 1556.051778] EXT4-fs error (device sda1): __ext4_find_entry:1610: inode #264821: comm android.ha
+stopped-at: 2026-11-27 20:41:08

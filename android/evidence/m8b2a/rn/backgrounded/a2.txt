@@ -1,0 +1,9 @@
+echo M14-A2 Settings on top of the unlocked wallet, settle 40s
+shell cat /proc/uptime
+shell am start -W -a android.settings.SETTINGS
+sleep 40
+shell dumpsys activity activities | grep -e mResumedActivity
+shell pidof com.mazawallet
+shell dumpsys activity oom | grep -e maza
+shell logcat -d -b events | grep -e am_on_paused_called | tail -2
+shell logcat -d | grep -e "MAZA " | tail -4

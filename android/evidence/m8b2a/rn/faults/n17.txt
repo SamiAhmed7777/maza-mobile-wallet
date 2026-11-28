@@ -1,0 +1,6 @@
+echo N17 third boot: post-connect state + app log
+shell cat /proc/uptime
+shell pidof com.mazawallet
+shell dumpsys activity activities | grep -e mResumedActivity
+shell logcat -d -t 400 | grep -e "MAZA " | tail -12
+shell logcat -d -t 400 | grep -e "Fatal" -e "totalDuration" | tail -4

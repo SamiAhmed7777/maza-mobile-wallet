@@ -1,0 +1,5 @@
+echo N0 boot probe
+raw devices
+shell getprop sys.boot_completed
+shell getprop ro.build.version.sdk
+shell pm list packages -3

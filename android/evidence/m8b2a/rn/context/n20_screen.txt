@@ -1,0 +1,18 @@
+# parsed from n20.out by scripts/uidump.py
+FrameLayout    [0,36][1600,900] (800,468) content
+TextView       [24,72][1576,116] (800,94) My Wallet
+TextView       [24,122][1576,149] (800,135) Self-custody · keys never leave this device
+TextView       [45,188][1555,213] (800,200) BALANCE
+TextView       [45,216][1555,273] (800,244) 1.4999 MAZA
+TextView       [45,276][1555,303] (800,289) 1 MAZA ≈ $0.00179217 · FreiXLite MAZA_BTC · 7m old
+TextView       [45,363][1555,388] (800,375) RECEIVE ADDRESS
+TextView       [45,391][1555,416] (800,403) index 4
+TextView       [45,419][1555,448] (800,433) MRQswDmXBiGqqmtPzHh2ViMkEL7uNDaaPy
+Button         [45,457][1555,529] (800,493) NEXT
+Button         [0,816][320,900] (160,858) BALANCE
+Button         [320,816][640,900] (480,858) RECEIVE
+Button         [640,816][960,900] (800,858) SEND
+Button         [960,816][1280,900] (1120,858) HISTORY
+Button         [1280,816][1600,900] (1440,858) WALLET
+View           [0,0][1600,36] (800,18) statusBarBackground
+-- 16 labelled nodes

@@ -1,0 +1,7 @@
+echo N9 app logcat + connectivity
+shell cat /proc/uptime
+shell which curl wget nc
+shell dumpsys connectivity | grep -e Active -e everValidated -e validated -e "NetworkAgentInfo" | head -10
+shell logcat -d -t 600 | grep -i -e maza -e UnknownHost -e SocketTimeout -e SSLHandshake -e ConnectException | tail -40
+shell settings get global private_dns_mode
+shell cat /proc/net/route | head -4

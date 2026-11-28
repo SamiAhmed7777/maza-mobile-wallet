@@ -1,0 +1,24 @@
+## N17 third boot: post-connect state + app log
+> shell cat /proc/uptime
+* daemon not running. starting it now on port 5037 *
+* daemon started successfully *
+480.85 1695.59
+> shell pidof com.mazawallet
+5011
+> shell dumpsys activity activities | grep -e mResumedActivity
+    mResumedActivity: ActivityRecord{b977cc8 u0 com.mazawallet/.MainActivity t161}
+> shell logcat -d -t 400 | grep -e "MAZA " | tail -12
+11-27 21:29:45.797  5011  5125 I MAZA    : 2026-11-27 21:29:45 #7 GET /api/state -> 200 (531ms)
+11-27 21:29:46.004  5011  5127 I MAZA    : 2026-11-27 21:29:46 #8 GET /api/price -> 200 (200ms)
+11-27 21:29:46.006  5011  5126 I MAZA    : 2026-11-27 21:29:46 #9 GET /api/qr.png -> 200 (202ms)
+11-27 21:29:46.009  5011  5128 I MAZA    : 2026-11-27 21:29:46 #10 GET /api/watch/utxos -> 200 (204ms)
+11-27 21:29:46.179  5011  5128 I MAZA    : 2026-11-27 21:29:46 #11 GET /api/watch/history -> 200 (169ms)
+11-27 21:29:48.935  5011  5123 I MAZA    : 2026-11-27 21:29:48 #12 POST /api/watch/import -> 200 (991ms)
+11-27 21:29:48.935  5011  5123 I MAZA    : 2026-11-27 21:29:48 #13 watch import count=42
+11-27 21:29:49.106  5011  5129 I MAZA    : 2026-11-27 21:29:49 #14 GET /api/watch/utxos -> 200 (170ms)
+11-27 21:29:49.275  5011  5129 I MAZA    : 2026-11-27 21:29:49 #15 GET /api/watch/history -> 200 (168ms)
+11-27 21:30:01.055  5011  5147 I MAZA    : 2026-11-27 21:30:01 #16 GET /api/state -> 200 (252ms)
+11-27 21:30:01.233  5011  5148 I MAZA    : 2026-11-27 21:30:01 #17 GET /api/watch/utxos -> 200 (174ms)
+11-27 21:30:01.442  5011  5148 I MAZA    : 2026-11-27 21:30:01 #18 GET /api/watch/history -> 200 (209ms)
+> shell logcat -d -t 400 | grep -e "Fatal" -e "totalDuration" | tail -4
+## ROUND-DONE

@@ -1,0 +1,8 @@
+# OCR of l1_locked_cover.png (sha256 5df6358a804be346cfb7ba3acaa35f1e730953cb2e3d133107df4a490503fd56): tesseract 5.3.4, --psm 6, on a 2x grayscale upscale. Unedited machine output.
+10:00 O @ oa
+MAZA Wallet
+cow
+Wallet locked
+Enter your PIN to continue.
+PIN or passphrase
+UNLOCK

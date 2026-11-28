@@ -1,0 +1,11 @@
+echo M14-A0 unlock from inactivity lock (before backgrounding)
+shell input tap 800 375
+sleep 0.9
+qshell input text [PIN]
+sleep 0.9
+shell input tap 800 496
+sleep 4
+shell uiautomator dump /sdcard/ui.xml
+shell cat /sdcard/ui.xml
+shell rm -f /sdcard/ui.xml
+shell cmd appops get com.mazawallet POST_NOTIFICATION

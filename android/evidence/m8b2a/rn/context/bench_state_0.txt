@@ -1,0 +1,4 @@
+# First bench state reading of the night. Line selection by scripts/rn_pack.py;
+# one unrelated leading line of the capture is left out.
+[2026-11-28 06:50:06 CET] GET /api/state -> 200 balance=46.9998774 account=mobile-play bench_address=MWRVvgWrLRqyEEQSm7J8NuYor1X9J4J9Fa
+[2026-11-28 06:50:06 CET] watch set: balance=1.4999 utxos=1 confirmations=[16834]

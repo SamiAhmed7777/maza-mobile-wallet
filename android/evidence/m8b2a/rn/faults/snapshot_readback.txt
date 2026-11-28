@@ -1,0 +1,12 @@
+# Excerpt: engine disk images read whole and copied before the relaunch (20:42-21:01).
+# Line selection by scripts/rn_pack.py. Free-space lines are left out.
+started 2026-11-27 20:42:43
+started 2026-11-27 20:48:35
+STEP1 Root.vhd: size=2022166528 READ-WHOLE-FILE-OK bytes=2022166528 sha256=2e73c19c7b755a96c0d26509313b68e4f80689c5e4c50d67a4a69a702c602c94 in 10s (195 MB/s)
+STEP1 Data.vhdx: size=12113149952 READ-WHOLE-FILE-OK bytes=12113149952 sha256=fabc4bb97f4ca6651dc8f426cd856676330a1d720a8425d1b831455adeb867a0 in 58s (198 MB/s)
+STEP2 COPY Root.vhd -> snapshot dir in 43s
+STEP2 COPY Data.vhdx -> snapshot dir in 552s
+STEP3 Root.vhd: copy reads back identical (sha256 2e73c19c7b755a96c0d26509313b68e4f80689c5e4c50d67a4a69a702c602c94)
+STEP3 Data.vhdx: copy reads back identical (sha256 fabc4bb97f4ca6651dc8f426cd856676330a1d720a8425d1b831455adeb867a0)
+finished 2026-11-27 21:01:19
+SNAPSHOT-DONE rc=0
